@@ -2,10 +2,13 @@
 
 웹 브라우저에서 PDF 도면을 열고, 치수를 아는 선 하나를 **기준 길이**로 지정하면
 그 축척으로 **길이, 면적, 각도**를 측정하는 도구입니다.
-PDF 파일은 서버로 올라가지 않고 사용자의 브라우저 안에서만 열립니다.
 
-- 기술: React (JavaScript) + Vite + Tailwind CSS + pdf.js + pdf-lib
-- 서버가 필요 없는 정적 사이트라서 무료 호스팅(Vercel, Netlify, GitHub Pages)에 그대로 올라갑니다.
+- 기술: React (JavaScript) + Vite + Tailwind CSS + pdf.js + pdf-lib, 서버 저장은 Supabase
+- 앱 자체는 정적 사이트라서 무료 호스팅(Vercel, Netlify, GitHub Pages)에 그대로 올라갑니다.
+- **저장 위치**
+  - 로그인하면 PDF 와 측정값·마크업이 **서버(Supabase 무료 플랜)** 에 저장되어 다른 컴퓨터에서도 이어서 볼 수 있어요.
+    설정 방법: **[docs/SERVER_SETUP.md](docs/SERVER_SETUP.md)**
+  - 로그인하지 않거나 서버를 설정하지 않으면 이 브라우저 안에만 저장됩니다.
 
 ## 사용법
 
@@ -21,8 +24,10 @@ PDF 파일은 서버로 올라가지 않고 사용자의 브라우저 안에서�
 8. **여러 개 선택**: 선택 도구로 빈 곳을 끌면 상자 안의 항목이 한꺼번에 선택되고, Shift/Ctrl+클릭으로 하나씩 더하거나 뺍니다.
    선택한 것은 함께 끌어 옮기거나 Delete 로 한꺼번에 지웁니다.
 9. **PDF 저장**(Ctrl+S): 화면에 보이는 마크업과 측정을 그려 넣은 PDF를 `파일이름_마크업.pdf` 로 다운로드 폴더에 저장합니다.
-10. 측정값과 기준 길이는 브라우저에 **자동 저장**되어, 새로고침하거나 같은 파일을 다시 열어도 그대로 남아 있습니다.
-   (같은 이름·크기의 파일을 같은 도면으로 봅니다. 최근 20개까지 보관, 다른 브라우저나 기기와는 공유되지 않습니다.)
+10. 측정값과 기준 길이는 **자동 저장**되어, 새로고침하거나 같은 파일을 다시 열어도 그대로 남아 있습니다.
+    (같은 이름·크기의 파일을 같은 도면으로 봅니다.)
+    - 로그인했으면 서버에 저장되어 다른 컴퓨터·브라우저에서도 보입니다. 툴바 오른쪽에 **서버에 저장됨** 이 표시돼요.
+    - 로그인하지 않았으면 이 브라우저에만 최근 20개까지 저장됩니다. 나중에 로그인하면 **서버로 옮기기** 로 올릴 수 있어요.
 
 | 단축키 | 기능 |
 | --- | --- |
@@ -51,6 +56,8 @@ npm run dev     # 개발 서버 실행 → 터미널에 나오는 http://localho
 npm run build   # 배포용 파일을 dist 폴더에 만들기
 ```
 
+서버 저장까지 시험하려면 `.env.example` 을 `.env.local` 로 복사하고 Supabase 주소와 키를 넣으세요.
+
 ## 무료로 배포하기
 
 ### 방법 A. Vercel (추천: 코드를 고치면 자동으로 다시 배포됨)
@@ -62,6 +69,7 @@ npm run build   # 배포용 파일을 dist 폴더에 만들기
 5. 1분쯤 뒤 `https://프로젝트이름.vercel.app` 주소가 생깁니다. 이 주소를 누구에게나 공유하면 됩니다.
 
 이후 GitHub 저장소에 코드가 바뀌면 Vercel 이 알아서 다시 배포합니다.
+서버 저장을 켜려면 [docs/SERVER_SETUP.md](docs/SERVER_SETUP.md) 대로 Supabase 를 만들고 Vercel 환경 변수 두 개를 넣으면 됩니다.
 
 ### 방법 B. Netlify Drop (가장 빠름: 가입 후 폴더 끌어다 놓기)
 
@@ -85,6 +93,7 @@ src/
     Sidebar.jsx           축척 설정, 측정 목록, CSV 저장
     CalibrationDialog.jsx 기준 길이 입력 창
     EmptyState.jsx        홈 화면 (파일 열기, 최근 연 도면 목록)
+    Account.jsx           로그인·회원가입, 계정 메뉴, 비밀번호 바꾸기, 브라우저 도면 서버로 옮기기
   lib/
     geometry.js           거리, 면적(신발끈 공식), 각도 계산
     units.js              단위 변환과 숫자 표시
@@ -93,6 +102,10 @@ src/
     markup.js             마크업 종류, 색, 텍스트 상자 크기 계산
     tools.js              도구 목록과 숫자·글자 단축키
     exportPdf.jsx         마크업·측정을 그려 넣은 PDF 만들기 (pdf-lib)
-    storage.js            IndexedDB(PDF 파일, 측정값)와 localStorage(열린 탭) 저장
+    storage.js            로그인 안 했을 때: IndexedDB(PDF 파일, 측정값)와 localStorage(열린 탭) 저장
+    cloudStore.js         로그인했을 때: Supabase 표(documents)와 보관함(pdfs)에 저장
+    supabase.js           Supabase 연결과 로그인 함수 (환경 변수 VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY)
+supabase/schema.sql       Supabase 에서 한 번 실행하는 표·보관함·보안 규칙
+docs/SERVER_SETUP.md      서버 저장 설정 안내 (무료 플랜)
 public/sample.pdf         체험용 샘플 평면도 (scripts/make-sample-pdf.mjs 로 생성, 축척 1:50)
 ```

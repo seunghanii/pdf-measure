@@ -28,6 +28,8 @@ export default function Toolbar({
   selectedMarkupType,
   onSave,
   saving,
+  syncStatus, // 서버 저장 상태: 'saved' | 'saving' | 'error' (로그인했을 때만)
+  right, // 홈 화면 오른쪽 (계정)
 }) {
   const inputRef = useRef(null)
   const numPages = pdfDoc?.numPages ?? 0
@@ -92,6 +94,7 @@ export default function Toolbar({
           </button>
 
           <div className="ml-auto flex items-center gap-3">
+            {syncStatus && <SyncBadge status={syncStatus} />}
             <button
               className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
               onClick={onSave}
@@ -135,7 +138,25 @@ export default function Toolbar({
           </div>
         </>
       )}
+      {right && <div className="ml-auto">{right}</div>}
     </header>
+  )
+}
+
+function SyncBadge({ status }) {
+  const look = {
+    saved: ['text-slate-400', '서버에 저장됨', 'M7 18a4 4 0 01-.5-8 6 6 0 0111.5 1.5A3.5 3.5 0 0117.5 18zM9.5 13.5l2 2 3.5-3.5'],
+    saving: ['text-blue-600', '저장 중…', 'M7 18a4 4 0 01-.5-8 6 6 0 0111.5 1.5A3.5 3.5 0 0117.5 18z'],
+    error: ['text-red-600', '서버 저장 실패', 'M7 18a4 4 0 01-.5-8 6 6 0 0111.5 1.5A3.5 3.5 0 0117.5 18zM12 11v3M12 16.5v.01'],
+  }[status]
+  return (
+    <span
+      className={`flex items-center gap-1 text-xs whitespace-nowrap ${look[0]}`}
+      title={status === 'error' ? '인터넷 연결을 확인하세요. 다음 변경 때 다시 저장을 시도해요.' : '측정값과 마크업은 자동으로 서버에 저장돼요'}
+    >
+      <Icon d={look[2]} />
+      <span className="hidden lg:inline">{look[1]}</span>
+    </span>
   )
 }
 

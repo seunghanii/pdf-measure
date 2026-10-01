@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { distance } from '../lib/geometry'
 import { PT_TO_PAPER_MM, UNITS } from '../lib/units'
-import { saveState } from '../lib/storage'
 import { TYPE_INFO } from '../lib/measure'
 import { DEFAULT_BOX_OPACITY, isMarkup } from '../lib/markup'
 import { TOOLS, toolForDigit } from '../lib/tools'
@@ -44,25 +43,72 @@ export default function Workspace({ doc, active, onOpenFile }) {
     [pdfDoc],
   )
 
-  // 측정값이 바뀌면 잠시 뒤 브라우저 저장소에 자동 저장
+  // 측정값이 바뀌면 잠시 뒤 자동 저장 (로그인했으면 서버, 아니면 이 브라우저).
+  // 서버 저장은 한 번에 하나씩, 밀린 것은 가장 최근 상태만 보냄.
+  const store = doc.store
+  const cloud = store.kind === 'cloud'
+  const [syncStatus, setSyncStatus] = useState('saved')
+  const queue = useRef({ busy: false, next: null })
+  const persist = useCallback(
+    (state) => {
+      const q = queue.current
+      q.next = state
+      if (q.busy) return
+      q.busy = true
+      ;(async () => {
+        while (q.next) {
+          const st = q.next
+          q.next = null
+          setSyncStatus('saving')
+          try {
+            await store.saveState(doc.id, st)
+            setSyncStatus(q.next ? 'saving' : 'saved')
+          } catch (e) {
+            console.warn('저장 실패', e)
+            setSyncStatus('error')
+          }
+        }
+        q.busy = false
+      })()
+    },
+    [doc.id, store],
+  )
+
   const latest = useRef(null)
+  const firstRun = useRef(true)
   useEffect(() => {
+    // 처음 열었을 때는 불러온 그대로라 저장할 필요 없음
+    if (firstRun.current) {
+      firstRun.current = false
+      return
+    }
     const state = { measurements, calibration, unit, pageNum, markupStyle, counters: counters.current }
     latest.current = state
     const t = setTimeout(() => {
-      saveState(doc.id, state).catch((e) => console.warn('저장 실패', e))
       latest.current = null
-    }, 200)
+      persist(state)
+    }, store.saveDelay)
     return () => clearTimeout(t)
-  }, [doc.id, measurements, calibration, unit, pageNum, markupStyle])
+  }, [measurements, calibration, unit, pageNum, markupStyle, persist, store.saveDelay])
 
-  // 탭을 닫을 때 아직 저장 안 된 변경이 있으면 바로 저장
+  // 탭을 닫거나 창을 닫을 때 아직 저장 안 된 변경이 있으면 바로 저장
   useEffect(() => {
-    const id = doc.id
-    return () => {
-      if (latest.current) saveState(id, latest.current).catch(() => {})
+    const flush = () => {
+      if (!latest.current) return false
+      persist(latest.current)
+      latest.current = null
+      return true
     }
-  }, [doc.id])
+    const onBeforeUnload = (e) => {
+      const pending = flush() || queue.current.busy
+      if (pending && cloud) e.preventDefault() // 서버 저장이 끝나기 전에 닫으면 물어봄
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload)
+      flush()
+    }
+  }, [cloud, persist])
 
   // 축척: PDF 1pt 가 실제 몇 mm 인지
   const mmPerPt = useMemo(() => {
@@ -347,6 +393,7 @@ export default function Workspace({ doc, active, onOpenFile }) {
         selectedMarkupType={selectedMarkupType}
         onSave={savePdf}
         saving={saving}
+        syncStatus={cloud ? syncStatus : null}
       />
 
       {notice && (

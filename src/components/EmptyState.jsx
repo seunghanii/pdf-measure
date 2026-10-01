@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import { AuthPanel, MigrationCard } from './Account'
 
 const STEPS = [
   { n: 1, title: 'PDF 도면 열기', text: '버튼을 누르거나 파일을 화면에 끌어다 놓으세요.' },
@@ -29,13 +30,27 @@ function scaleLabel(state) {
   return c.mode === 'ratio' ? `축척 1:${c.ratio.toLocaleString('ko-KR')}` : c.label
 }
 
-export default function EmptyState({ onOpenFile, onOpenSample, loading, recent, openIds, onOpenRecent, onRemoveRecent }) {
+export default function EmptyState({
+  onOpenFile,
+  onOpenSample,
+  loading,
+  recent,
+  openIds,
+  onOpenRecent,
+  onRemoveRecent,
+  cloud, // 로그인해서 서버에 저장 중
+  showLogin,
+  store,
+  onMigrated,
+}) {
   const inputRef = useRef(null)
   const hasRecent = recent.length > 0
 
   return (
     <div className="flex-1 overflow-auto p-6">
       <div className="mx-auto w-full max-w-2xl">
+        {showLogin && <AuthPanel />}
+        {cloud && <MigrationCard store={store} onDone={onMigrated} />}
         <div
           className={`cursor-pointer rounded-2xl border-2 border-dashed border-slate-300 bg-white px-6 text-center transition hover:border-blue-400 hover:bg-blue-50/40 ${
             hasRecent ? 'py-6' : 'py-12'
@@ -57,7 +72,9 @@ export default function EmptyState({ onOpenFile, onOpenSample, loading, recent, 
             {loading ? 'PDF 여는 중…' : 'PDF 도면을 여기에 끌어다 놓거나 클릭해서 여세요'}
           </p>
           <p className="mt-1 text-sm text-slate-500">
-            여러 개를 한 번에 열 수 있어요. 파일은 서버로 전송되지 않고 내 브라우저에만 저장됩니다.
+            {cloud
+              ? '여러 개를 한 번에 열 수 있어요. PDF와 측정값은 내 계정의 서버 저장소에 저장되고, 나만 볼 수 있어요.'
+              : '여러 개를 한 번에 열 수 있어요. 파일은 서버로 전송되지 않고 내 브라우저에만 저장됩니다.'}
           </p>
           <input
             ref={inputRef}
@@ -74,7 +91,7 @@ export default function EmptyState({ onOpenFile, onOpenSample, loading, recent, 
 
         {hasRecent ? (
           <section className="mt-8">
-            <h2 className="mb-2 px-1 text-sm font-semibold text-slate-500">최근 연 도면</h2>
+            <h2 className="mb-2 px-1 text-sm font-semibold text-slate-500">{cloud ? '서버에 저장된 도면' : '최근 연 도면'}</h2>
             <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl bg-white shadow-sm">
               {recent.map((item) => {
                 const count = item.state?.measurements?.length ?? 0
@@ -99,12 +116,16 @@ export default function EmptyState({ onOpenFile, onOpenSample, loading, recent, 
                           <span>· {formatSize(item.size)}</span>
                           <span>· 측정 {count}개</span>
                           {scale && <span className="text-orange-600">· {scale}</span>}
+                          {cloud && item.hasFile === false && <span className="text-amber-600">· PDF 파일 없음</span>}
                         </div>
                       </div>
                     </button>
                     <button
                       onClick={() => {
-                        if (window.confirm(`"${item.name}" 을(를) 최근 목록에서 지울까요? 저장된 측정값도 함께 지워집니다.`))
+                        const ask = cloud
+                          ? `"${item.name}" 을(를) 서버에서 지울까요? PDF 파일과 측정값이 서버에서 완전히 지워집니다.`
+                          : `"${item.name}" 을(를) 최근 목록에서 지울까요? 저장된 측정값도 함께 지워집니다.`
+                        if (window.confirm(ask))
                           onRemoveRecent(item)
                       }}
                       disabled={isOpen}
