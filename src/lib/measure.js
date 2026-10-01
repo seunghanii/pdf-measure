@@ -1,8 +1,8 @@
-import { angleDeg, distance, polygonArea, polygonPerimeter } from './geometry'
+import { angleDeg, polygonArea, polygonPerimeter, polylineLength } from './geometry'
 import { formatAngle, formatArea, formatLength } from './units'
 
 export const TYPE_INFO = {
-  length: { name: '길이', color: '#2563eb', need: 2 },
+  length: { name: '길이', color: '#2563eb', need: null }, // 여러 점을 이어서 총 길이
   area: { name: '면적', color: '#16a34a', need: null },
   angle: { name: '각도', color: '#9333ea', need: 3 },
   calibrate: { name: '기준 길이', color: '#ea580c', need: 2 },
@@ -11,7 +11,11 @@ export const TYPE_INFO = {
 // 측정 하나의 표시 문자열(주 값, 보조 값)
 export function describe(m, mmPerPt, unit) {
   if (m.type === 'length') {
-    return { main: formatLength(distance(m.points[0], m.points[1]), mmPerPt, unit) }
+    const segments = m.points.length - 1
+    return {
+      main: formatLength(polylineLength(m.points), mmPerPt, unit),
+      sub: segments > 1 ? `${segments}구간 합계` : null,
+    }
   }
   if (m.type === 'area') {
     return {

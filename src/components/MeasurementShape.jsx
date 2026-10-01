@@ -1,4 +1,5 @@
-import { angleArcPath, polygonCentroid } from '../lib/geometry'
+import { angleArcPath, distance, polygonCentroid } from '../lib/geometry'
+import { formatLength } from '../lib/units'
 import { TYPE_INFO, describe } from '../lib/measure'
 
 function Label({ x, y, text, sub, color }) {
@@ -39,6 +40,26 @@ function Label({ x, y, text, sub, color }) {
   )
 }
 
+function SmallLabel({ x, y, text, color }) {
+  return (
+    <text
+      x={x}
+      y={y}
+      textAnchor="middle"
+      dominantBaseline="middle"
+      fontSize="10.5"
+      fill={color}
+      stroke="white"
+      strokeWidth="3"
+      paintOrder="stroke"
+      strokeLinejoin="round"
+      pointerEvents="none"
+    >
+      {text}
+    </text>
+  )
+}
+
 // 선 방향에 수직으로 살짝 띄운 라벨 위치
 function offsetLabel(a, b, dist = 14) {
   const mx = (a.x + b.x) / 2
@@ -53,7 +74,7 @@ function offsetLabel(a, b, dist = 14) {
   return { x: mx + nx * dist, y: my + ny * dist }
 }
 
-export default function MeasurementShape({ m, zoom, mmPerPt, unit, selected, showHandles, draft, closeHint }) {
+export default function MeasurementShape({ m, zoom, mmPerPt, unit, selected, showHandles, draft, closeHint, endHint }) {
   const color = TYPE_INFO[m.type].color
   const pts = m.points.map((p) => ({ x: p.x * zoom, y: p.y * zoom }))
   const strokeWidth = selected ? 3 : 2
@@ -64,7 +85,36 @@ export default function MeasurementShape({ m, zoom, mmPerPt, unit, selected, sho
   let label = null
   const info = draft && m.type === 'calibrate' ? { main: '' } : m.type === 'calibrate' ? { main: m.label } : describe(m, mmPerPt, unit)
 
-  if (m.type === 'length' || m.type === 'calibrate') {
+  if (m.type === 'length' && pts.length > 2) {
+    // 여러 구간: 구간마다 작은 길이, 마지막 점 옆에 총 길이
+    const last = pts[pts.length - 1]
+    const prev = pts[pts.length - 2]
+    body = (
+      <>
+        <polyline points={pts.map((p) => `${p.x},${p.y}`).join(' ')} fill="none" {...common} />
+        <EndTick p={pts[0]} q={pts[1]} color={color} />
+        <EndTick p={last} q={prev} color={color} />
+      </>
+    )
+    const segLabels = mmPerPt
+      ? pts.slice(1).map((b, i) => {
+          const a = pts[i]
+          const lp = offsetLabel(a, b, 10)
+          return (
+            <SmallLabel key={i} {...lp} color={color} text={formatLength(distance(m.points[i], m.points[i + 1]), mmPerPt, unit)} />
+          )
+        })
+      : null
+    const dx = last.x - prev.x
+    const dy = last.y - prev.y
+    const len = Math.hypot(dx, dy) || 1
+    label = (
+      <>
+        {segLabels}
+        <Label x={last.x + (dx / len) * 18} y={last.y + (dy / len) * 18 - 4} text={info.main ? `총 ${info.main}` : ''} color={color} />
+      </>
+    )
+  } else if (m.type === 'length' || m.type === 'calibrate') {
     const [a, b] = pts
     if (b) {
       body = (
@@ -148,6 +198,9 @@ export default function MeasurementShape({ m, zoom, mmPerPt, unit, selected, sho
         />
       ))}
       {closeHint && <circle cx={pts[0].x} cy={pts[0].y} r={9} fill="none" stroke={color} strokeWidth={2} />}
+      {endHint && (
+        <circle cx={pts[pts.length - 1].x} cy={pts[pts.length - 1].y} r={9} fill="none" stroke={color} strokeWidth={2} />
+      )}
     </g>
   )
 }

@@ -12,6 +12,8 @@ export default function Sidebar({
   selectedId,
   onSelect,
   onDelete,
+  onToggleHidden,
+  onSetAllHidden,
   onRename,
   onClear,
   onStartCalibrate,
@@ -38,6 +40,8 @@ export default function Sidebar({
     URL.revokeObjectURL(a.href)
   }
 
+  const allHidden = measurements.length > 0 && measurements.every((m) => m.hidden)
+
   return (
     <aside className="flex max-h-[35vh] w-full shrink-0 flex-col border-t border-slate-200 bg-white md:max-h-none md:w-80 md:border-t-0 md:border-l">
       {/* 축척 */}
@@ -45,8 +49,13 @@ export default function Sidebar({
         <h3 className="text-xs font-semibold tracking-wide text-slate-500">축척</h3>
         {mmPerPt ? (
           <div className="mt-2 rounded-lg bg-orange-50 p-3 ring-1 ring-orange-200">
-            <div className="font-semibold text-orange-800">
-              {calibration.mode === 'ratio' ? `도면 축척 1:${calibration.ratio.toLocaleString('ko-KR')}` : calibration.label}
+            <div className="flex items-center justify-between gap-2">
+              <div className="font-semibold text-orange-800">
+                {calibration.mode === 'ratio' ? `도면 축척 1:${calibration.ratio.toLocaleString('ko-KR')}` : calibration.label}
+              </div>
+              {calibration.mode === 'line' && (
+                <EyeButton hidden={calibration.hidden} onClick={() => onToggleHidden('calibration')} label="기준선" />
+              )}
             </div>
             <div className="mt-0.5 text-xs text-orange-700">
               {calibration.mode === 'line'
@@ -119,7 +128,14 @@ export default function Sidebar({
         <div className="flex items-center justify-between px-4 pt-4 pb-2">
           <h3 className="text-xs font-semibold tracking-wide text-slate-500">측정 목록 ({measurements.length})</h3>
           {measurements.length > 0 && (
-            <div className="flex gap-3 text-xs">
+            <div className="flex items-center gap-3 text-xs">
+              <button
+                className="text-slate-500 hover:underline"
+                onClick={() => onSetAllHidden(!allHidden)}
+                title={allHidden ? '모든 측정을 화면에 보이기' : '모든 측정을 화면에서 숨기기'}
+              >
+                {allHidden ? '모두 보이기' : '모두 숨기기'}
+              </button>
               <button className="text-blue-600 hover:underline" onClick={exportCsv}>
                 CSV 저장
               </button>
@@ -146,7 +162,7 @@ export default function Sidebar({
                 onClick={() => onSelect(m)}
                 className={`group flex cursor-pointer items-start gap-2 rounded-lg px-2 py-2 ${
                   selected ? 'bg-blue-50 ring-1 ring-blue-200' : 'hover:bg-slate-50'
-                }`}
+                } ${m.hidden ? 'opacity-50' : ''}`}
               >
                 <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
                 <div className="min-w-0 flex-1">
@@ -164,6 +180,7 @@ export default function Sidebar({
                   </div>
                   {d.sub && <div className="px-1 text-xs text-slate-500 tabular-nums">{d.sub}</div>}
                 </div>
+                <EyeButton hidden={m.hidden} onClick={() => onToggleHidden(m.id)} label={m.name} />
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
@@ -188,10 +205,43 @@ export default function Sidebar({
           <li>Ctrl + 마우스 휠: 확대/축소, 스페이스바 누른 채 드래그: 화면 이동</li>
           <li>Shift 누른 채 클릭: 수평/수직/45° 로 고정</li>
           <li>선택 도구(V)로 점을 끌어 위치 수정, Delete 로 삭제</li>
+          <li>길이: 점을 이어 찍으면 총 길이, 마지막 점 다시 클릭·더블클릭·Enter 로 완료</li>
           <li>면적: 첫 점 클릭·더블클릭·Enter 로 완료, Backspace/우클릭으로 한 점 취소</li>
+          <li>눈 아이콘: 도면 위에서 숨기기/보이기 (값은 그대로 남아요)</li>
+          <li>여러 페이지는 위아래로 스크롤, PageUp/PageDown 으로 페이지 이동</li>
           <li>V 선택 · H 이동 · C 기준 · L 길이 · A 면적 · G 각도 · Ctrl+Z 되돌리기</li>
         </ul>
       </details>
     </aside>
+  )
+}
+
+// 눈 아이콘: 도면 위에서 숨기기/보이기
+function EyeButton({ hidden, onClick, label }) {
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation()
+        onClick()
+      }}
+      title={hidden ? `${label} 보이기` : `${label} 숨기기`}
+      aria-pressed={!!hidden}
+      className={`shrink-0 rounded p-1 hover:bg-slate-100 ${hidden ? 'text-slate-400' : 'text-slate-500 hover:text-slate-800'}`}
+    >
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        {hidden ? (
+          <>
+            <path d="M3 3l18 18" />
+            <path d="M10.6 5.1A10 10 0 0112 5c5 0 9 4.5 10 7a13 13 0 01-2.9 4.1M6.1 6.1C3.9 7.6 2.5 9.7 2 12c1 2.5 5 7 10 7a9.6 9.6 0 004.4-1.1" />
+            <path d="M9.9 9.9a3 3 0 004.2 4.2" />
+          </>
+        ) : (
+          <>
+            <path d="M2 12c1-2.5 5-7 10-7s9 4.5 10 7c-1 2.5-5 7-10 7S3 14.5 2 12z" />
+            <circle cx="12" cy="12" r="3" />
+          </>
+        )}
+      </svg>
+    </button>
   )
 }

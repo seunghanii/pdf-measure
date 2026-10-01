@@ -25,6 +25,12 @@ export default function Workspace({ doc, active, onOpenFile }) {
   const [selectedId, setSelectedId] = useState(null)
   const [unit, setUnit] = useState(saved?.unit ?? 'mm')
   const counters = useRef(saved?.counters ?? { length: 0, area: 0, angle: 0 })
+  // 툴바·목록에서 특정 페이지로 이동 요청 (뷰어가 스크롤)
+  const [jump, setJump] = useState(null)
+  const jumpTo = useCallback(
+    (page) => setJump({ page: Math.min(Math.max(1, page), pdfDoc.numPages), nonce: Date.now() + Math.random() }),
+    [pdfDoc],
+  )
 
   // 측정값이 바뀌면 잠시 뒤 브라우저 저장소에 자동 저장
   const latest = useRef(null)
@@ -76,23 +82,23 @@ export default function Workspace({ doc, active, onOpenFile }) {
   }, [])
 
   const onComplete = useCallback(
-    (type, points) => {
+    (type, points, page) => {
       if (type === 'calibrate') {
-        setPendingCalibration({ page: pageNum, points })
+        setPendingCalibration({ page, points })
         return
       }
       counters.current[type] += 1
       const m = {
         id: newId(),
         type,
-        page: pageNum,
+        page,
         points,
         name: `${type === 'length' ? '길이' : type === 'area' ? '면적' : '각도'} ${counters.current[type]}`,
       }
       commit((prev) => [...prev, m])
       setSelectedId(m.id)
     },
-    [commit, pageNum],
+    [commit],
   )
 
   const onMovePoint = useCallback((id, index, p) => {
@@ -146,14 +152,30 @@ export default function Workspace({ doc, active, onOpenFile }) {
       if (e.key === 'Delete' && selectedId && selectedId !== 'calibration') deleteMeasurement(selectedId)
       if (e.key === '+' || e.key === '=') setZoom((z) => Math.min(8, z * 1.25))
       if (e.key === '-') setZoom((z) => Math.max(0.1, z / 1.25))
-      if (e.key === 'PageDown' && pdfDoc) setPageNum((p) => Math.min(pdfDoc.numPages, p + 1))
-      if (e.key === 'PageUp') setPageNum((p) => Math.max(1, p - 1))
+      if (e.key === 'PageDown') {
+        e.preventDefault()
+        jumpTo(pageNum + 1)
+      }
+      if (e.key === 'PageUp') {
+        e.preventDefault()
+        jumpTo(pageNum - 1)
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [active, deleteMeasurement, pdfDoc, pendingCalibration, selectedId, undo])
+  }, [active, deleteMeasurement, jumpTo, pageNum, pdfDoc, pendingCalibration, selectedId, undo])
 
-  const pageMeasurements = measurements.filter((m) => m.page === pageNum)
+  const visibleMeasurements = measurements.filter((m) => !m.hidden)
+
+  // 눈 아이콘: 화면에서 숨기기/보이기 (값은 그대로 남음)
+  const toggleHidden = (id) => {
+    if (id === 'calibration') {
+      setCalibration((c) => (c ? { ...c, hidden: !c.hidden } : c))
+      return
+    }
+    setMeasurements((prev) => prev.map((m) => (m.id === id ? { ...m, hidden: !m.hidden } : m)))
+  }
+  const setAllHidden = (hidden) => setMeasurements((prev) => prev.map((m) => ({ ...m, hidden })))
 
   if (!active) return null
 
@@ -163,7 +185,7 @@ export default function Workspace({ doc, active, onOpenFile }) {
         onOpenFile={onOpenFile}
         pdfDoc={pdfDoc}
         pageNum={pageNum}
-        setPageNum={setPageNum}
+        setPageNum={jumpTo}
         zoom={zoom}
         setZoom={setZoom}
         onFit={() => setFitKey((k) => k + 1)}
@@ -178,14 +200,16 @@ export default function Workspace({ doc, active, onOpenFile }) {
         <PdfViewer
           pdfDoc={pdfDoc}
           pageNum={pageNum}
+          onPageChange={setPageNum}
+          jump={jump}
           zoom={zoom}
           onZoom={setZoom}
           fitKey={fitKey}
           fittedKey={fittedKey}
           onFitted={setFittedKey}
           tool={tool}
-          measurements={pageMeasurements}
-          calibration={calibration?.mode === 'line' ? calibration : null}
+          measurements={visibleMeasurements}
+          calibration={calibration?.mode === 'line' && !calibration.hidden ? calibration : null}
           selectedId={selectedId}
           onSelect={setSelectedId}
           onComplete={onComplete}
@@ -203,9 +227,12 @@ export default function Workspace({ doc, active, onOpenFile }) {
           selectedId={selectedId}
           onSelect={(m) => {
             setSelectedId(m.id)
-            setPageNum(m.page)
+            if (m.hidden) toggleHidden(m.id)
+            jumpTo(m.page)
           }}
           onDelete={deleteMeasurement}
+          onToggleHidden={toggleHidden}
+          onSetAllHidden={setAllHidden}
           onRename={(id, name) => setMeasurements((prev) => prev.map((m) => (m.id === id ? { ...m, name } : m)))}
           onClear={() => {
             commit([])
