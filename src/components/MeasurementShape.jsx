@@ -1,6 +1,7 @@
 import { angleArcPath, distance, polygonCentroid } from '../lib/geometry'
 import { formatLength } from '../lib/units'
 import { TYPE_INFO, describe } from '../lib/measure'
+import { FONT_FAMILY, MARKUP_STROKE, isMarkup, rectOf, textBoxMetrics } from '../lib/markup'
 
 function Label({ x, y, text, sub, color }) {
   return (
@@ -75,6 +76,7 @@ function offsetLabel(a, b, dist = 14) {
 }
 
 export default function MeasurementShape({ m, zoom, mmPerPt, unit, selected, showHandles, draft, closeHint, endHint }) {
+  if (isMarkup(m.type)) return <MarkupShape m={m} zoom={zoom} selected={selected} showHandles={showHandles} draft={draft} />
   const color = TYPE_INFO[m.type].color
   const pts = m.points.map((p) => ({ x: p.x * zoom, y: p.y * zoom }))
   const strokeWidth = selected ? 3 : 2
@@ -211,4 +213,83 @@ function EndTick({ p, q, color }) {
   const nx = (-(q.y - p.y) / len) * 6
   const ny = ((q.x - p.x) / len) * 6
   return <line x1={p.x - nx} y1={p.y - ny} x2={p.x + nx} y2={p.y + ny} stroke={color} strokeWidth={2} />
+}
+
+// 마크업: 형광펜, 텍스트 상자, 펜, 사각형, 화살표. 굵기와 글자 크기는 도면과 함께 확대됩니다.
+function MarkupShape({ m, zoom, selected, showHandles, draft }) {
+  const color = m.color ?? TYPE_INFO[m.type].color
+  const pts = m.points.map((p) => ({ x: p.x * zoom, y: p.y * zoom }))
+  const sw = Math.max(1, MARKUP_STROKE * zoom)
+  let body = null
+  let bounds = null
+  let handles = false
+
+  if (m.type === 'highlight' || m.type === 'rect') {
+    const r = rectOf(pts[0], pts[1] ?? pts[0])
+    bounds = r
+    handles = true
+    body =
+      m.type === 'highlight' ? (
+        <rect x={r.x} y={r.y} width={r.w} height={r.h} fill={color} fillOpacity={0.38} style={{ mixBlendMode: 'multiply' }} />
+      ) : (
+        <rect x={r.x} y={r.y} width={r.w} height={r.h} fill="transparent" stroke={color} strokeWidth={sw} />
+      )
+  } else if (m.type === 'arrow') {
+    const [a, b] = pts
+    if (b) {
+      handles = true
+      const ang = Math.atan2(b.y - a.y, b.x - a.x)
+      const head = Math.max(8, sw * 5)
+      const p1 = { x: b.x - head * Math.cos(ang - 0.45), y: b.y - head * Math.sin(ang - 0.45) }
+      const p2 = { x: b.x - head * Math.cos(ang + 0.45), y: b.y - head * Math.sin(ang + 0.45) }
+      body = (
+        <>
+          <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="transparent" strokeWidth={Math.max(12, sw * 4)} />
+          <line x1={a.x} y1={a.y} x2={b.x - Math.cos(ang) * head * 0.6} y2={b.y - Math.sin(ang) * head * 0.6} stroke={color} strokeWidth={sw} strokeLinecap="round" />
+          <polygon points={`${b.x},${b.y} ${p1.x},${p1.y} ${p2.x},${p2.y}`} fill={color} />
+        </>
+      )
+    }
+  } else if (m.type === 'pen') {
+    const d = pts.map((p) => `${p.x},${p.y}`).join(' ')
+    body = (
+      <>
+        <polyline points={d} fill="none" stroke="transparent" strokeWidth={Math.max(12, sw * 4)} strokeLinecap="round" strokeLinejoin="round" />
+        <polyline points={d} fill="none" stroke={color} strokeWidth={sw * 1.2} strokeLinecap="round" strokeLinejoin="round" />
+      </>
+    )
+  } else if (m.type === 'text') {
+    const size = m.fontSize ?? 13
+    const box = textBoxMetrics(m.text, size)
+    const x = pts[0].x
+    const y = pts[0].y
+    bounds = { x, y, w: box.width * zoom, h: box.height * zoom }
+    body = (
+      <>
+        <rect x={x} y={y} width={box.width * zoom} height={box.height * zoom} fill="white" fillOpacity={0.9} stroke={color} strokeWidth={Math.max(0.75, 0.8 * zoom)} rx={2 * zoom} />
+        <text fontSize={size * zoom} fontFamily={FONT_FAMILY} fill={color}>
+          {box.lines.map((line, i) => (
+            <tspan key={i} x={x + box.pad * zoom} y={y + (box.pad + box.lineHeight * i + size * 1.02) * zoom} xmlSpace="preserve">
+              {line || ' '}
+            </tspan>
+          ))}
+        </text>
+      </>
+    )
+  }
+
+  return (
+    <g data-shape={draft ? undefined : m.id} data-type={m.type} style={{ cursor: showHandles ? 'move' : undefined }} opacity={draft ? 0.8 : 1}>
+      {body}
+      {selected && bounds && !draft && (
+        <rect x={bounds.x - 3} y={bounds.y - 3} width={bounds.w + 6} height={bounds.h + 6} fill="none" stroke="#2563eb" strokeWidth={1} strokeDasharray="4 3" pointerEvents="none" />
+      )}
+      {showHandles &&
+        handles &&
+        !draft &&
+        pts.map((p, i) => (
+          <circle key={i} cx={p.x} cy={p.y} r={5} fill="white" stroke={color} strokeWidth={2} data-handle="" data-id={m.id} data-index={i} style={{ cursor: 'crosshair' }} />
+        ))}
+    </g>
+  )
 }

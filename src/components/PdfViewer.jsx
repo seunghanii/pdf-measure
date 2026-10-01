@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { distance, snapTo45 } from '../lib/geometry'
 import { TYPE_INFO } from '../lib/measure'
 import MeasurementShape from './MeasurementShape'
+import { DRAG_TOOLS, textBoxMetrics, FONT_FAMILY } from '../lib/markup'
 
 const MAX_CANVAS_PIXELS = 16_000_000 // 모바일 사파리 캔버스 한도 근처
 const CLOSE_RADIUS_PX = 10 // 면적: 첫 점 / 길이: 마지막 점 근처 클릭 시 완료
@@ -26,6 +27,10 @@ export default function PdfViewer({
   onSelect,
   onComplete,
   onMovePoint,
+  onSetPoints,
+  onBeginEdit,
+  onUpdateItem,
+  markupStyle,
   mmPerPt,
   unit,
 }) {
@@ -37,7 +42,8 @@ export default function PdfViewer({
   const [shiftDown, setShiftDown] = useState(false)
   const [spaceDown, setSpaceDown] = useState(false)
   const [visible, setVisible] = useState(() => new Set())
-  const dragRef = useRef(null) // { id, index } 점 이동 중
+  const dragRef = useRef(null) // 점 하나 { id, index } 또는 도형 전체 { id, whole, start, orig } 이동 중
+  const [editing, setEditing] = useState(null) // 텍스트 입력 중 { page, point, id?, text, fontSize, color }
   const panRef = useRef(null) // { x, y, left, top } 화면 이동 중
   const zoomAnchorRef = useRef(null) // 확대/축소 후에도 같은 지점을 같은 자리에
   const viewAnchorRef = useRef(null) // 현재 화면 가운데에 있는 페이지 위치
@@ -121,19 +127,33 @@ export default function PdfViewer({
     [anchorAt, onZoom],
   )
 
-  // Ctrl(⌘) + 휠 = 확대/축소 (브라우저 확대 대신)
+  // Ctrl(⌘) + 휠 / 트랙패드 핀치 = PDF 만 확대/축소.
+  // 창 전체에서 가로채서 툴바·목록 위에서 휠을 굴려도 브라우저 화면 확대가 되지 않게 합니다.
+  const wheelRef = useRef(null)
+  useLayoutEffect(() => {
+    wheelRef.current = { zoom, zoomAt }
+  })
   useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
     const onWheel = (e) => {
       if (!e.ctrlKey && !e.metaKey) return
       e.preventDefault()
-      const factor = Math.exp(-e.deltaY * 0.0025)
-      zoomAt(Math.min(8, Math.max(0.1, zoom * factor)), e.clientX, e.clientY)
+      const { zoom: z, zoomAt: at } = wheelRef.current
+      const el = containerRef.current
+      const inside = el && el.contains(e.target)
+      const factor = Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0025))
+      at(Math.min(8, Math.max(0.1, z * factor)), inside ? e.clientX : undefined, inside ? e.clientY : undefined)
     }
-    el.addEventListener('wheel', onWheel, { passive: false })
-    return () => el.removeEventListener('wheel', onWheel)
-  }, [zoom, zoomAt, sizes])
+    // 사파리 트랙패드 핀치
+    const onGesture = (e) => e.preventDefault()
+    window.addEventListener('wheel', onWheel, { passive: false })
+    window.addEventListener('gesturestart', onGesture)
+    window.addEventListener('gesturechange', onGesture)
+    return () => {
+      window.removeEventListener('wheel', onWheel)
+      window.removeEventListener('gesturestart', onGesture)
+      window.removeEventListener('gesturechange', onGesture)
+    }
+  }, [])
 
   // ---------- 화면에 맞춤 (새 파일을 열거나 맞춤 버튼) ----------
   useEffect(() => {
@@ -197,6 +217,42 @@ export default function PdfViewer({
   useEffect(() => {
     setDraft(null)
   }, [tool, pdfDoc])
+
+  // ---------- 텍스트 상자 입력 ----------
+  const editingRef = useRef(null)
+  useLayoutEffect(() => {
+    editingRef.current = editing
+  })
+  const commitText = useCallback(() => {
+    const ed = editingRef.current
+    editingRef.current = null // blur 와 Enter 가 겹쳐도 한 번만 저장
+    setEditing(null)
+    if (!ed) return
+    const text = ed.text.replace(/\s+$/, '')
+    if (ed.id) {
+      if (text && text !== ed.original) {
+        onBeginEdit()
+        onUpdateItem(ed.id, { text })
+      }
+    } else if (text) {
+      onComplete('text', [ed.point], ed.page, { text, fontSize: ed.fontSize, color: ed.color })
+    }
+  }, [onBeginEdit, onComplete, onUpdateItem])
+
+  const editExisting = (id) => {
+    const item = measurements.find((m) => m.id === id)
+    if (!item || item.type !== 'text') return
+    onSelect(id)
+    setEditing({
+      page: item.page,
+      point: item.points[0],
+      id,
+      text: item.text,
+      original: item.text,
+      fontSize: item.fontSize ?? markupStyle.fontSize,
+      color: item.color,
+    })
+  }
 
   const drawing = tool === 'length' || tool === 'area' || tool === 'angle' || tool === 'calibrate'
   const multi = tool === 'length' || tool === 'area' // 원하는 만큼 점을 찍는 도구
@@ -269,17 +325,47 @@ export default function PdfViewer({
     }
     if (e.button !== 0) return
 
-    // 선택 도구: 점 잡아서 옮기기 / 도형 선택
+    // 선택 도구: 점 잡아서 옮기기 / 도형 통째로 옮기기 / 선택
     if (tool === 'select') {
       const handle = e.target.closest?.('[data-handle]')
       if (handle) {
-        dragRef.current = { id: handle.dataset.id, index: Number(handle.dataset.index) }
+        dragRef.current = { id: handle.dataset.id, index: Number(handle.dataset.index), moved: false }
         onSelect(handle.dataset.id)
         e.currentTarget.setPointerCapture(e.pointerId)
         return
       }
       const shape = e.target.closest?.('[data-shape]')
-      onSelect(shape ? shape.dataset.shape : null)
+      const id = shape?.dataset.shape ?? null
+      onSelect(id)
+      const item = id && measurements.find((m) => m.id === id)
+      if (item) {
+        dragRef.current = { id, whole: true, start: toPage(e, e.currentTarget), orig: item.points, moved: false }
+        e.currentTarget.setPointerCapture(e.pointerId)
+      }
+      return
+    }
+
+    // 형광펜·펜·사각형·화살표: 누른 채 끌어서 그리기
+    if (DRAG_TOOLS.includes(tool)) {
+      const p = toPage(e, e.currentTarget)
+      setDraft({ page, points: tool === 'pen' ? [p] : [p, p], dragging: true })
+      e.currentTarget.setPointerCapture(e.pointerId)
+      return
+    }
+
+    // 텍스트: 클릭한 곳에 입력 상자 (기존 텍스트를 누르면 고치기)
+    if (tool === 'text') {
+      e.preventDefault()
+      if (editing) return commitText()
+      const existing = e.target.closest?.('[data-type="text"]')
+      if (existing) return editExisting(existing.dataset.shape)
+      setEditing({
+        page,
+        point: toPage(e, e.currentTarget),
+        text: '',
+        fontSize: markupStyle.fontSize,
+        color: markupStyle.color,
+      })
       return
     }
 
@@ -308,8 +394,36 @@ export default function PdfViewer({
       return
     }
     const p = toPage(e, e.currentTarget)
-    if (dragRef.current) {
-      onMovePoint(dragRef.current.id, dragRef.current.index, p)
+    const d = dragRef.current
+    if (d) {
+      if (d.whole) {
+        const dx = p.x - d.start.x
+        const dy = p.y - d.start.y
+        if (!d.moved) {
+          if (Math.hypot(dx, dy) * zoom < 3) return // 단순 클릭은 선택만
+          d.moved = true
+          onBeginEdit()
+        }
+        onSetPoints(d.id, d.orig.map((q) => ({ x: q.x + dx, y: q.y + dy })))
+      } else {
+        if (!d.moved) {
+          d.moved = true
+          onBeginEdit()
+        }
+        onMovePoint(d.id, d.index, p)
+      }
+      return
+    }
+    if (draft?.dragging) {
+      setDraft((dr) => {
+        if (!dr) return dr
+        if (tool === 'pen') {
+          const last = dr.points[dr.points.length - 1]
+          return distance(last, p) * zoom > 2 ? { ...dr, points: [...dr.points, p] } : dr
+        }
+        const q = shiftDown && tool === 'arrow' ? snapTo45(dr.points[0], p) : p
+        return { ...dr, points: [dr.points[0], q] }
+      })
       return
     }
     if (drawing) setCursor({ page, p: draft && draft.page === page ? constrained(p) : p })
@@ -321,16 +435,34 @@ export default function PdfViewer({
       forceRender((n) => n + 1)
     }
     dragRef.current = null
+    if (draft?.dragging) {
+      const pts = draft.points
+      const big = tool === 'pen' ? pts.length > 1 : distance(pts[0], pts[pts.length - 1]) * zoom > 4
+      if (big) onComplete(tool, pts, draft.page)
+      setDraft(null)
+    }
   }
 
   if (!sizes) {
     return <div className="flex flex-1 items-center justify-center bg-slate-200 text-slate-500">페이지 불러오는 중…</div>
   }
 
-  const cursorStyle = panRef.current ? 'grabbing' : panning ? 'grab' : drawing ? 'crosshair' : 'default'
+  const cursorStyle = panRef.current
+    ? 'grabbing'
+    : panning
+      ? 'grab'
+      : tool === 'text'
+        ? 'text'
+        : drawing || DRAG_TOOLS.includes(tool)
+          ? 'crosshair'
+          : 'default'
 
   // 그리는 중인 도형 미리보기
   const renderPreview = (page) => {
+    if (draft?.dragging && draft.page === page) {
+      const color = tool === 'highlight' ? markupStyle.highlightColor : markupStyle.color
+      return <MeasurementShape m={{ id: 'draft', type: tool, points: draft.points, color }} zoom={zoom} draft />
+    }
     if (!drawing || !draft || draft.page !== page) return null
     const c = cursor && cursor.page === page ? cursor.p : null
     const pts = draft.points
@@ -372,6 +504,9 @@ export default function PdfViewer({
                 style={{ width: w, height: h }}
               >
                 <PageCanvas pdfDoc={pdfDoc} page={page} size={size} zoom={zoom} visible={visible.has(i)} />
+                {editing && editing.page === page && (
+                  <TextEditor editing={editing} zoom={zoom} onChange={(text) => setEditing((ed) => ({ ...ed, text }))} onCommit={commitText} onCancel={() => setEditing(null)} />
+                )}
                 <svg
                   width={w}
                   height={h}
@@ -380,7 +515,13 @@ export default function PdfViewer({
                   onPointerDown={(e) => onPointerDown(e, page)}
                   onPointerMove={(e) => onPointerMove(e, page)}
                   onPointerUp={onPointerUp}
-                  onDoubleClick={finishMulti}
+                  onDoubleClick={(e) => {
+                    if (tool === 'select') {
+                      // 포인터 캡처 때문에 e.target 이 svg 일 수 있어 좌표로 다시 찾음
+                      const t = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-type="text"]')
+                      if (t) editExisting(t.dataset.shape)
+                    } else finishMulti()
+                  }}
                   onContextMenu={(e) => {
                     if (drawing && draft) {
                       e.preventDefault()
@@ -397,7 +538,7 @@ export default function PdfViewer({
                     />
                   )}
                   {measurements
-                    .filter((m) => m.page === page)
+                    .filter((m) => m.page === page && m.id !== editing?.id)
                     .map((m) => (
                       <MeasurementShape
                         key={m.id}
@@ -513,5 +654,55 @@ function DrawHint({ tool, count }) {
         {text} <span className="text-slate-400">· Esc 취소</span>
       </div>
     </div>
+  )
+}
+
+// 도면 위 텍스트 상자 입력창. Enter 로 완료, Shift+Enter 로 줄바꿈, Esc 로 취소.
+function TextEditor({ editing, zoom, onChange, onCommit, onCancel }) {
+  const ref = useRef(null)
+  const openedAt = useRef(0)
+  useEffect(() => {
+    openedAt.current = performance.now()
+    const t = setTimeout(() => {
+      ref.current?.focus()
+      ref.current?.select()
+    }, 0)
+    return () => clearTimeout(t)
+  }, [])
+  const size = editing.fontSize
+  const box = textBoxMetrics(editing.text || '텍스트 입력', size)
+  return (
+    <textarea
+      ref={ref}
+      value={editing.text}
+      placeholder="텍스트 입력"
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => {
+        e.stopPropagation()
+        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+          e.preventDefault()
+          onCommit()
+        }
+        if (e.key === 'Escape') onCancel()
+      }}
+      onBlur={() => {
+        if (performance.now() - openedAt.current > 150) onCommit()
+      }}
+      onPointerDown={(e) => e.stopPropagation()}
+      spellCheck={false}
+      className="absolute z-10 resize-none overflow-hidden rounded-sm border border-dashed bg-white/95 outline-none"
+      style={{
+        left: editing.point.x * zoom,
+        top: editing.point.y * zoom,
+        width: Math.max(box.width * zoom + 8, 80),
+        height: box.height * zoom + 2,
+        fontSize: size * zoom,
+        lineHeight: 1.3,
+        padding: `${box.pad * zoom}px`,
+        color: editing.color,
+        borderColor: editing.color,
+        fontFamily: FONT_FAMILY,
+      }}
+    />
   )
 }

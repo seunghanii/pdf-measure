@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { TYPE_INFO, describe } from '../lib/measure'
 import { UNITS, parseNumber } from '../lib/units'
+import { isMarkup } from '../lib/markup'
 
 export default function Sidebar({
   calibration,
@@ -26,7 +27,7 @@ export default function Sidebar({
 
   const exportCsv = () => {
     const rows = [['이름', '종류', '페이지', '값', '둘레']]
-    for (const m of measurements) {
+    for (const m of measures) {
       const d = describe(m, mmPerPt, unit)
       rows.push([m.name, TYPE_INFO[m.type].name, m.page, d.main, d.sub?.replace('둘레 ', '') ?? ''])
     }
@@ -40,7 +41,9 @@ export default function Sidebar({
     URL.revokeObjectURL(a.href)
   }
 
-  const allHidden = measurements.length > 0 && measurements.every((m) => m.hidden)
+  const measures = measurements.filter((m) => !isMarkup(m.type))
+  const markups = measurements.filter((m) => isMarkup(m.type))
+  const rowProps = { mmPerPt, unit, pageNum, selectedId, onSelect, onDelete, onToggleHidden, onSetAllHidden, onRename }
 
   return (
     <aside className="flex max-h-[35vh] w-full shrink-0 flex-col border-t border-slate-200 bg-white md:max-h-none md:w-80 md:border-t-0 md:border-l">
@@ -123,93 +126,62 @@ export default function Sidebar({
         </div>
       </section>
 
-      {/* 측정 목록 */}
-      <section className="flex min-h-0 flex-1 flex-col">
-        <div className="flex items-center justify-between px-4 pt-4 pb-2">
-          <h3 className="text-xs font-semibold tracking-wide text-slate-500">측정 목록 ({measurements.length})</h3>
-          {measurements.length > 0 && (
-            <div className="flex items-center gap-3 text-xs">
-              <button
-                className="text-slate-500 hover:underline"
-                onClick={() => onSetAllHidden(!allHidden)}
-                title={allHidden ? '모든 측정을 화면에 보이기' : '모든 측정을 화면에서 숨기기'}
-              >
-                {allHidden ? '모두 보이기' : '모두 숨기기'}
-              </button>
+      {/* 측정 목록 · 마크업 목록 */}
+      <div className="min-h-0 flex-1 overflow-auto">
+        <ItemSection
+          title="측정 목록"
+          items={measures}
+          empty="아직 측정한 항목이 없습니다."
+          actions={
+            <>
               <button className="text-blue-600 hover:underline" onClick={exportCsv}>
                 CSV 저장
               </button>
               <button
                 className="text-red-500 hover:underline"
-                onClick={() => window.confirm('모든 측정을 지울까요?') && onClear()}
+                onClick={() => window.confirm('모든 측정을 지울까요?') && onClear('measure')}
               >
                 전체 삭제
               </button>
-            </div>
-          )}
-        </div>
-        <ul className="min-h-0 flex-1 overflow-auto px-2 pb-3">
-          {measurements.length === 0 && (
-            <li className="px-2 py-6 text-center text-sm text-slate-400">아직 측정한 항목이 없습니다.</li>
-          )}
-          {measurements.map((m) => {
-            const d = describe(m, mmPerPt, unit)
-            const color = TYPE_INFO[m.type].color
-            const selected = selectedId === m.id
-            return (
-              <li
-                key={m.id}
-                onClick={() => onSelect(m)}
-                className={`group flex cursor-pointer items-start gap-2 rounded-lg px-2 py-2 ${
-                  selected ? 'bg-blue-50 ring-1 ring-blue-200' : 'hover:bg-slate-50'
-                } ${m.hidden ? 'opacity-50' : ''}`}
-              >
-                <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1">
-                    <input
-                      value={m.name}
-                      onChange={(e) => onRename(m.id, e.target.value)}
-                      onClick={(e) => e.stopPropagation()}
-                      className="min-w-0 flex-1 truncate rounded bg-transparent px-1 text-sm text-slate-600 hover:bg-white focus:bg-white focus:outline focus:outline-blue-300"
-                    />
-                    {m.page !== pageNum && <span className="shrink-0 text-xs text-slate-400">{m.page}p</span>}
-                  </div>
-                  <div className="px-1 font-semibold tabular-nums" style={{ color: mmPerPt || m.type === 'angle' ? color : '#94a3b8' }}>
-                    {d.main}
-                  </div>
-                  {d.sub && <div className="px-1 text-xs text-slate-500 tabular-nums">{d.sub}</div>}
-                </div>
-                <EyeButton hidden={m.hidden} onClick={() => onToggleHidden(m.id)} label={m.name} />
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onDelete(m.id)
-                  }}
-                  className="rounded p-1 text-slate-300 opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:text-red-500"
-                  title="삭제"
-                >
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
-                  </svg>
-                </button>
-              </li>
-            )
-          })}
-        </ul>
-      </section>
+            </>
+          }
+          group="measure"
+          {...rowProps}
+        />
+        <ItemSection
+          title="마크업"
+          items={markups}
+          empty="형광펜, 텍스트, 펜, 사각형, 화살표 도구로 표시를 남겨 보세요."
+          actions={
+            <button
+              className="text-red-500 hover:underline"
+              onClick={() => window.confirm('모든 마크업을 지울까요?') && onClear('markup')}
+            >
+              전체 삭제
+            </button>
+          }
+          group="markup"
+          {...rowProps}
+        />
+      </div>
 
       <details className="border-t border-slate-200 px-4 py-3 text-xs text-slate-500">
         <summary className="cursor-pointer font-medium text-slate-600">사용 팁 · 단축키</summary>
         <ul className="mt-2 list-disc space-y-1 pl-4">
           <li>Ctrl + 마우스 휠: 확대/축소, 스페이스바 누른 채 드래그: 화면 이동</li>
           <li>Shift 누른 채 클릭: 수평/수직/45° 로 고정</li>
-          <li>선택 도구(V)로 점을 끌어 위치 수정, Delete 로 삭제</li>
+          <li>선택 도구로 점이나 도형을 끌어 옮기고, Delete 로 삭제</li>
+          <li>텍스트: 클릭한 곳에 입력, Enter 완료 · Shift+Enter 줄바꿈, 선택 도구로 더블클릭하면 고치기</li>
+          <li>형광펜·펜·사각형·화살표: 누른 채 끌어서 그리기</li>
           <li>길이: 점을 이어 찍으면 총 길이, 마지막 점 다시 클릭·더블클릭·Enter 로 완료</li>
           <li>면적: 첫 점 클릭·더블클릭·Enter 로 완료, Backspace/우클릭으로 한 점 취소</li>
           <li>눈 아이콘: 도면 위에서 숨기기/보이기 (값은 그대로 남아요)</li>
           <li>여러 페이지는 위아래로 스크롤, PageUp/PageDown 으로 페이지 이동</li>
-          <li>V 선택 · H 이동 · C 기준 · L 길이 · A 면적 · G 각도 · Ctrl+Z 되돌리기</li>
+          <li>
+            숫자 키로 도구 바꾸기: 1 선택 · 2 이동 · 3 기준 · 4 길이 · 5 면적 · 6 각도 · 7 형광펜 · 8 텍스트 · 9 펜 · 0
+            사각형 · W 화살표
+          </li>
+          <li>Ctrl+S PDF 저장 · Ctrl+Z 되돌리기 · Ctrl+0 화면에 맞춤</li>
         </ul>
       </details>
     </aside>
@@ -243,5 +215,82 @@ function EyeButton({ hidden, onClick, label }) {
         )}
       </svg>
     </button>
+  )
+}
+
+function ItemSection({ title, items, empty, actions, group, mmPerPt, unit, pageNum, selectedId, onSelect, onDelete, onToggleHidden, onSetAllHidden, onRename }) {
+  const allHidden = items.length > 0 && items.every((m) => m.hidden)
+  return (
+    <section className="border-b border-slate-100 last:border-b-0">
+      <div className="flex items-center justify-between px-4 pt-4 pb-2">
+        <h3 className="text-xs font-semibold tracking-wide text-slate-500">
+          {title} ({items.length})
+        </h3>
+        {items.length > 0 && (
+          <div className="flex items-center gap-3 text-xs">
+            <button
+              className="text-slate-500 hover:underline"
+              onClick={() => onSetAllHidden(!allHidden, group)}
+              title={allHidden ? '모두 화면에 보이기' : '모두 화면에서 숨기기'}
+            >
+              {allHidden ? '모두 보이기' : '모두 숨기기'}
+            </button>
+            {actions}
+          </div>
+        )}
+      </div>
+      <ul className="px-2 pb-3">
+        {items.length === 0 && <li className="px-2 py-3 text-center text-sm text-slate-400">{empty}</li>}
+        {items.map((m) => {
+          const d = describe(m, mmPerPt, unit)
+          const color = m.color ?? TYPE_INFO[m.type].color
+          const selected = selectedId === m.id
+          const markup = isMarkup(m.type)
+          return (
+            <li
+              key={m.id}
+              onClick={() => onSelect(m)}
+              className={`group flex cursor-pointer items-start gap-2 rounded-lg px-2 py-2 ${
+                selected ? 'bg-blue-50 ring-1 ring-blue-200' : 'hover:bg-slate-50'
+              } ${m.hidden ? 'opacity-50' : ''}`}
+            >
+              <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1">
+                  <input
+                    value={m.name}
+                    onChange={(e) => onRename(m.id, e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="min-w-0 flex-1 truncate rounded bg-transparent px-1 text-sm text-slate-600 hover:bg-white focus:bg-white focus:outline focus:outline-blue-300"
+                  />
+                  {m.page !== pageNum && <span className="shrink-0 text-xs text-slate-400">{m.page}p</span>}
+                </div>
+                {markup ? (
+                  d.main && <div className="truncate px-1 text-sm text-slate-700">{d.main}</div>
+                ) : (
+                  <div className="px-1 font-semibold tabular-nums" style={{ color: mmPerPt || m.type === 'angle' ? color : '#94a3b8' }}>
+                    {d.main}
+                  </div>
+                )}
+                {d.sub && <div className="px-1 text-xs text-slate-500 tabular-nums">{d.sub}</div>}
+              </div>
+              <EyeButton hidden={m.hidden} onClick={() => onToggleHidden(m.id)} label={m.name} />
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDelete(m.id)
+                }}
+                className="rounded p-1 text-slate-300 opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:text-red-500"
+                title="삭제"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+                </svg>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
   )
 }

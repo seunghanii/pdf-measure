@@ -1,13 +1,6 @@
 import { useRef } from 'react'
-
-const TOOLS = [
-  { id: 'select', label: '선택', key: 'V', icon: 'M5 3l14 8-6 2-3 6z' },
-  { id: 'pan', label: '이동', key: 'H', icon: 'M8 13V5a1.5 1.5 0 013 0v6m0-1V4a1.5 1.5 0 013 0v6m0-1V5.5a1.5 1.5 0 013 0V14a6 6 0 01-6 6h-1a6 6 0 01-5-2.7L4 13.5a1.5 1.5 0 012.5-1.6L8 14' },
-  { id: 'calibrate', label: '기준 길이', key: 'C', icon: 'M3 17L17 3M3 17l3 0M3 17l0-3M17 3l-3 0M17 3l0 3', accent: 'orange' },
-  { id: 'length', label: '길이', key: 'L', icon: 'M3 12h18M3 8v8M21 8v8' },
-  { id: 'area', label: '면적', key: 'A', icon: 'M4 6l8-3 8 5-2 11H6z' },
-  { id: 'angle', label: '각도', key: 'G', icon: 'M4 20h16M4 20L16 5M10 20a6 6 0 00-2-4.5' },
-]
+import { TOOLS, digitForTool } from '../lib/tools'
+import { HIGHLIGHT_COLORS, MARKUP_COLORS, TEXT_SIZES } from '../lib/markup'
 
 function Icon({ d }) {
   return (
@@ -30,6 +23,11 @@ export default function Toolbar({
   calibrated,
   canUndo,
   onUndo,
+  markupStyle,
+  onChangeMarkupStyle,
+  selectedMarkupType,
+  onSave,
+  saving,
 }) {
   const inputRef = useRef(null)
   const numPages = pdfDoc?.numPages ?? 0
@@ -66,31 +64,23 @@ export default function Toolbar({
         <>
           <Divider />
           <div className="flex items-center gap-1" role="group" aria-label="측정 도구">
-            {TOOLS.map((t) => {
-              const active = tool === t.id
-              const needCal = !calibrated && t.id === 'calibrate'
-              return (
-                <button
-                  key={t.id}
-                  title={`${t.label} (${t.key})`}
-                  onClick={() => setTool(t.id)}
-                  className={[
-                    'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium whitespace-nowrap transition',
-                    active
-                      ? t.accent === 'orange'
-                        ? 'bg-orange-500 text-white'
-                        : 'bg-slate-800 text-white'
-                      : needCal
-                        ? 'bg-orange-50 text-orange-700 ring-1 ring-orange-300 hover:bg-orange-100'
-                        : 'text-slate-700 hover:bg-slate-100',
-                  ].join(' ')}
-                >
-                  <Icon d={t.icon} />
-                  <span className="hidden sm:inline">{t.label}</span>
-                </button>
-              )
-            })}
+            {TOOLS.filter((t) => t.group !== 'markup').map((t) => (
+              <ToolButton key={t.id} t={t} active={tool === t.id} needCal={!calibrated && t.id === 'calibrate'} onClick={() => setTool(t.id)} showLabel />
+            ))}
           </div>
+          <Divider />
+          <div className="flex items-center gap-1" role="group" aria-label="마크업 도구">
+            {TOOLS.filter((t) => t.group === 'markup').map((t) => (
+              <ToolButton key={t.id} t={t} active={tool === t.id} onClick={() => setTool(t.id)} />
+            ))}
+          </div>
+          {(['highlight', 'text', 'pen', 'rect', 'arrow'].includes(tool) || selectedMarkupType) && (
+            <MarkupStyle
+              kind={selectedMarkupType && tool === 'select' ? selectedMarkupType : tool}
+              style={markupStyle}
+              onChange={onChangeMarkupStyle}
+            />
+          )}
 
           <button
             className="rounded-md px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 disabled:opacity-40"
@@ -102,6 +92,15 @@ export default function Toolbar({
           </button>
 
           <div className="ml-auto flex items-center gap-3">
+            <button
+              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              onClick={onSave}
+              disabled={saving}
+              title="마크업과 측정을 그려 넣은 PDF로 저장 (Ctrl+S)"
+            >
+              <Icon d="M12 4v11M7 10l5 5 5-5M5 20h14" />
+              <span className="hidden sm:inline">{saving ? '저장 중…' : 'PDF 저장'}</span>
+            </button>
             {numPages > 1 && (
               <div className="flex items-center gap-1 text-sm">
                 <SmallButton onClick={() => setPageNum(Math.max(1, pageNum - 1))} disabled={pageNum <= 1}>
@@ -152,5 +151,62 @@ function SmallButton({ children, ...props }) {
     >
       {children}
     </button>
+  )
+}
+
+function ToolButton({ t, active, needCal, onClick, showLabel }) {
+  const digit = digitForTool(t.id)
+  return (
+    <button
+      title={`${t.label} (${digit ? `${digit} 또는 ` : ''}${t.key})`}
+      onClick={onClick}
+      className={[
+        'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium whitespace-nowrap transition',
+        active
+          ? t.accent === 'orange'
+            ? 'bg-orange-500 text-white'
+            : 'bg-slate-800 text-white'
+          : needCal
+            ? 'bg-orange-50 text-orange-700 ring-1 ring-orange-300 hover:bg-orange-100'
+            : 'text-slate-700 hover:bg-slate-100',
+      ].join(' ')}
+    >
+      <Icon d={t.icon} />
+      {showLabel ? <span className="hidden sm:inline">{t.label}</span> : <span className="hidden 2xl:inline">{t.label}</span>}
+    </button>
+  )
+}
+
+// 마크업 색상, 글자 크기
+function MarkupStyle({ kind, style, onChange }) {
+  const isHighlight = kind === 'highlight'
+  const colors = isHighlight ? HIGHLIGHT_COLORS : MARKUP_COLORS
+  const current = isHighlight ? style.highlightColor : style.color
+  return (
+    <div className="flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-1">
+      {colors.map((c) => (
+        <button
+          key={c}
+          title="색상"
+          onClick={() => onChange(isHighlight ? { highlightColor: c } : { color: c })}
+          className={`h-5 w-5 rounded-full border border-black/10 ${current === c ? 'ring-2 ring-slate-700 ring-offset-1' : ''}`}
+          style={{ background: c }}
+        />
+      ))}
+      {kind === 'text' && (
+        <select
+          value={style.fontSize}
+          onChange={(e) => onChange({ fontSize: Number(e.target.value) })}
+          className="ml-1 rounded border border-slate-300 bg-white px-1 py-0.5 text-xs"
+          title="글자 크기"
+        >
+          {TEXT_SIZES.map((s) => (
+            <option key={s.id} value={s.pt}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+      )}
+    </div>
   )
 }

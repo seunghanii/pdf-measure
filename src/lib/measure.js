@@ -6,6 +6,11 @@ export const TYPE_INFO = {
   area: { name: '면적', color: '#16a34a', need: null },
   angle: { name: '각도', color: '#9333ea', need: 3 },
   calibrate: { name: '기준 길이', color: '#ea580c', need: 2 },
+  highlight: { name: '형광펜', color: '#facc15', need: null },
+  text: { name: '텍스트', color: '#dc2626', need: 1 },
+  pen: { name: '펜', color: '#dc2626', need: null },
+  rect: { name: '사각형', color: '#dc2626', need: null },
+  arrow: { name: '화살표', color: '#dc2626', need: null },
 }
 
 // 측정 하나의 표시 문자열(주 값, 보조 값)
@@ -27,5 +32,6 @@ export function describe(m, mmPerPt, unit) {
     if (m.points.length < 3) return { main: '' }
     return { main: formatAngle(angleDeg(m.points[0], m.points[1], m.points[2])) }
   }
+  if (m.type === 'text') return { main: m.text }
   return { main: '' }
 }
