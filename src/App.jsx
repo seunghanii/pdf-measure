@@ -57,7 +57,7 @@ export default function App() {
 function Session({ store, user, onLogout, onChangePassword }) {
   const [docs, setDocs] = useState([]) // 열린 탭: { id, name, pdfDoc, savedState, store }
   const [activeId, setActiveId] = useState(null) // null = 홈(최근 파일)
-  const [recent, setRecent] = useState([])
+  const [recent, setRecent] = useState(store.kind === 'cloud' ? null : []) // null = 서버에서 불러오는 중
   const [error, setError] = useState('')
   const [warning, setWarning] = useState('')
   const [uploading, setUploading] = useState([]) // 서버에 올리는 중인 파일 이름
@@ -260,11 +260,9 @@ function Session({ store, user, onLogout, onChangePassword }) {
     try {
       await signOut()
     } catch (e) {
-      // 서버에 닿지 않아도 이 브라우저에서는 로그아웃
       console.warn(e)
-      await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
-      onLogout()
     }
+    onLogout() // 서버에 닿지 않아도 이 브라우저에서는 로그아웃
   }, [onLogout])
 
   // Ctrl+Tab 대신 Alt+←/→ 로 탭 이동

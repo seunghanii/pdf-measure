@@ -31,8 +31,9 @@ export async function signUp(email, password) {
   return data
 }
 
+// 이 브라우저에서만 로그아웃 (기본값은 모든 기기에서 로그아웃이라 다른 컴퓨터의 로그인도 끊김)
 export async function signOut() {
-  const { error } = await supabase.auth.signOut()
+  const { error } = await supabase.auth.signOut({ scope: 'local' })
   if (error) throw error
 }
 

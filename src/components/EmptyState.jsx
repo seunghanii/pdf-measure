@@ -44,7 +44,9 @@ export default function EmptyState({
   onMigrated,
 }) {
   const inputRef = useRef(null)
-  const hasRecent = recent.length > 0
+  const fetching = recent === null // 서버에서 목록을 불러오는 중
+  const list = recent ?? []
+  const hasRecent = list.length > 0 || fetching
 
   return (
     <div className="flex-1 overflow-auto p-6">
@@ -93,7 +95,8 @@ export default function EmptyState({
           <section className="mt-8">
             <h2 className="mb-2 px-1 text-sm font-semibold text-slate-500">{cloud ? '서버에 저장된 도면' : '최근 연 도면'}</h2>
             <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl bg-white shadow-sm">
-              {recent.map((item) => {
+              {fetching && <li className="px-4 py-6 text-center text-sm text-slate-400">서버에서 도면 목록을 불러오는 중…</li>}
+              {list.map((item) => {
                 const count = item.state?.measurements?.length ?? 0
                 const scale = scaleLabel(item.state)
                 const isOpen = openIds.includes(item.id)
