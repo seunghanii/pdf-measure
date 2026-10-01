@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { TOOLS, digitForTool } from '../lib/tools'
-import { HIGHLIGHT_COLORS, MARKUP_COLORS, TEXT_SIZES } from '../lib/markup'
+import { DEFAULT_BOX_OPACITY, HIGHLIGHT_COLORS, MARKUP_COLORS, TEXT_SIZES } from '../lib/markup'
 
 function Icon({ d }) {
   return (
@@ -177,11 +177,14 @@ function ToolButton({ t, active, needCal, onClick, showLabel }) {
   )
 }
 
-// 마크업 색상, 글자 크기
+// 마크업 색상, 글자 크기, 텍스트 상자 배경 투명도
 function MarkupStyle({ kind, style, onChange }) {
   const isHighlight = kind === 'highlight'
   const colors = isHighlight ? HIGHLIGHT_COLORS : MARKUP_COLORS
   const current = isHighlight ? style.highlightColor : style.color
+  // 예전에 저장된 크기처럼 목록에 없는 값도 그대로 보이게
+  const sizes = TEXT_SIZES.includes(style.fontSize) ? TEXT_SIZES : [...TEXT_SIZES, style.fontSize].sort((a, b) => a - b)
+  const transparency = Math.round((1 - (style.boxOpacity ?? DEFAULT_BOX_OPACITY)) * 100)
   return (
     <div className="flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-1">
       {colors.map((c) => (
@@ -194,18 +197,35 @@ function MarkupStyle({ kind, style, onChange }) {
         />
       ))}
       {kind === 'text' && (
-        <select
-          value={style.fontSize}
-          onChange={(e) => onChange({ fontSize: Number(e.target.value) })}
-          className="ml-1 rounded border border-slate-300 bg-white px-1 py-0.5 text-xs"
-          title="글자 크기"
-        >
-          {TEXT_SIZES.map((s) => (
-            <option key={s.id} value={s.pt}>
-              {s.label}
-            </option>
-          ))}
-        </select>
+        <>
+          <label className="ml-2 flex items-center gap-1 text-xs text-slate-600" title="글자 크기 (pt)">
+            크기
+            <select
+              value={style.fontSize}
+              onChange={(e) => onChange({ fontSize: Number(e.target.value) })}
+              className="rounded border border-slate-300 bg-white px-1 py-0.5 text-xs tabular-nums"
+            >
+              {sizes.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="ml-2 flex items-center gap-1 text-xs whitespace-nowrap text-slate-600" title="텍스트 상자 배경 투명도 (100% = 배경 없음)">
+            배경 투명도
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              value={transparency}
+              onChange={(e) => onChange({ boxOpacity: 1 - Number(e.target.value) / 100 }, { live: true })}
+              className="w-20 accent-slate-700"
+            />
+            <span className="w-8 text-right tabular-nums">{transparency}%</span>
+          </label>
+        </>
       )}
     </div>
   )

@@ -11,11 +11,10 @@ export const DRAG_TOOLS = ['highlight', 'pen', 'rect', 'arrow']
 export const HIGHLIGHT_COLORS = ['#facc15', '#4ade80', '#f472b6', '#60a5fa']
 export const MARKUP_COLORS = ['#dc2626', '#2563eb', '#16a34a', '#111827', '#ea580c']
 
-export const TEXT_SIZES = [
-  { id: 's', label: '작게', pt: 9 },
-  { id: 'm', label: '보통', pt: 13 },
-  { id: 'l', label: '크게', pt: 20 },
-]
+// 텍스트 글자 크기 (pt)
+export const TEXT_SIZES = [8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 24, 28, 32, 40, 48, 64]
+
+export const DEFAULT_BOX_OPACITY = 0.9
 
 export const FONT_FAMILY = '"Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif'
 
@@ -43,4 +42,12 @@ export function rectOf(a, b) {
     w: Math.abs(b.x - a.x),
     h: Math.abs(b.y - a.y),
   }
+}
+
+// 드래그 선택 판정에 쓰는 점들 (텍스트는 상자 네 모서리)
+export function itemCorners(m) {
+  if (m.type !== 'text') return m.points
+  const p = m.points[0]
+  const box = textBoxMetrics(m.text, m.fontSize ?? 13)
+  return [p, { x: p.x + box.width, y: p.y }, { x: p.x, y: p.y + box.height }, { x: p.x + box.width, y: p.y + box.height }]
 }

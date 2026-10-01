@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { distance, snapTo45 } from '../lib/geometry'
 import { TYPE_INFO } from '../lib/measure'
 import MeasurementShape from './MeasurementShape'
-import { DRAG_TOOLS, textBoxMetrics, FONT_FAMILY } from '../lib/markup'
+import { DRAG_TOOLS, textBoxMetrics, FONT_FAMILY, itemCorners, rectOf } from '../lib/markup'
 
 const MAX_CANVAS_PIXELS = 16_000_000 // 모바일 사파리 캔버스 한도 근처
 const CLOSE_RADIUS_PX = 10 // 면적: 첫 점 / 길이: 마지막 점 근처 클릭 시 완료
@@ -23,8 +23,8 @@ export default function PdfViewer({
   tool,
   measurements,
   calibration,
-  selectedId,
-  onSelect,
+  selectedIds,
+  onSelect, // (ids 배열)
   onComplete,
   onMovePoint,
   onSetPoints,
@@ -44,6 +44,7 @@ export default function PdfViewer({
   const [visible, setVisible] = useState(() => new Set())
   const dragRef = useRef(null) // 점 하나 { id, index } 또는 도형 전체 { id, whole, start, orig } 이동 중
   const [editing, setEditing] = useState(null) // 텍스트 입력 중 { page, point, id?, text, fontSize, color }
+  const [marquee, setMarquee] = useState(null) // 드래그 선택 상자 { page, a, b, additive }
   const panRef = useRef(null) // { x, y, left, top } 화면 이동 중
   const zoomAnchorRef = useRef(null) // 확대/축소 후에도 같은 지점을 같은 자리에
   const viewAnchorRef = useRef(null) // 현재 화면 가운데에 있는 페이지 위치
@@ -242,7 +243,7 @@ export default function PdfViewer({
   const editExisting = (id) => {
     const item = measurements.find((m) => m.id === id)
     if (!item || item.type !== 'text') return
-    onSelect(id)
+    onSelect([id])
     setEditing({
       page: item.page,
       point: item.points[0],
@@ -330,18 +331,34 @@ export default function PdfViewer({
       const handle = e.target.closest?.('[data-handle]')
       if (handle) {
         dragRef.current = { id: handle.dataset.id, index: Number(handle.dataset.index), moved: false }
-        onSelect(handle.dataset.id)
+        onSelect([handle.dataset.id])
         e.currentTarget.setPointerCapture(e.pointerId)
         return
       }
+      const additive = e.shiftKey || e.ctrlKey || e.metaKey
       const shape = e.target.closest?.('[data-shape]')
       const id = shape?.dataset.shape ?? null
-      onSelect(id)
-      const item = id && measurements.find((m) => m.id === id)
-      if (item) {
-        dragRef.current = { id, whole: true, start: toPage(e, e.currentTarget), orig: item.points, moved: false }
-        e.currentTarget.setPointerCapture(e.pointerId)
+      const start = toPage(e, e.currentTarget)
+      if (id) {
+        // Shift/Ctrl+클릭: 선택에 더하거나 빼기
+        if (additive) {
+          onSelect(selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id])
+          return
+        }
+        // 이미 선택된 것을 잡으면 선택된 것 전부를 함께 옮김
+        const group = selectedIds.includes(id) ? selectedIds : [id]
+        if (!selectedIds.includes(id)) onSelect([id])
+        const orig = {}
+        for (const m of measurements) if (group.includes(m.id)) orig[m.id] = m.points
+        if (Object.keys(orig).length) {
+          dragRef.current = { whole: true, start, orig, moved: false }
+          e.currentTarget.setPointerCapture(e.pointerId)
+        }
+        return
       }
+      // 빈 곳을 끌면 상자 안의 항목을 한꺼번에 선택
+      setMarquee({ page, a: start, b: start, additive })
+      e.currentTarget.setPointerCapture(e.pointerId)
       return
     }
 
@@ -404,7 +421,9 @@ export default function PdfViewer({
           d.moved = true
           onBeginEdit()
         }
-        onSetPoints(d.id, d.orig.map((q) => ({ x: q.x + dx, y: q.y + dy })))
+        const next = {}
+        for (const [id, pts] of Object.entries(d.orig)) next[id] = pts.map((q) => ({ x: q.x + dx, y: q.y + dy }))
+        onSetPoints(next)
       } else {
         if (!d.moved) {
           d.moved = true
@@ -412,6 +431,10 @@ export default function PdfViewer({
         }
         onMovePoint(d.id, d.index, p)
       }
+      return
+    }
+    if (marquee) {
+      setMarquee((mq) => (mq ? { ...mq, b: p } : mq))
       return
     }
     if (draft?.dragging) {
@@ -435,6 +458,17 @@ export default function PdfViewer({
       forceRender((n) => n + 1)
     }
     dragRef.current = null
+    if (marquee) {
+      const r = rectOf(marquee.a, marquee.b)
+      let ids = []
+      if (r.w * zoom > 3 || r.h * zoom > 3) {
+        const inside = (q) => q.x >= r.x && q.x <= r.x + r.w && q.y >= r.y && q.y <= r.y + r.h
+        // 점(텍스트는 상자 모서리) 하나라도 상자 안에 들어오면 선택
+        ids = measurements.filter((m) => m.page === marquee.page && itemCorners(m).some(inside)).map((m) => m.id)
+      }
+      onSelect(marquee.additive ? [...new Set([...selectedIds, ...ids])] : ids)
+      setMarquee(null)
+    }
     if (draft?.dragging) {
       const pts = draft.points
       const big = tool === 'pen' ? pts.length > 1 : distance(pts[0], pts[pts.length - 1]) * zoom > 4
@@ -533,7 +567,7 @@ export default function PdfViewer({
                     <MeasurementShape
                       m={{ id: 'calibration', type: 'calibrate', points: calibration.points, label: calibration.label }}
                       zoom={zoom}
-                      selected={selectedId === 'calibration'}
+                      selected={selectedIds.includes('calibration')}
                       showHandles={tool === 'select'}
                     />
                   )}
@@ -546,11 +580,27 @@ export default function PdfViewer({
                         zoom={zoom}
                         mmPerPt={mmPerPt}
                         unit={unit}
-                        selected={selectedId === m.id}
+                        selected={selectedIds.includes(m.id)}
                         showHandles={tool === 'select'}
                       />
                     ))}
                   {renderPreview(page)}
+                  {marquee && marquee.page === page && (() => {
+                    const r = rectOf(marquee.a, marquee.b)
+                    return (
+                      <rect
+                        x={r.x * zoom}
+                        y={r.y * zoom}
+                        width={r.w * zoom}
+                        height={r.h * zoom}
+                        fill="#3b82f6"
+                        fillOpacity={0.08}
+                        stroke="#2563eb"
+                        strokeDasharray="5 3"
+                        pointerEvents="none"
+                      />
+                    )
+                  })()}
                   {drawing && cursor && cursor.page === page && !(draft && draft.page === page) && (
                     <circle cx={cursor.p.x * zoom} cy={cursor.p.y * zoom} r={3} fill={TYPE_INFO[tool].color} />
                   )}

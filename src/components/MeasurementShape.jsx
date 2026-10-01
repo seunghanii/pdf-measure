@@ -1,7 +1,7 @@
 import { angleArcPath, distance, polygonCentroid } from '../lib/geometry'
 import { formatLength } from '../lib/units'
 import { TYPE_INFO, describe } from '../lib/measure'
-import { FONT_FAMILY, MARKUP_STROKE, isMarkup, rectOf, textBoxMetrics } from '../lib/markup'
+import { DEFAULT_BOX_OPACITY, FONT_FAMILY, MARKUP_STROKE, isMarkup, rectOf, textBoxMetrics } from '../lib/markup'
 
 function Label({ x, y, text, sub, color }) {
   return (
@@ -266,7 +266,7 @@ function MarkupShape({ m, zoom, selected, showHandles, draft }) {
     bounds = { x, y, w: box.width * zoom, h: box.height * zoom }
     body = (
       <>
-        <rect x={x} y={y} width={box.width * zoom} height={box.height * zoom} fill="white" fillOpacity={0.9} stroke={color} strokeWidth={Math.max(0.75, 0.8 * zoom)} rx={2 * zoom} />
+        <rect x={x} y={y} width={box.width * zoom} height={box.height * zoom} fill="white" fillOpacity={m.boxOpacity ?? DEFAULT_BOX_OPACITY} stroke={color} strokeWidth={Math.max(0.75, 0.8 * zoom)} rx={2 * zoom} />
         <text fontSize={size * zoom} fontFamily={FONT_FAMILY} fill={color}>
           {box.lines.map((line, i) => (
             <tspan key={i} x={x + box.pad * zoom} y={y + (box.pad + box.lineHeight * i + size * 1.02) * zoom} xmlSpace="preserve">

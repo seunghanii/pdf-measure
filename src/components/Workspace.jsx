@@ -3,7 +3,7 @@ import { distance } from '../lib/geometry'
 import { PT_TO_PAPER_MM, UNITS } from '../lib/units'
 import { saveState } from '../lib/storage'
 import { TYPE_INFO } from '../lib/measure'
-import { isMarkup } from '../lib/markup'
+import { DEFAULT_BOX_OPACITY, isMarkup } from '../lib/markup'
 import { TOOLS, toolForDigit } from '../lib/tools'
 import PdfViewer from './PdfViewer'
 import Toolbar from './Toolbar'
@@ -25,12 +25,16 @@ export default function Workspace({ doc, active, onOpenFile }) {
   const [history, setHistory] = useState([])
   const [calibration, setCalibration] = useState(saved?.calibration ?? null)
   const [pendingCalibration, setPendingCalibration] = useState(null)
-  const [selectedId, setSelectedId] = useState(null)
+  const [selectedIds, setSelectedIds] = useState([]) // 선택된 항목들 (드래그·Shift+클릭으로 여러 개)
   const [unit, setUnit] = useState(saved?.unit ?? 'mm')
   const counters = useRef(saved?.counters ?? { length: 0, area: 0, angle: 0 })
-  const [markupStyle, setMarkupStyle] = useState(
-    saved?.markupStyle ?? { color: '#dc2626', highlightColor: '#facc15', fontSize: 13 },
-  )
+  const [markupStyle, setMarkupStyle] = useState(() => ({
+    color: '#dc2626',
+    highlightColor: '#facc15',
+    fontSize: 13,
+    boxOpacity: DEFAULT_BOX_OPACITY,
+    ...saved?.markupStyle,
+  }))
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState('')
   // 툴바·목록에서 특정 페이지로 이동 요청 (뷰어가 스크롤)
@@ -111,34 +115,64 @@ export default function Workspace({ doc, active, onOpenFile }) {
       }
       if (isMarkup(type)) {
         m.color = type === 'highlight' ? markupStyle.highlightColor : markupStyle.color
-        if (type === 'text') m.fontSize = markupStyle.fontSize
+        if (type === 'text') {
+          m.fontSize = markupStyle.fontSize
+          m.boxOpacity = markupStyle.boxOpacity
+        }
       }
       Object.assign(m, extra)
       commit((prev) => [...prev, m])
-      setSelectedId(m.id)
+      setSelectedIds([m.id])
     },
     [commit, markupStyle],
   )
 
-  const onSetPoints = useCallback((id, points) => {
-    setMeasurements((prev) => prev.map((m) => (m.id === id ? { ...m, points } : m)))
+  // { id: points } 로 여러 항목의 점을 한꺼번에 바꾸기 (선택한 것 함께 옮기기)
+  const onSetPoints = useCallback((map) => {
+    setMeasurements((prev) => prev.map((m) => (map[m.id] ? { ...m, points: map[m.id] } : m)))
   }, [])
 
   const updateItem = useCallback((id, patch) => {
     setMeasurements((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)))
   }, [])
 
-  // 색·글자 크기: 다음에 그릴 마크업에 적용, 선택된 마크업이 있으면 그것도 바꿈
-  const selectedItem = measurements.find((m) => m.id === selectedId)
-  const changeMarkupStyle = (patch) => {
+  // 선택된 마크업. 텍스트가 섞여 있으면 툴바에 텍스트 설정(글자 크기·투명도)을 보여 줌
+  const selectedMarkups = measurements.filter((m) => selectedIds.includes(m.id) && isMarkup(m.type))
+  const selText = selectedMarkups.find((m) => m.type === 'text')
+  const selLine = selectedMarkups.find((m) => m.type !== 'highlight')
+  const selHighlight = selectedMarkups.find((m) => m.type === 'highlight')
+  const selectedMarkupType = selText ? 'text' : selLine ? selLine.type : selHighlight ? 'highlight' : null
+  // 툴바에는 선택된 마크업의 현재 값을 보여 줌
+  const shownStyle =
+    tool === 'select' && selectedMarkups.length
+      ? {
+          ...markupStyle,
+          ...(selLine && { color: selLine.color }),
+          ...(selHighlight && { highlightColor: selHighlight.color }),
+          ...(selText && { fontSize: selText.fontSize ?? 13, boxOpacity: selText.boxOpacity ?? DEFAULT_BOX_OPACITY }),
+        }
+      : markupStyle
+
+  // 색·글자 크기·투명도: 다음에 그릴 마크업에 적용, 선택된 마크업이 있으면 전부 바꿈.
+  // 슬라이더처럼 연달아 바뀌는 변경(live)은 되돌리기 한 번으로 묶음.
+  const styleGesture = useRef(0)
+  const changeMarkupStyle = (patch, { live = false } = {}) => {
     setMarkupStyle((st) => ({ ...st, ...patch }))
-    if (selectedItem && isMarkup(selectedItem.type)) {
-      const itemPatch = {}
-      if (patch.color && selectedItem.type !== 'highlight') itemPatch.color = patch.color
-      if (patch.highlightColor && selectedItem.type === 'highlight') itemPatch.color = patch.highlightColor
-      if (patch.fontSize && selectedItem.type === 'text') itemPatch.fontSize = patch.fontSize
-      if (Object.keys(itemPatch).length) commit((prev) => prev.map((m) => (m.id === selectedItem.id ? { ...m, ...itemPatch } : m)))
+    const itemPatch = (m) => {
+      const out = {}
+      if (patch.color && m.type !== 'highlight') out.color = patch.color
+      if (patch.highlightColor && m.type === 'highlight') out.color = patch.highlightColor
+      if (patch.fontSize && m.type === 'text') out.fontSize = patch.fontSize
+      if (patch.boxOpacity !== undefined && m.type === 'text') out.boxOpacity = patch.boxOpacity
+      return Object.keys(out).length ? out : null
     }
+    const targets = selectedMarkups.filter(itemPatch)
+    if (!targets.length) return
+    const now = Date.now()
+    if (!live || now - styleGesture.current > 800) beginEdit()
+    styleGesture.current = live ? now : 0
+    const ids = new Set(targets.map((m) => m.id))
+    setMeasurements((prev) => prev.map((m) => (ids.has(m.id) ? { ...m, ...itemPatch(m) } : m)))
   }
 
   // 마크업과 측정을 그려 넣은 PDF 를 다운로드 폴더에 저장
@@ -176,10 +210,16 @@ export default function Workspace({ doc, active, onOpenFile }) {
     )
   }, [])
 
-  const deleteMeasurement = useCallback((id) => {
-    commit((prev) => prev.filter((m) => m.id !== id))
-    setSelectedId((s) => (s === id ? null : s))
-  }, [commit])
+  // ids: 지울 항목 id 배열 (기준선은 목록에서 따로 지움)
+  const deleteItems = useCallback(
+    (ids) => {
+      const del = new Set(ids.filter((id) => id !== 'calibration'))
+      if (!del.size) return
+      commit((prev) => prev.filter((m) => !del.has(m.id)))
+      setSelectedIds((s) => s.filter((id) => !del.has(id)))
+    },
+    [commit],
+  )
 
   const applyCalibration = ({ value, unit: u }) => {
     const realMm = value * UNITS[u].toMm
@@ -223,6 +263,13 @@ export default function Workspace({ doc, active, onOpenFile }) {
         undo()
         return
       }
+      // Ctrl+A: 화면에 보이는 항목 전체 선택
+      if (ctrl && e.key.toLowerCase() === 'a') {
+        e.preventDefault()
+        setTool('select')
+        setSelectedIds(measurementsRef.current.filter((m) => !m.hidden).map((m) => m.id))
+        return
+      }
       // 숫자 키(1~9, 0)로 도구 바꾸기. Ctrl/Alt+숫자도 브라우저가 넘겨주는 경우엔 동작
       const digitTool = /^Digit\d$/.test(e.code) ? toolForDigit(e.code.slice(5)) : undefined
       if (digitTool && !e.shiftKey) {
@@ -233,7 +280,13 @@ export default function Workspace({ doc, active, onOpenFile }) {
       if (ctrl || e.altKey) return
       const t = TOOLS.find((x) => x.key.toLowerCase() === e.key.toLowerCase())?.id
       if (t && pdfDoc) setTool(t)
-      if (e.key === 'Delete' && selectedId && selectedId !== 'calibration') deleteMeasurement(selectedId)
+      if (e.key === 'Delete' || (e.key === 'Backspace' && tool === 'select')) {
+        if (selectedIds.length) {
+          e.preventDefault()
+          deleteItems(selectedIds)
+        }
+      }
+      if (e.key === 'Escape' && tool === 'select') setSelectedIds([])
       if (e.key === '+' || e.key === '=') setZoom((z) => Math.min(8, z * 1.25))
       if (e.key === '-') setZoom((z) => Math.max(0.1, z / 1.25))
       if (e.key === 'PageDown') {
@@ -247,23 +300,30 @@ export default function Workspace({ doc, active, onOpenFile }) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [active, deleteMeasurement, jumpTo, pageNum, pdfDoc, pendingCalibration, savePdf, selectedId, undo])
+  }, [active, deleteItems, jumpTo, pageNum, pdfDoc, pendingCalibration, savePdf, selectedIds, tool, undo])
 
   const visibleMeasurements = measurements.filter((m) => !m.hidden)
 
   // 눈 아이콘: 화면에서 숨기기/보이기 (값은 그대로 남음)
+  // 숨긴 항목은 선택에서도 빠짐 (보이지 않는 것이 함께 지워지거나 옮겨지지 않도록)
   const toggleHidden = (id) => {
     if (id === 'calibration') {
       setCalibration((c) => (c ? { ...c, hidden: !c.hidden } : c))
       return
     }
+    const hiding = !measurementsRef.current.find((m) => m.id === id)?.hidden
+    if (hiding) setSelectedIds((s) => s.filter((x) => x !== id))
     setMeasurements((prev) => prev.map((m) => (m.id === id ? { ...m, hidden: !m.hidden } : m)))
   }
   // group: 'measure' | 'markup'
-  const setAllHidden = (hidden, group) =>
-    setMeasurements((prev) =>
-      prev.map((m) => ((group === 'markup') === isMarkup(m.type) ? { ...m, hidden } : m)),
-    )
+  const setAllHidden = (hidden, group) => {
+    const inGroup = (m) => (group === 'markup') === isMarkup(m.type)
+    if (hidden) {
+      const ids = new Set(measurementsRef.current.filter(inGroup).map((m) => m.id))
+      setSelectedIds((s) => s.filter((x) => !ids.has(x)))
+    }
+    setMeasurements((prev) => prev.map((m) => (inGroup(m) ? { ...m, hidden } : m)))
+  }
 
   if (!active) return null
 
@@ -282,9 +342,9 @@ export default function Workspace({ doc, active, onOpenFile }) {
         calibrated={!!mmPerPt}
         canUndo={history.length > 0}
         onUndo={undo}
-        markupStyle={markupStyle}
+        markupStyle={shownStyle}
         onChangeMarkupStyle={changeMarkupStyle}
-        selectedMarkupType={selectedItem && isMarkup(selectedItem.type) ? selectedItem.type : null}
+        selectedMarkupType={selectedMarkupType}
         onSave={savePdf}
         saving={saving}
       />
@@ -312,8 +372,8 @@ export default function Workspace({ doc, active, onOpenFile }) {
           tool={tool}
           measurements={visibleMeasurements}
           calibration={calibration?.mode === 'line' && !calibration.hidden ? calibration : null}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
+          selectedIds={selectedIds}
+          onSelect={setSelectedIds}
           onComplete={onComplete}
           onMovePoint={onMovePoint}
           onSetPoints={onSetPoints}
@@ -330,19 +390,23 @@ export default function Workspace({ doc, active, onOpenFile }) {
           setUnit={setUnit}
           measurements={measurements}
           pageNum={pageNum}
-          selectedId={selectedId}
-          onSelect={(m) => {
-            setSelectedId(m.id)
+          selectedIds={selectedIds}
+          onSelect={(m, additive) => {
+            if (additive) {
+              setSelectedIds((s) => (s.includes(m.id) ? s.filter((x) => x !== m.id) : [...s, m.id]))
+              return
+            }
+            setSelectedIds([m.id])
             if (m.hidden) toggleHidden(m.id)
             jumpTo(m.page)
           }}
-          onDelete={deleteMeasurement}
+          onDelete={(id) => deleteItems([id])}
           onToggleHidden={toggleHidden}
           onSetAllHidden={setAllHidden}
           onRename={(id, name) => setMeasurements((prev) => prev.map((m) => (m.id === id ? { ...m, name } : m)))}
           onClear={(group) => {
             commit((prev) => prev.filter((m) => (group === 'markup') !== isMarkup(m.type)))
-            setSelectedId(null)
+            setSelectedIds([])
           }}
           onStartCalibrate={() => setTool('calibrate')}
           onApplyRatio={applyRatio}

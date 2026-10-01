@@ -10,7 +10,7 @@ export default function Sidebar({
   setUnit,
   measurements,
   pageNum,
-  selectedId,
+  selectedIds,
   onSelect,
   onDelete,
   onToggleHidden,
@@ -43,7 +43,7 @@ export default function Sidebar({
 
   const measures = measurements.filter((m) => !isMarkup(m.type))
   const markups = measurements.filter((m) => isMarkup(m.type))
-  const rowProps = { mmPerPt, unit, pageNum, selectedId, onSelect, onDelete, onToggleHidden, onSetAllHidden, onRename }
+  const rowProps = { mmPerPt, unit, pageNum, selectedIds, onSelect, onDelete, onToggleHidden, onSetAllHidden, onRename }
 
   return (
     <aside className="flex max-h-[35vh] w-full shrink-0 flex-col border-t border-slate-200 bg-white md:max-h-none md:w-80 md:border-t-0 md:border-l">
@@ -171,6 +171,7 @@ export default function Sidebar({
           <li>Ctrl + 마우스 휠: 확대/축소, 스페이스바 누른 채 드래그: 화면 이동</li>
           <li>Shift 누른 채 클릭: 수평/수직/45° 로 고정</li>
           <li>선택 도구로 점이나 도형을 끌어 옮기고, Delete 로 삭제</li>
+          <li>선택 도구로 빈 곳을 끌면 상자 안의 항목을 한꺼번에 선택, Shift/Ctrl+클릭으로 하나씩 더하거나 빼기, Ctrl+A 전체 선택</li>
           <li>텍스트: 클릭한 곳에 입력, Enter 완료 · Shift+Enter 줄바꿈, 선택 도구로 더블클릭하면 고치기</li>
           <li>형광펜·펜·사각형·화살표: 누른 채 끌어서 그리기</li>
           <li>길이: 점을 이어 찍으면 총 길이, 마지막 점 다시 클릭·더블클릭·Enter 로 완료</li>
@@ -218,7 +219,7 @@ function EyeButton({ hidden, onClick, label }) {
   )
 }
 
-function ItemSection({ title, items, empty, actions, group, mmPerPt, unit, pageNum, selectedId, onSelect, onDelete, onToggleHidden, onSetAllHidden, onRename }) {
+function ItemSection({ title, items, empty, actions, group, mmPerPt, unit, pageNum, selectedIds, onSelect, onDelete, onToggleHidden, onSetAllHidden, onRename }) {
   const allHidden = items.length > 0 && items.every((m) => m.hidden)
   return (
     <section className="border-b border-slate-100 last:border-b-0">
@@ -244,12 +245,12 @@ function ItemSection({ title, items, empty, actions, group, mmPerPt, unit, pageN
         {items.map((m) => {
           const d = describe(m, mmPerPt, unit)
           const color = m.color ?? TYPE_INFO[m.type].color
-          const selected = selectedId === m.id
+          const selected = selectedIds.includes(m.id)
           const markup = isMarkup(m.type)
           return (
             <li
               key={m.id}
-              onClick={() => onSelect(m)}
+              onClick={(e) => onSelect(m, e.shiftKey || e.ctrlKey || e.metaKey)}
               className={`group flex cursor-pointer items-start gap-2 rounded-lg px-2 py-2 ${
                 selected ? 'bg-blue-50 ring-1 ring-blue-200' : 'hover:bg-slate-50'
               } ${m.hidden ? 'opacity-50' : ''}`}
