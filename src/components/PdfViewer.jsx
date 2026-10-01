@@ -12,6 +12,8 @@ export default function PdfViewer({
   zoom,
   onZoom,
   fitKey,
+  fittedKey,
+  onFitted,
   tool,
   measurements,
   calibration,
@@ -51,16 +53,17 @@ export default function PdfViewer({
     }
   }, [pdfDoc, pageNum])
 
-  // "화면에 맞춤": 새 파일을 열거나 맞춤 버튼을 누를 때
+  // "화면에 맞춤": 새 파일을 열거나 맞춤 버튼을 누를 때 (fitKey 가 아직 적용 안 된 경우만)
   const pageWidth = pageSize?.width
   const pageHeight = pageSize?.height
   useEffect(() => {
     const el = containerRef.current
-    if (!el || !pageWidth) return
+    if (!el || !pageWidth || fitKey === fittedKey) return
     const fit = Math.min((el.clientWidth - 48) / pageWidth, (el.clientHeight - 48) / pageHeight)
     onZoom(Math.max(0.1, Math.min(8, fit)))
+    onFitted(fitKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fitKey, pageWidth, pageHeight])
+  }, [fitKey, fittedKey, pageWidth, pageHeight])
 
   // 페이지/도구가 바뀌면 그리던 것은 취소
   useEffect(() => {

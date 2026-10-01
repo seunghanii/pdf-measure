@@ -18,7 +18,6 @@ function Icon({ d }) {
 }
 
 export default function Toolbar({
-  fileName,
   onOpenFile,
   pdfDoc,
   pageNum,
@@ -55,13 +54,13 @@ export default function Toolbar({
         ref={inputRef}
         type="file"
         accept="application/pdf,.pdf"
+        multiple
         className="hidden"
         onChange={(e) => {
-          onOpenFile(e.target.files?.[0])
+          onOpenFile([...(e.target.files ?? [])])
           e.target.value = ''
         }}
       />
-      {fileName && <span className="max-w-48 truncate text-sm text-slate-500" title={fileName}>{fileName}</span>}
 
       {pdfDoc && (
         <>

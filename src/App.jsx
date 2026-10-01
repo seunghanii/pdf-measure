@@ -1,66 +1,107 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { loadPdf } from './lib/pdf'
-import { distance } from './lib/geometry'
-import { PT_TO_PAPER_MM, UNITS } from './lib/units'
-import PdfViewer from './components/PdfViewer'
+import {
+  fileIdOf,
+  getFile,
+  listRecent,
+  loadSession,
+  rememberFile,
+  removeFile,
+  saveSession,
+  touchFile,
+} from './lib/storage'
+import Workspace from './components/Workspace'
 import Toolbar from './components/Toolbar'
-import Sidebar from './components/Sidebar'
-import CalibrationDialog from './components/CalibrationDialog'
+import TabBar from './components/TabBar'
 import EmptyState from './components/EmptyState'
 
-let nextId = 1
-
 export default function App() {
-  const [pdfDoc, setPdfDoc] = useState(null)
-  const [fileName, setFileName] = useState('')
-  const [pageNum, setPageNum] = useState(1)
-  const [zoom, setZoom] = useState(1)
-  const [fitKey, setFitKey] = useState(0)
-  const [tool, setTool] = useState('calibrate')
-  const [measurements, setMeasurements] = useState([])
-  const [history, setHistory] = useState([])
-  const [calibration, setCalibration] = useState(null)
-  const [pendingCalibration, setPendingCalibration] = useState(null)
-  const [selectedId, setSelectedId] = useState(null)
-  const [unit, setUnit] = useState('mm')
+  const [docs, setDocs] = useState([]) // 열린 탭: { id, name, pdfDoc, savedState }
+  const [activeId, setActiveId] = useState(null) // null = 홈(최근 파일)
+  const [recent, setRecent] = useState([])
   const [error, setError] = useState('')
+  const [warning, setWarning] = useState('')
   const [loading, setLoading] = useState(false)
-  const counters = useRef({ length: 0, area: 0, angle: 0 })
+  const [restored, setRestored] = useState(false)
+  const docsRef = useRef(docs)
+  const opening = useRef(new Set())
 
-  // 축척: PDF 1pt 가 실제 몇 mm 인지
-  const mmPerPt = useMemo(() => {
-    if (!calibration) return null
-    if (calibration.mode === 'ratio') return PT_TO_PAPER_MM * calibration.ratio
-    const d = distance(calibration.points[0], calibration.points[1])
-    return d > 0 ? calibration.realMm / d : null
-  }, [calibration])
+  useEffect(() => {
+    docsRef.current = docs
+  }, [docs])
 
-  const openFile = useCallback(async (file) => {
-    if (!file) return
-    setError('')
-    setLoading(true)
-    try {
-      const doc = await loadPdf(await file.arrayBuffer())
-      setPdfDoc((old) => {
-        old?.destroy()
-        return doc
-      })
-      setFileName(file.name)
-      setPageNum(1)
-      setMeasurements([])
-      setHistory([])
-      setCalibration(null)
-      setSelectedId(null)
-      setTool('calibrate')
-      counters.current = { length: 0, area: 0, angle: 0 }
-      setFitKey((k) => k + 1)
-    } catch (e) {
-      console.error(e)
-      setError('PDF 파일을 열 수 없습니다. 암호가 걸려 있거나 손상된 파일인지 확인해 주세요.')
-    } finally {
-      setLoading(false)
-    }
+  const refreshRecent = useCallback(() => {
+    listRecent()
+      .then(setRecent)
+      .catch(() => setRecent([]))
   }, [])
+
+  // id 로 식별되는 PDF 를 새 탭으로 열기 (이미 열려 있으면 그 탭으로 이동)
+  const openDoc = useCallback(
+    async (id, file, { fromRecent = false, activate = true } = {}) => {
+      if (docsRef.current.some((d) => d.id === id)) {
+        if (activate) setActiveId(id)
+        touchFile(id).catch(() => {})
+        return true
+      }
+      if (opening.current.has(id)) return false
+      opening.current.add(id)
+      try {
+        const pdfDoc = await loadPdf(await file.arrayBuffer())
+        let record = null
+        try {
+          record = fromRecent ? await touchFile(id) : await rememberFile(id, file)
+        } catch (e) {
+          console.warn(e)
+          setWarning('브라우저 저장 공간이 부족해 이 도면은 새로고침하면 사라질 수 있어요.')
+        }
+        const doc = { id, name: file.name, pdfDoc, savedState: record?.state ?? null }
+        setDocs((prev) => (prev.some((d) => d.id === id) ? prev : [...prev, doc]))
+        if (activate) setActiveId(id)
+        return true
+      } finally {
+        opening.current.delete(id)
+      }
+    },
+    [],
+  )
+
+  const openFile = useCallback(
+    async (file) => {
+      if (!file) return
+      setError('')
+      setLoading(true)
+      try {
+        await openDoc(fileIdOf(file), file)
+      } catch (e) {
+        console.error(e)
+        setError(`"${file.name}" 을(를) 열 수 없습니다. 암호가 걸려 있거나 손상된 PDF인지 확인해 주세요.`)
+      } finally {
+        setLoading(false)
+        refreshRecent()
+      }
+    },
+    [openDoc, refreshRecent],
+  )
+
+  const openRecent = useCallback(
+    async (item) => {
+      setError('')
+      setLoading(true)
+      try {
+        const blob = await getFile(item.id)
+        if (!blob) throw new Error('missing')
+        await openDoc(item.id, new File([blob], item.name, { type: 'application/pdf' }), { fromRecent: true })
+      } catch (e) {
+        console.error(e)
+        setError(`"${item.name}" 을(를) 다시 열 수 없습니다. 목록에서 지우고 파일을 새로 열어 주세요.`)
+      } finally {
+        setLoading(false)
+        refreshRecent()
+      }
+    },
+    [openDoc, refreshRecent],
+  )
 
   const openSample = useCallback(async () => {
     const res = await fetch(`${import.meta.env.BASE_URL}sample.pdf`)
@@ -68,114 +109,89 @@ export default function App() {
     openFile(new File([blob], '샘플 평면도.pdf', { type: 'application/pdf' }))
   }, [openFile])
 
-  const measurementsRef = useRef(measurements)
-  const historyRef = useRef(history)
-  useLayoutEffect(() => {
-    measurementsRef.current = measurements
-    historyRef.current = history
-  })
-
-  // 되돌리기(Ctrl+Z)가 가능한 변경
-  const commit = useCallback((updater) => {
-    const prev = measurementsRef.current
-    setHistory((h) => [...h.slice(-49), prev])
-    setMeasurements(typeof updater === 'function' ? updater(prev) : updater)
-  }, [])
-
-  const undo = useCallback(() => {
-    const h = historyRef.current
-    if (!h.length) return
-    setMeasurements(h[h.length - 1])
-    setHistory(h.slice(0, -1))
-  }, [])
-
-  const onComplete = useCallback(
-    (type, points) => {
-      if (type === 'calibrate') {
-        setPendingCalibration({ page: pageNum, points })
-        return
-      }
-      counters.current[type] += 1
-      const m = {
-        id: String(nextId++),
-        type,
-        page: pageNum,
-        points,
-        name: `${type === 'length' ? '길이' : type === 'area' ? '면적' : '각도'} ${counters.current[type]}`,
-      }
-      commit((prev) => [...prev, m])
-      setSelectedId(m.id)
+  const closeTab = useCallback(
+    (id) => {
+      const list = docsRef.current
+      const idx = list.findIndex((d) => d.id === id)
+      if (idx < 0) return
+      list[idx].pdfDoc.loadingTask?.destroy() // 워커 메모리 해제
+      const rest = list.filter((d) => d.id !== id)
+      setDocs(rest)
+      if (activeId === id) setActiveId(rest[Math.min(idx, rest.length - 1)]?.id ?? null)
+      refreshRecent()
     },
-    [commit, pageNum],
+    [activeId, refreshRecent],
   )
 
-  const onMovePoint = useCallback((id, index, p) => {
-    if (id === 'calibration') {
-      setCalibration((c) => (c ? { ...c, points: c.points.map((q, i) => (i === index ? p : q)) } : c))
-      return
+  // 새로고침 전에 열려 있던 탭 복원
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const session = loadSession()
+      const restoredIds = []
+      for (const id of session.open) {
+        try {
+          const blob = await getFile(id)
+          if (!blob || cancelled) continue
+          const name = id.slice(0, id.lastIndexOf('|'))
+          const ok = await openDoc(id, new File([blob], name, { type: 'application/pdf' }), {
+            fromRecent: true,
+            activate: false,
+          })
+          if (ok) restoredIds.push(id)
+        } catch (e) {
+          console.warn('탭 복원 실패', id, e)
+        }
+      }
+      if (cancelled) return
+      if (restoredIds.includes(session.active)) setActiveId(session.active)
+      else if (restoredIds.length) setActiveId(restoredIds[restoredIds.length - 1])
+      setRestored(true)
+      refreshRecent()
+    })()
+    return () => {
+      cancelled = true
     }
-    setMeasurements((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, points: m.points.map((q, i) => (i === index ? p : q)) } : m)),
-    )
-  }, [])
+  }, [openDoc, refreshRecent])
 
-  const deleteMeasurement = useCallback((id) => {
-    commit((prev) => prev.filter((m) => m.id !== id))
-    setSelectedId((s) => (s === id ? null : s))
-  }, [commit])
+  useEffect(() => {
+    if (restored) saveSession({ open: docs.map((d) => d.id), active: activeId })
+  }, [docs, activeId, restored])
 
-  const applyCalibration = ({ value, unit: u }) => {
-    const realMm = value * UNITS[u].toMm
-    setCalibration({
-      mode: 'line',
-      page: pendingCalibration.page,
-      points: pendingCalibration.points,
-      realMm,
-      label: `기준 ${value.toLocaleString('ko-KR')} ${u}`,
-    })
-    setUnit(u)
-    setPendingCalibration(null)
-    setTool('length')
-  }
+  // 홈 화면으로 돌아올 때 최근 목록 새로 고침
+  useEffect(() => {
+    if (activeId === null) refreshRecent()
+  }, [activeId, refreshRecent])
 
-  const applyRatio = (ratio) => {
-    setCalibration({ mode: 'ratio', ratio })
-    setTool('length')
-  }
-
-  // 단축키
+  // Ctrl+Tab 대신 Alt+←/→ 로 탭 이동
   useEffect(() => {
     const onKey = (e) => {
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || pendingCalibration) return
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
-        e.preventDefault()
-        undo()
-        return
-      }
-      if (e.ctrlKey || e.metaKey || e.altKey) return
-      const map = { v: 'select', h: 'pan', c: 'calibrate', l: 'length', a: 'area', g: 'angle' }
-      const t = map[e.key.toLowerCase()]
-      if (t && pdfDoc) setTool(t)
-      if (e.key === 'Delete' && selectedId && selectedId !== 'calibration') deleteMeasurement(selectedId)
-      if (e.key === '+' || e.key === '=') setZoom((z) => Math.min(8, z * 1.25))
-      if (e.key === '-') setZoom((z) => Math.max(0.1, z / 1.25))
-      if (e.key === 'PageDown' && pdfDoc) setPageNum((p) => Math.min(pdfDoc.numPages, p + 1))
-      if (e.key === 'PageUp') setPageNum((p) => Math.max(1, p - 1))
+      if (!e.altKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return
+      const list = docsRef.current
+      if (!list.length) return
+      e.preventDefault()
+      const idx = list.findIndex((d) => d.id === activeId)
+      const next = e.key === 'ArrowRight' ? idx + 1 : idx - 1
+      setActiveId(list[(next + list.length) % list.length].id)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [deleteMeasurement, pdfDoc, pendingCalibration, selectedId, undo])
+  }, [activeId])
 
-  // 창 어디에나 PDF 끌어다 놓기
+  // 창 어디에나 PDF 끌어다 놓기 (여러 개도 가능)
   const [dragOver, setDragOver] = useState(false)
-  const onDrop = (e) => {
+  const onDrop = async (e) => {
     e.preventDefault()
     setDragOver(false)
-    const file = [...e.dataTransfer.files].find((f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'))
-    if (file) openFile(file)
+    const files = [...e.dataTransfer.files].filter(
+      (f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'),
+    )
+    for (const f of files) await openFile(f)
   }
 
-  const pageMeasurements = measurements.filter((m) => m.page === pageNum)
+  const openFiles = async (files) => {
+    for (const f of files) await openFile(f)
+  }
 
   return (
     <div
@@ -189,79 +205,45 @@ export default function App() {
       }}
       onDrop={onDrop}
     >
-      <Toolbar
-        fileName={fileName}
-        onOpenFile={openFile}
-        pdfDoc={pdfDoc}
-        pageNum={pageNum}
-        setPageNum={setPageNum}
-        zoom={zoom}
-        setZoom={setZoom}
-        onFit={() => setFitKey((k) => k + 1)}
-        tool={tool}
-        setTool={setTool}
-        calibrated={!!mmPerPt}
-        canUndo={history.length > 0}
-        onUndo={undo}
-      />
+      <TabBar docs={docs} activeId={activeId} onSelect={setActiveId} onClose={closeTab} onHome={() => setActiveId(null)} />
 
-      {error && (
-        <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div>
+      {activeId === null && <Toolbar onOpenFile={openFiles} />}
+
+      {(error || warning) && (
+        <div
+          className={`flex items-center justify-between border-b px-4 py-2 text-sm ${
+            error ? 'border-red-200 bg-red-50 text-red-700' : 'border-amber-200 bg-amber-50 text-amber-800'
+          }`}
+        >
+          <span>{error || warning}</span>
+          <button
+            className="ml-4 opacity-60 hover:opacity-100"
+            onClick={() => {
+              setError('')
+              setWarning('')
+            }}
+          >
+            닫기
+          </button>
+        </div>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        {pdfDoc ? (
-          <PdfViewer
-            pdfDoc={pdfDoc}
-            pageNum={pageNum}
-            zoom={zoom}
-            onZoom={setZoom}
-            fitKey={fitKey}
-            tool={tool}
-            measurements={pageMeasurements}
-            calibration={calibration?.mode === 'line' ? calibration : null}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-            onComplete={onComplete}
-            onMovePoint={onMovePoint}
-            mmPerPt={mmPerPt}
-            unit={unit}
-          />
-        ) : (
-          <EmptyState onOpenFile={openFile} onOpenSample={openSample} loading={loading} />
-        )}
-        {pdfDoc && (
-          <Sidebar
-            calibration={calibration}
-            mmPerPt={mmPerPt}
-            unit={unit}
-            setUnit={setUnit}
-            measurements={measurements}
-            pageNum={pageNum}
-            selectedId={selectedId}
-            onSelect={(m) => {
-              setSelectedId(m.id)
-              setPageNum(m.page)
-            }}
-            onDelete={deleteMeasurement}
-            onRename={(id, name) => setMeasurements((prev) => prev.map((m) => (m.id === id ? { ...m, name } : m)))}
-            onClear={() => {
-              commit([])
-              setSelectedId(null)
-            }}
-            onStartCalibrate={() => setTool('calibrate')}
-            onApplyRatio={applyRatio}
-            onResetCalibration={() => setCalibration(null)}
-            fileName={fileName}
-          />
-        )}
-      </div>
+      {docs.map((doc) => (
+        <Workspace key={doc.id} doc={doc} active={doc.id === activeId} onOpenFile={openFiles} />
+      ))}
 
-      {pendingCalibration && (
-        <CalibrationDialog
-          defaultUnit={unit}
-          onCancel={() => setPendingCalibration(null)}
-          onConfirm={applyCalibration}
+      {activeId === null && (
+        <EmptyState
+          onOpenFile={openFiles}
+          onOpenSample={openSample}
+          loading={loading}
+          recent={recent}
+          openIds={docs.map((d) => d.id)}
+          onOpenRecent={openRecent}
+          onRemoveRecent={async (item) => {
+            await removeFile(item.id).catch(() => {})
+            refreshRecent()
+          }}
         />
       )}
 
