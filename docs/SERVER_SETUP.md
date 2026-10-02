@@ -92,14 +92,19 @@
    - [이 링크](https://vercel.com/d?to=%2F%5Bteam%5D%2F%5Bproject%5D%2Fsettings%2Fenvironment-variables&title=Go+to+Environment+Variables)를 누르고 프로젝트로 **pdf-measure** 를 고르면 바로 열립니다.
    - 또는 프로젝트 왼쪽 메뉴의 **Environment Variables** 를 누릅니다.
    - Settings 안의 **Environments** 는 다른 페이지예요. 거기 있다면 주소창 끝의 `environments` 를 `environment-variables` 로 바꿔 Enter 를 누르세요.
-3. 아래 두 개를 하나씩 추가합니다. (Key 에 이름, Value 에 4단계에서 복사한 값. Environments 는 전부 체크된 그대로)
+3. **Add Environment Variable** 창에서 아래 두 개를 추가합니다. (Key 에 이름, Value 에 4단계에서 복사한 값)
 
    | Key | Value |
    | --- | --- |
    | `VITE_SUPABASE_URL` | Project URL (`https://….supabase.co`) |
    | `VITE_SUPABASE_PUBLISHABLE_KEY` | Publishable key (`sb_publishable_…`) |
 
-   이름의 글자 하나라도 틀리면 동작하지 않아요. 위 표에서 복사해서 붙여넣는 것을 추천합니다.
+   - **가장 쉬운 방법:** 4단계의 `.env.local` 두 줄(`VITE_SUPABASE_URL=…`, `VITE_SUPABASE_PUBLISHABLE_KEY=…`)을
+     통째로 복사해 **Key 칸에 붙여넣으면** Vercel 이 이름과 값을 알아서 나눠 줍니다.
+   - 직접 넣을 때 **Key 칸에는 이름만** 넣으세요. 주소를 넣으면 "invalid characters" 오류가 납니다.
+     이름의 글자 하나라도 틀리면 동작하지 않으니 위 표에서 복사해서 붙여넣는 것을 추천합니다.
+   - **Type** 은 **Config** 를 고르세요. 둘 다 공개해도 되는 값이라, 나중에 맞게 들어갔는지 다시 볼 수 있어요.
+   - **Environments** 는 Production 이면 충분합니다. (Preview 도 고를 수 있으면 함께)
 4. **Save** 를 누릅니다.
 5. **환경 변수는 새로 빌드해야 반영됩니다.** 위쪽 **Deployments** 로 가서 맨 위 배포의 오른쪽 **⋯** 메뉴 → **Redeploy** → **Redeploy** 를 누릅니다.
 6. 1분쯤 뒤 상태가 **Ready** 가 되면 끝입니다.
