@@ -88,7 +88,10 @@
 ## 5단계. Vercel 에 값 넣고 다시 배포하기
 
 1. [vercel.com](https://vercel.com) 에 로그인해 **pdf-measure** 프로젝트를 엽니다.
-2. 위쪽 **Settings** → 왼쪽 **Environment Variables** 로 갑니다.
+2. **Environment Variables** 페이지로 갑니다.
+   - [이 링크](https://vercel.com/d?to=%2F%5Bteam%5D%2F%5Bproject%5D%2Fsettings%2Fenvironment-variables&title=Go+to+Environment+Variables)를 누르고 프로젝트로 **pdf-measure** 를 고르면 바로 열립니다.
+   - 또는 프로젝트 왼쪽 메뉴의 **Environment Variables** 를 누릅니다.
+   - Settings 안의 **Environments** 는 다른 페이지예요. 거기 있다면 주소창 끝의 `environments` 를 `environment-variables` 로 바꿔 Enter 를 누르세요.
 3. 아래 두 개를 하나씩 추가합니다. (Key 에 이름, Value 에 4단계에서 복사한 값. Environments 는 전부 체크된 그대로)
 
    | Key | Value |
