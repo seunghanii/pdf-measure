@@ -68,11 +68,19 @@
 
 ## 4단계. 앱에 넣을 값 두 개 복사하기
 
-1. 프로젝트 화면 위쪽의 **Connect** 버튼을 누릅니다. (또는 **Project Settings → API Keys**)
-2. 아래 두 값을 메모장에 복사해 둡니다.
-   - **Project URL**: `https://abcdefgh.supabase.co` 처럼 생긴 주소
-   - **Publishable key**: `sb_publishable_` 로 시작하는 긴 글자
-     (화면에 `anon` key 만 보이면 그것을 써도 됩니다. `eyJ` 로 시작해요.)
+1. 프로젝트 화면 위쪽의 **Connect** 버튼을 누릅니다.
+   **Connect to your project** 창이 열리고 패키지 설치, 파일 추가 같은 단계가 나오는데 **따라 하지 않아도 됩니다.**
+   (앱 코드는 이미 준비되어 있어요. 이 창에서는 값만 복사합니다.)
+2. **Framework** 의 `Next.js` 를 **React** 로 바꿉니다. Variant 가 보이면 **Vite** 를 고릅니다.
+3. 아래로 내려 **Add files** 단계의 첫 번째 탭 **`.env.local`** 을 누르면 이런 두 줄이 보입니다.
+   ```
+   VITE_SUPABASE_URL=https://abcdefgh.supabase.co
+   VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+   ```
+   5단계에서 `=` 앞은 Key, `=` 뒤는 Value 로 그대로 넣으면 됩니다.
+   - Framework 를 바꾸지 않아 이름이 `NEXT_PUBLIC_…` 으로 나와도 **값은 같습니다.** 값만 가져가세요.
+   - 이 창 대신 **Project Settings → API Keys** 에서 **Publishable key** 를, **Project Settings → Data API** 에서 **Project URL** 을 복사해도 됩니다.
+     (`anon` key 만 보이면 그것을 써도 됩니다. `eyJ` 로 시작해요.)
 
 > ⚠️ **secret key**(`sb_secret_…`)나 **service_role** key 는 절대 앱에 넣지 마세요.
 > 이 키는 모든 보안 규칙을 무시하는 관리자 열쇠입니다. Publishable key 는 브라우저에 공개되어도 괜찮도록 만들어진 키예요.
