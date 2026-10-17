@@ -4,10 +4,13 @@
 // 로그인하면 cloudStore.js 가 같은 모양의 함수로 서버(Supabase)에 저장하고,
 // 여기의 'cache' 저장소는 서버에서 받은 PDF 를 다시 받지 않도록 임시 보관하는 데만 씁니다.
 
+import { EMPTY_LIBRARY, normalizeLibrary } from './library'
+
 const DB_NAME = 'pdf-measure'
 const DB_VERSION = 2
 const MAX_RECENT = 20
 const SESSION_KEY = 'pdf-measure:session'
+const LIBRARY_KEY = 'pdf-measure:library'
 
 let dbPromise = null
 
@@ -106,6 +109,14 @@ export async function listRecent() {
   return all.sort((a, b) => b.lastOpened - a.lastOpened)
 }
 
+// 화면에 보이는 이름만 바꿈 (id 는 그대로라 측정값이 이어짐)
+export function renameFile(id, name) {
+  return run('docs', 'readwrite', async (docs) => {
+    const existing = await req2promise(docs.get(id))
+    if (existing) docs.put({ ...existing, name })
+  })
+}
+
 export function removeFile(id) {
   return run(['files', 'docs'], 'readwrite', (files, docs) => {
     files.delete(id)
@@ -113,9 +124,27 @@ export function removeFile(id) {
   })
 }
 
+// 오래된 도면은 목록에서 정리하되, 폴더에 넣어 둔 도면은 남김
 async function pruneRecent() {
-  const all = await listRecent()
-  for (const d of all.slice(MAX_RECENT)) await removeFile(d.id)
+  const { assign } = getLibrary()
+  const loose = (await listRecent()).filter((d) => !assign[d.id])
+  for (const d of loose.slice(MAX_RECENT)) await removeFile(d.id)
+}
+
+export function getLibrary() {
+  try {
+    return normalizeLibrary(JSON.parse(localStorage.getItem(LIBRARY_KEY)))
+  } catch {
+    return EMPTY_LIBRARY
+  }
+}
+
+export function saveLibrary(lib) {
+  try {
+    localStorage.setItem(LIBRARY_KEY, JSON.stringify(lib))
+  } catch {
+    // 무시
+  }
 }
 
 // 서버에서 받은 PDF 임시 보관 (key: 저장 경로)
@@ -152,6 +181,9 @@ export const localStore = {
   saveState,
   listRecent: () => listRecent(),
   removeFile,
+  renameFile,
+  getLibrary: async () => getLibrary(),
+  saveLibrary: async (lib) => saveLibrary(lib),
 }
 
 // scope: 로그인한 사용자 id (없으면 이 브라우저 전용)

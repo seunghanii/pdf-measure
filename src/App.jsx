@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { loadPdf } from './lib/pdf'
 import { fileIdOf, loadSession, localStore, saveSession } from './lib/storage'
 import { createCloudStore, MAX_UPLOAD_BYTES } from './lib/cloudStore'
+import { EMPTY_LIBRARY, moveDoc } from './lib/library'
 import { cloudConfigured, networkHint, signOut, supabase } from './lib/supabase'
 import Workspace from './components/Workspace'
 import Toolbar from './components/Toolbar'
@@ -58,6 +59,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
   const [docs, setDocs] = useState([]) // 열린 탭: { id, name, pdfDoc, savedState, store }
   const [activeId, setActiveId] = useState(null) // null = 홈(최근 파일)
   const [recent, setRecent] = useState(store.kind === 'cloud' ? null : []) // null = 서버에서 불러오는 중
+  const [library, setLibrary] = useState(EMPTY_LIBRARY) // 홈 화면 폴더
   const [error, setError] = useState('')
   const [warning, setWarning] = useState('')
   const [uploading, setUploading] = useState([]) // 서버에 올리는 중인 파일 이름
@@ -82,7 +84,31 @@ function Session({ store, user, onLogout, onChangePassword }) {
         setRecent([])
         if (s.kind === 'cloud') setError(networkHint(e) ?? '서버에서 도면 목록을 불러오지 못했어요.')
       })
+    s.getLibrary()
+      .then(setLibrary)
+      .catch((e) => console.warn('폴더 정보를 불러오지 못함', e))
   }, [])
+
+  // 폴더 정보 바꾸기: 화면에 먼저 반영하고 저장
+  const updateLibrary = useCallback((change) => {
+    setLibrary((prev) => {
+      const next = change(prev)
+      storeRef.current.saveLibrary(next).catch((e) => setError(networkHint(e) ?? '폴더 정보를 저장하지 못했어요.'))
+      return next
+    })
+  }, [])
+
+  // 화면에 보이는 이름만 바꿈. 파일 식별자(id)는 그대로라 측정값이 이어집니다.
+  const renameDoc = useCallback(async (item, name) => {
+    setRecent((list) => list?.map((r) => (r.id === item.id ? { ...r, name } : r)) ?? list)
+    setDocs((list) => list.map((d) => (d.id === item.id ? { ...d, name } : d)))
+    try {
+      await storeRef.current.renameFile(item.id, name)
+    } catch (e) {
+      setError(networkHint(e) ?? `"${item.name}" 의 이름을 바꾸지 못했어요.`)
+      refreshRecent()
+    }
+  }, [refreshRecent])
 
   const watchUpload = useCallback((upload, name) => {
     setUploading((u) => [...u, name])
@@ -128,7 +154,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
           )
         }
         if (record?.upload) watchUpload(record.upload, file.name)
-        const doc = { id, name: file.name, pdfDoc, savedState: record?.state ?? null, store: s }
+        const doc = { id, name: record?.name ?? file.name, pdfDoc, savedState: record?.state ?? null, store: s }
         setDocs((prev) => (prev.some((d) => d.id === id) ? prev : [...prev, doc]))
         if (activate) setActiveId(id)
         return true
@@ -307,6 +333,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
     <div
       className="flex h-full flex-col bg-slate-100 text-slate-800"
       onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes('Files')) return // 홈 화면에서 도면을 폴더로 끌 때
         e.preventDefault()
         setDragOver(true)
       }}
@@ -364,9 +391,13 @@ function Session({ store, user, onLogout, onChangePassword }) {
           recent={recent}
           openIds={docs.map((d) => d.id)}
           onOpenRecent={openRecent}
+          library={library}
+          onUpdateLibrary={updateLibrary}
+          onRename={renameDoc}
           onRemoveRecent={async (item) => {
             try {
               await storeRef.current.removeFile(item.id)
+              if (library.assign[item.id]) updateLibrary((lib) => moveDoc(lib, item.id, null))
             } catch (e) {
               setError(networkHint(e) ?? `"${item.name}" 을(를) 지우지 못했어요.`)
             }

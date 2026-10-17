@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { authErrorMessage, changePassword, sendPasswordReset, signIn, signUp } from '../lib/supabase'
 import { localStore } from '../lib/storage'
+import { mergeLibrary, moveDoc } from '../lib/library'
 
 const inputCls =
   'w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
@@ -260,18 +261,32 @@ export function MigrationCard({ store, onDone }) {
     const total = items.length
     let done = 0
     let failed = 0
+    const moved = []
     setProgress({ done, failed, total, running: true })
     for (const doc of items) {
       try {
         const blob = await localStore.getFile(doc.id)
         await store.importLocal(doc, blob)
         await localStore.removeFile(doc.id) // 서버에 옮긴 뒤 브라우저 사본은 지움
+        moved.push(doc.id)
         done++
       } catch (e) {
         console.warn('옮기기 실패', doc.name, e)
         failed++
       }
       setProgress({ done, failed, total, running: true })
+    }
+    // 폴더 정리해 둔 것도 함께 옮김
+    const localLib = await localStore.getLibrary()
+    if (moved.some((id) => localLib.assign[id])) {
+      try {
+        await store.saveLibrary(mergeLibrary(await store.getLibrary(), localLib, moved))
+        await localStore.saveLibrary(
+          moved.reduce((lib, id) => moveDoc(lib, id, null), localLib),
+        )
+      } catch (e) {
+        console.warn('폴더 정보 옮기기 실패', e)
+      }
     }
     setProgress({ done, failed, total, running: false })
     const left = await localStore.listRecent().catch(() => [])
