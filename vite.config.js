@@ -6,5 +6,20 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   base: './',
   plugins: [react(), tailwindcss()],
-  build: { chunkSizeWarningLimit: 1500 }, // pdf.js 가 커서 경고 기준만 올림
+  build: {
+    chunkSizeWarningLimit: 1500, // pdf.js 가 커서 경고 기준만 올림
+    rolldownOptions: {
+      output: {
+        // 잘 안 바뀌는 라이브러리는 따로 묶어서, 앱을 고쳐 다시 배포해도 브라우저가 받아 둔 것을 그대로 씀
+        advancedChunks: {
+          groups: [
+            { name: 'pdfjs', test: /node_modules[\\/]pdfjs-dist/ },
+            { name: 'react', test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/ },
+            { name: 'supabase', test: /node_modules[\\/]@supabase/ },
+          ],
+        },
+      },
+    },
+  },
+  worker: { format: 'es' }, // OCR 조각 그리기 워커가 pdf.js 를 불러옴
 })

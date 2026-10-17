@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { angleArcPath, distance, polygonCentroid } from '../lib/geometry'
 import { formatLength } from '../lib/units'
 import { TYPE_INFO, describe } from '../lib/measure'
@@ -75,7 +76,7 @@ function offsetLabel(a, b, dist = 14) {
   return { x: mx + nx * dist, y: my + ny * dist }
 }
 
-export default function MeasurementShape({ m, zoom, mmPerPt, unit, selected, showHandles, showResize, draft, closeHint, endHint }) {
+function MeasurementShape({ m, zoom, mmPerPt, unit, selected, showHandles, showResize, draft, closeHint, endHint }) {
   if (isMarkup(m.type)) return <MarkupShape m={m} zoom={zoom} selected={selected} showHandles={showHandles} showResize={showResize} draft={draft} />
   const color = TYPE_INFO[m.type].color
   const pts = m.points.map((p) => ({ x: p.x * zoom, y: p.y * zoom }))
@@ -332,3 +333,6 @@ function MarkupShape({ m, zoom, selected, showHandles, showResize, draft }) {
     </g>
   )
 }
+
+// 측정값이 많을 때 바뀐 것만 다시 그림
+export default memo(MeasurementShape)

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { distance, snapTo45 } from '../lib/geometry'
 import { TYPE_INFO } from '../lib/measure'
 import MeasurementShape from './MeasurementShape'
@@ -7,6 +7,8 @@ import { SNAP_KINDS, findRaySnap, findSnap, loadSnapIndex } from '../lib/snap'
 import { useSnapEnabled } from '../lib/snapSetting'
 
 const MAX_CANVAS_PIXELS = 16_000_000 // 모바일 사파리 캔버스 한도 근처
+// 크게 확대해서 상세 캔버스가 덮을 때 밑그림 해상도. 낮을수록 확대·축소할 때 덜 버벅임
+const BASE_PIXELS_WHEN_DETAILED = 4_000_000
 const CLOSE_RADIUS_PX = 10 // 면적: 첫 점 / 길이: 마지막 점 근처 클릭 시 완료
 const SNAP_RADIUS_PX = 12 // 자석: 화면에서 이 거리 안이면 붙음
 const PAGE_GAP = 16
@@ -241,7 +243,8 @@ export default function PdfViewer({
             if (en.isIntersecting) next.add(i)
             else next.delete(i)
           }
-          return next
+          // 바뀐 게 없으면 그대로 (다시 그리지 않게)
+          return next.size === prev.size && [...next].every((i) => prev.has(i)) ? prev : next
         })
       },
       { root, rootMargin: '400px 0px' },
@@ -767,9 +770,11 @@ export default function PdfViewer({
 // 페이지 한 장의 캔버스. 화면 근처에 있을 때만 그리고, 멀어지면 메모리를 비웁니다.
 // 크게 확대하면 페이지 전체를 선명하게 그릴 캔버스가 너무 커지므로, 전체는 낮은 해상도로 깔고
 // 화면에 보이는 부분만 원래 해상도로 한 번 더 그려 위에 덮습니다(상세 캔버스).
-function PageCanvas({ pdfDoc, page, size, zoom, visible, scrollRoot }) {
+// 배율 등 값이 그대로면 다시 그리지 않음 (스크롤·커서 이동 때 부모가 다시 그려도)
+const PageCanvas = memo(function PageCanvas({ pdfDoc, page, size, zoom, visible, scrollRoot }) {
   const canvasRef = useRef(null)
   const detailRef = useRef(null)
+  const baseScaleRef = useRef(0) // 지금 밑그림 캔버스에 그려진 배율 (0 = 비어 있음)
   const [rendering, setRendering] = useState(false)
 
   useEffect(() => {
@@ -781,6 +786,7 @@ function PageCanvas({ pdfDoc, page, size, zoom, visible, scrollRoot }) {
       canvas.height = 0
       detail.width = 0
       detail.height = 0
+      baseScaleRef.current = 0
       return
     }
     let task = null
@@ -794,10 +800,14 @@ function PageCanvas({ pdfDoc, page, size, zoom, visible, scrollRoot }) {
     const capped = fullPixels > MAX_CANVAS_PIXELS
     const pdfPagePromise = pdfDoc.getPage(page)
 
+    // 상세 캔버스가 덮을 만큼 크면 밑그림은 낮은 해상도로 한 번만 (배율이 바뀌어도 늘려서 씀)
+    const baseScale = capped ? fullScale * Math.sqrt(BASE_PIXELS_WHEN_DETAILED / fullPixels) : fullScale
+    const reuseBase = capped && Math.abs(baseScaleRef.current - baseScale) < 1e-6
     const timer = setTimeout(async () => {
+      if (reuseBase) return scheduleDetail(0)
       const pdfPage = await pdfPagePromise
       if (cancelled) return
-      const scale = capped ? fullScale * Math.sqrt(MAX_CANVAS_PIXELS / fullPixels) : fullScale
+      const scale = baseScale
       const viewport = pdfPage.getViewport({ scale })
       const off = document.createElement('canvas')
       off.width = Math.floor(viewport.width)
@@ -810,6 +820,8 @@ function PageCanvas({ pdfDoc, page, size, zoom, visible, scrollRoot }) {
           canvas.width = off.width
           canvas.height = off.height
           canvas.getContext('2d').drawImage(off, 0, 0)
+          off.width = off.height = 0
+          baseScaleRef.current = scale
           // 캔버스 픽셀과 화면 픽셀을 1:1 로 맞춰서 브라우저가 다시 늘리며 흐려지지 않게
           if (!capped) {
             canvas.style.width = `${off.width / dpr}px`
@@ -878,6 +890,7 @@ function PageCanvas({ pdfDoc, page, size, zoom, visible, scrollRoot }) {
           detail.width = pw
           detail.height = ph
           detail.getContext('2d').drawImage(off, 0, 0)
+          off.width = off.height = 0
           detail.style.left = `${x0}px`
           detail.style.top = `${y0}px`
           detail.style.width = `${pw / dpr}px`
@@ -922,7 +935,7 @@ function PageCanvas({ pdfDoc, page, size, zoom, visible, scrollRoot }) {
       )}
     </>
   )
-}
+})
 
 // 자석이 붙은 곳 표시: 끝점·측정점 □, 교차점 ×, 선 위 ◇
 function SnapMarker({ snap, zoom }) {
