@@ -376,24 +376,30 @@ export default function PdfViewer({
     }
     if (e.button !== 0) return
 
+    // 크기 조절 손잡이 (선택 도구, 또는 텍스트 도구에서 선택된 텍스트 상자)
+    const resizeHandle = (tool === 'select' || tool === 'text') && e.target.closest?.('[data-resize]')
+    if (resizeHandle) {
+      e.preventDefault()
+      if (editing) commitText()
+      const item = measurements.find((m) => m.id === resizeHandle.dataset.id)
+      const dir = resizeHandle.dataset.resize
+      if (item?.type === 'text') {
+        // 텍스트 상자 너비 조절: 반대쪽 변은 그대로
+        const left = item.points[0].x
+        const right = left + textMetricsOf(item).width
+        dragRef.current = { id: item.id, resize: dir, text: { left, right, y: item.points[0].y, min: minTextBoxWidth(item.fontSize ?? 13) }, moved: false }
+        e.currentTarget.setPointerCapture(e.pointerId)
+      } else if (item) {
+        // 사각형·형광펜 크기 조절: 잡은 순간의 사각형 기준으로 계산
+        dragRef.current = { id: item.id, resize: dir, rect: rectOf(item.points[0], item.points[1] ?? item.points[0]), moved: false }
+        e.currentTarget.setPointerCapture(e.pointerId)
+      }
+      return
+    }
+
     // 선택 도구: 점 잡아서 옮기기 / 도형 통째로 옮기기 / 선택
     if (tool === 'select') {
       const handle = e.target.closest?.('[data-handle]')
-      if (handle?.dataset.resize) {
-        // 사각형·형광펜 크기 조절: 잡은 순간의 사각형 기준으로 계산
-        const item = measurements.find((m) => m.id === handle.dataset.id)
-        if (item?.type === 'text') {
-          // 텍스트 상자 너비 조절: 반대쪽 변은 그대로
-          const left = item.points[0].x
-          const right = left + textMetricsOf(item).width
-          dragRef.current = { id: item.id, resize: handle.dataset.resize, text: { left, right, y: item.points[0].y, min: minTextBoxWidth(item.fontSize ?? 13) }, moved: false }
-          e.currentTarget.setPointerCapture(e.pointerId)
-        } else if (item) {
-          dragRef.current = { id: item.id, resize: handle.dataset.resize, rect: rectOf(item.points[0], item.points[1] ?? item.points[0]), moved: false }
-          e.currentTarget.setPointerCapture(e.pointerId)
-        }
-        return
-      }
       if (handle) {
         dragRef.current = { id: handle.dataset.id, index: Number(handle.dataset.index), moved: false }
         onSelect([handle.dataset.id])
@@ -667,6 +673,7 @@ export default function PdfViewer({
                         unit={unit}
                         selected={selectedIds.includes(m.id)}
                         showHandles={tool === 'select'}
+                        showResize={tool === 'text' && m.type === 'text'}
                       />
                     ))}
                   {renderPreview(page)}
