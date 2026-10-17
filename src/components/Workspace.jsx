@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { distance } from '../lib/geometry'
 import { PT_TO_PAPER_MM, UNITS } from '../lib/units'
 import { TYPE_INFO } from '../lib/measure'
-import { DEFAULT_BOX_OPACITY, isMarkup } from '../lib/markup'
+import { DEFAULT_BOX_OPACITY, MARKUP_STROKE, STROKE_TYPES, isMarkup, strokeOf } from '../lib/markup'
 import { TOOLS, toolForDigit } from '../lib/tools'
 import PdfViewer from './PdfViewer'
 import Toolbar from './Toolbar'
@@ -32,6 +32,7 @@ export default function Workspace({ doc, active, onOpenFile }) {
     highlightColor: '#facc15',
     fontSize: 13,
     boxOpacity: DEFAULT_BOX_OPACITY,
+    strokeWidth: MARKUP_STROKE,
     ...saved?.markupStyle,
   }))
   const [saving, setSaving] = useState(false)
@@ -165,6 +166,7 @@ export default function Workspace({ doc, active, onOpenFile }) {
           m.fontSize = markupStyle.fontSize
           m.boxOpacity = markupStyle.boxOpacity
         }
+        if (STROKE_TYPES.includes(type)) m.strokeWidth = markupStyle.strokeWidth
       }
       Object.assign(m, extra)
       commit((prev) => [...prev, m])
@@ -187,6 +189,7 @@ export default function Workspace({ doc, active, onOpenFile }) {
   const selText = selectedMarkups.find((m) => m.type === 'text')
   const selLine = selectedMarkups.find((m) => m.type !== 'highlight')
   const selHighlight = selectedMarkups.find((m) => m.type === 'highlight')
+  const selStroke = selectedMarkups.find((m) => STROKE_TYPES.includes(m.type))
   const selectedMarkupType = selText ? 'text' : selLine ? selLine.type : selHighlight ? 'highlight' : null
   // 툴바에는 선택된 마크업의 현재 값을 보여 줌
   const shownStyle =
@@ -195,11 +198,13 @@ export default function Workspace({ doc, active, onOpenFile }) {
           ...markupStyle,
           ...(selLine && { color: selLine.color }),
           ...(selHighlight && { highlightColor: selHighlight.color }),
+          ...(selStroke && { strokeWidth: strokeOf(selStroke) }),
           ...(selText && { fontSize: selText.fontSize ?? 13, boxOpacity: selText.boxOpacity ?? DEFAULT_BOX_OPACITY }),
         }
       : markupStyle
 
-  // 색·글자 크기·투명도: 다음에 그릴 마크업에 적용, 선택된 마크업이 있으면 전부 바꿈.
+  // 색·글자 크기·투명도·선 굵기: 다음에 그릴 마크업에 적용, 선택 도구에서 선택된 마크업이 있으면 전부 바꿈.
+  // (그리기 도구일 때는 방금 그린 것이 선택돼 있어도 바꾸지 않음. 툴바도 다음에 그릴 값만 보여 줌)
   // 슬라이더처럼 연달아 바뀌는 변경(live)은 되돌리기 한 번으로 묶음.
   const styleGesture = useRef(0)
   const changeMarkupStyle = (patch, { live = false } = {}) => {
@@ -210,9 +215,10 @@ export default function Workspace({ doc, active, onOpenFile }) {
       if (patch.highlightColor && m.type === 'highlight') out.color = patch.highlightColor
       if (patch.fontSize && m.type === 'text') out.fontSize = patch.fontSize
       if (patch.boxOpacity !== undefined && m.type === 'text') out.boxOpacity = patch.boxOpacity
+      if (patch.strokeWidth && STROKE_TYPES.includes(m.type)) out.strokeWidth = patch.strokeWidth
       return Object.keys(out).length ? out : null
     }
-    const targets = selectedMarkups.filter(itemPatch)
+    const targets = tool === 'select' ? selectedMarkups.filter(itemPatch) : []
     if (!targets.length) return
     const now = Date.now()
     if (!live || now - styleGesture.current > 800) beginEdit()
@@ -391,6 +397,7 @@ export default function Workspace({ doc, active, onOpenFile }) {
         markupStyle={shownStyle}
         onChangeMarkupStyle={changeMarkupStyle}
         selectedMarkupType={selectedMarkupType}
+        selectedHasStroke={tool === 'select' && !!selStroke}
         onSave={savePdf}
         saving={saving}
         syncStatus={cloud ? syncStatus : null}
