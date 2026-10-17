@@ -2,11 +2,14 @@
 // - documents 표: 도면 이름·크기, 측정값(state), 마지막으로 연 시각
 // - pdfs 보관함: PDF 파일. 경로는 "사용자id/파일이름의 해시.pdf" (자기 폴더만 읽고 쓸 수 있음)
 // storage.js 의 localStore 와 같은 모양의 함수를 돌려줍니다.
+// 폴더 정보는 documents 표의 특별한 한 줄(file_key = LIBRARY_KEY)의 state 에 보관 (표를 새로 만들지 않으려고)
 import { cacheDelete, cacheGet, cachePrune, cachePut } from './storage'
+import { normalizeLibrary } from './library'
 
 export const BUCKET = 'pdfs'
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024 // Supabase 무료 플랜의 파일 하나 최대 크기
-const MAX_RECENT = 50
+const MAX_RECENT = 200
+const LIBRARY_KEY = '__library__'
 const COLS = 'file_key, name, size, storage_path, has_file, state, last_opened'
 
 const toRecord = (row) =>
@@ -122,11 +125,45 @@ export function createCloudStore(supabase, user) {
 
     async listRecent() {
       const rows = check(
-        await table().select(COLS).eq('user_id', uid).order('last_opened', { ascending: false }).limit(MAX_RECENT),
+        await table()
+          .select(COLS)
+          .eq('user_id', uid)
+          .neq('file_key', LIBRARY_KEY)
+          .order('last_opened', { ascending: false })
+          .limit(MAX_RECENT),
       )
       const list = rows.map(toRecord)
       cachePrune(new Set(list.map((r) => r.path))).catch(() => {})
       return list
+    },
+
+    renameFile(id, name) {
+      return track(table().update({ name }).eq('user_id', uid).eq('file_key', id).then(check))
+    },
+
+    async getLibrary() {
+      const row = check(await table().select('state').eq('user_id', uid).eq('file_key', LIBRARY_KEY).maybeSingle())
+      return normalizeLibrary(row?.state)
+    },
+
+    saveLibrary(lib) {
+      return track(
+        table()
+          .upsert(
+            {
+              user_id: uid,
+              file_key: LIBRARY_KEY,
+              name: '폴더 정보',
+              size: 0,
+              storage_path: '',
+              state: lib,
+              last_opened: new Date(0).toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'user_id,file_key' },
+          )
+          .then(check),
+      )
     },
 
     async removeFile(id) {
