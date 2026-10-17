@@ -2,10 +2,13 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { distance, snapTo45 } from '../lib/geometry'
 import { TYPE_INFO } from '../lib/measure'
 import MeasurementShape from './MeasurementShape'
-import { DRAG_TOOLS, textBoxMetrics, FONT_FAMILY, itemCorners, rectOf, resizeRect } from '../lib/markup'
+import { DRAG_TOOLS, textBoxMetrics, FONT_FAMILY, itemCorners, rectOf, resizeRect, isMarkup } from '../lib/markup'
+import { SNAP_KINDS, findRaySnap, findSnap, loadSnapIndex } from '../lib/snap'
+import { useSnapEnabled } from '../lib/snapSetting'
 
 const MAX_CANVAS_PIXELS = 16_000_000 // 모바일 사파리 캔버스 한도 근처
 const CLOSE_RADIUS_PX = 10 // 면적: 첫 점 / 길이: 마지막 점 근처 클릭 시 완료
+const SNAP_RADIUS_PX = 12 // 자석: 화면에서 이 거리 안이면 붙음
 const PAGE_GAP = 16
 const PAD = 24
 
@@ -30,6 +33,7 @@ export default function PdfViewer({
   onSetPoints,
   onBeginEdit,
   onUpdateItem,
+  onEditCalibration, // 기준선 더블클릭: 길이 숫자 고치기
   markupStyle,
   mmPerPt,
   unit,
@@ -38,7 +42,7 @@ export default function PdfViewer({
   const pageEls = useRef([])
   const [sizes, setSizes] = useState(null) // 페이지별 배율 1 기준 크기(pt)
   const [draft, setDraft] = useState(null) // { page, points }
-  const [cursor, setCursor] = useState(null) // { page, p }
+  const [cursor, setCursor] = useState(null) // { page, p, snap? }
   const [shiftDown, setShiftDown] = useState(false)
   const [spaceDown, setSpaceDown] = useState(false)
   const [visible, setVisible] = useState(() => new Set())
@@ -49,6 +53,8 @@ export default function PdfViewer({
   const zoomAnchorRef = useRef(null) // 확대/축소 후에도 같은 지점을 같은 자리에
   const viewAnchorRef = useRef(null) // 현재 화면 가운데에 있는 페이지 위치
   const [, forceRender] = useState(0)
+  const snapOn = useSnapEnabled()
+  const snapIndexes = useRef(new Map()) // 페이지 번호 → 도면 선 색인 (자석용, 필요할 때 한 번 읽음)
 
   // ---------- 모든 페이지 크기 불러오기 ----------
   useEffect(() => {
@@ -219,6 +225,10 @@ export default function PdfViewer({
     setDraft(null)
   }, [tool, pdfDoc])
 
+  useEffect(() => {
+    snapIndexes.current = new Map()
+  }, [pdfDoc])
+
   // ---------- 텍스트 상자 입력 ----------
   const editingRef = useRef(null)
   useLayoutEffect(() => {
@@ -262,6 +272,44 @@ export default function PdfViewer({
   const constrained = (p) => {
     if (!shiftDown || draftPts.length === 0) return p
     return snapTo45(draftPts[draftPts.length - 1], p)
+  }
+
+  // ---------- 자석 ----------
+  const snapIndexFor = (page) => {
+    const map = snapIndexes.current
+    if (!map.has(page)) {
+      map.set(page, null) // 읽는 중
+      loadSnapIndex(pdfDoc, page).then((index) => {
+        if (snapIndexes.current !== map) return // 그사이 다른 파일
+        map.set(page, index)
+        forceRender((n) => n + 1)
+      })
+    }
+    return map.get(page)
+  }
+
+  // 붙을 수 있는 측정 점: 측정·기준선·그리는 중인 점 (exclude: 지금 끌고 있는 점 { id, index })
+  const snapTargets = (page, exclude) => {
+    const pts = []
+    const add = (id, points) =>
+      points.forEach((q, i) => {
+        if (!(exclude && exclude.id === id && exclude.index === i)) pts.push(q)
+      })
+    for (const m of measurements) if (m.page === page && !isMarkup(m.type)) add(m.id, m.points)
+    if (calibration && calibration.page === page) add('calibration', calibration.points)
+    if (draft && draft.page === page && !draft.dragging) add('draft', draft.points)
+    return pts
+  }
+
+  // 커서 위치 → 실제로 찍힐 점. Shift 를 누르면 방향을 고정한 채 그 방향의 선에 붙음
+  const resolvePoint = (raw, page, { exclude } = {}) => {
+    const locked = shiftDown && draft && draft.page === page && draftPts.length > 0
+    const p = locked ? constrained(raw) : raw
+    if (!snapOn) return { p, snap: null }
+    const opts = { index: snapIndexFor(page), points: snapTargets(page, exclude) }
+    const r = SNAP_RADIUS_PX / zoom
+    const s = locked ? findRaySnap(draftPts[draftPts.length - 1], p, r, opts) : findSnap(p, r, opts)
+    return s ? { p: { x: s.x, y: s.y }, snap: s } : { p, snap: null }
   }
 
   const finish = useCallback(
@@ -397,7 +445,7 @@ export default function PdfViewer({
 
     if (!drawing) return
     if (draft && draft.page !== page) return // 그리던 도형은 한 페이지 안에서만
-    const p = constrained(toPage(e, e.currentTarget))
+    const { p } = resolvePoint(toPage(e, e.currentTarget), page)
     const pts = draftPts
     const near = (q) => distance(q, p) * zoom < CLOSE_RADIUS_PX
 
@@ -444,7 +492,9 @@ export default function PdfViewer({
           d.moved = true
           onBeginEdit()
         }
-        onMovePoint(d.id, d.index, p)
+        const r = resolvePoint(p, page, { exclude: { id: d.id, index: d.index } })
+        onMovePoint(d.id, d.index, r.p)
+        setCursor(r.snap ? { page, p: r.p, snap: r.snap } : null)
       }
       return
     }
@@ -464,7 +514,10 @@ export default function PdfViewer({
       })
       return
     }
-    if (drawing) setCursor({ page, p: draft && draft.page === page ? constrained(p) : p })
+    if (drawing) {
+      const r = resolvePoint(p, page)
+      setCursor({ page, p: r.p, snap: r.snap })
+    }
   }
 
   const onPointerUp = () => {
@@ -472,6 +525,7 @@ export default function PdfViewer({
       panRef.current = null
       forceRender((n) => n + 1)
     }
+    if (dragRef.current && !drawing) setCursor(null) // 점 끌기 때 보이던 자석 표시 지우기
     dragRef.current = null
     if (marquee) {
       const r = rectOf(marquee.a, marquee.b)
@@ -567,8 +621,10 @@ export default function PdfViewer({
                   onDoubleClick={(e) => {
                     if (tool === 'select') {
                       // 포인터 캡처 때문에 e.target 이 svg 일 수 있어 좌표로 다시 찾음
-                      const t = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-type="text"]')
+                      const hit = document.elementFromPoint(e.clientX, e.clientY)
+                      const t = hit?.closest('[data-type="text"]')
                       if (t) editExisting(t.dataset.shape)
+                      else if (hit?.closest('[data-shape="calibration"]')) onEditCalibration()
                     } else finishMulti()
                   }}
                   onContextMenu={(e) => {
@@ -619,6 +675,7 @@ export default function PdfViewer({
                   {drawing && cursor && cursor.page === page && !(draft && draft.page === page) && (
                     <circle cx={cursor.p.x * zoom} cy={cursor.p.y * zoom} r={3} fill={TYPE_INFO[tool].color} />
                   )}
+                  {cursor?.snap && cursor.page === page && <SnapMarker snap={cursor.snap} zoom={zoom} />}
                 </svg>
                 {sizes.length > 1 && (
                   <div className="pointer-events-none absolute -bottom-px left-1/2 translate-y-full -translate-x-1/2 pt-0.5 text-[11px] text-slate-500">
@@ -797,6 +854,39 @@ function PageCanvas({ pdfDoc, page, size, zoom, visible, scrollRoot }) {
         </div>
       )}
     </>
+  )
+}
+
+// 자석이 붙은 곳 표시: 끝점·측정점 □, 교차점 ×, 선 위 ◇
+function SnapMarker({ snap, zoom }) {
+  const x = snap.x * zoom
+  const y = snap.y * zoom
+  const s = 6
+  const color = '#db2777'
+  const common = { fill: 'none', stroke: color, strokeWidth: 2 }
+  return (
+    <g pointerEvents="none">
+      {snap.kind === 'cross' ? (
+        <path d={`M${x - s} ${y - s}L${x + s} ${y + s}M${x + s} ${y - s}L${x - s} ${y + s}`} {...common} />
+      ) : snap.kind === 'line' ? (
+        <path d={`M${x} ${y - s - 1}L${x + s + 1} ${y}L${x} ${y + s + 1}L${x - s - 1} ${y}Z`} {...common} />
+      ) : (
+        <rect x={x - s} y={y - s} width={s * 2} height={s * 2} {...common} />
+      )}
+      <text
+        x={x + s + 4}
+        y={y - s - 3}
+        fontSize={11}
+        fontWeight={600}
+        fill={color}
+        stroke="#fff"
+        strokeWidth={3}
+        paintOrder="stroke"
+        style={{ fontFamily: FONT_FAMILY }}
+      >
+        {SNAP_KINDS[snap.kind].label}
+      </text>
+    </g>
   )
 }
 

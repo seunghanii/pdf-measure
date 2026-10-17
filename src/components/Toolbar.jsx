@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { TOOLS, digitForTool } from '../lib/tools'
+import { toggleSnap, useSnapEnabled } from '../lib/snapSetting'
 import { DEFAULT_BOX_OPACITY, HIGHLIGHT_COLORS, MARKUP_COLORS, STROKE_TYPES, STROKE_WIDTHS, TEXT_SIZES } from '../lib/markup'
 
 const MARKUP_TOOL_IDS = TOOLS.filter((t) => t.group === 'markup').map((t) => t.id)
@@ -72,6 +73,7 @@ export default function Toolbar({
             {TOOLS.filter((t) => t.group !== 'markup').map((t) => (
               <ToolButton key={t.id} t={t} active={tool === t.id} needCal={!calibrated && t.id === 'calibrate'} onClick={() => setTool(t.id)} showLabel />
             ))}
+            <SnapButton />
           </div>
           <Divider />
           <div className="flex items-center gap-1" role="group" aria-label="마크업 도구">
@@ -178,6 +180,25 @@ function SmallButton({ children, ...props }) {
       {...props}
     >
       {children}
+    </button>
+  )
+}
+
+// 자석 켜고 끄기: 켜져 있으면 도면 선의 끝점·교차점·선 위와 찍은 점에 붙음
+function SnapButton() {
+  const on = useSnapEnabled()
+  return (
+    <button
+      onClick={toggleSnap}
+      aria-pressed={on}
+      title={on ? '자석 켜짐: 선 끝점·교차점·선 위에 붙어요. 누르면 꺼짐 (S)' : '자석 꺼짐: 누르면 선에 붙게 켜요 (S)'}
+      className={[
+        'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium whitespace-nowrap transition',
+        on ? 'bg-pink-50 text-pink-700 ring-1 ring-pink-300 hover:bg-pink-100' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600',
+      ].join(' ')}
+    >
+      <Icon d={on ? 'M6 4v8a6 6 0 0012 0V4h-4v8a2 2 0 01-4 0V4zM6 8h4M14 8h4' : 'M6 4v8a6 6 0 0012 0V4h-4v8a2 2 0 01-4 0V4zM3 3l18 18'} />
+      <span className="hidden min-[1600px]:inline">자석</span>
     </button>
   )
 }

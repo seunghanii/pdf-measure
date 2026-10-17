@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { TYPE_INFO, describe } from '../lib/measure'
-import { UNITS, parseNumber } from '../lib/units'
+import { UNITS, calibrationInput, parseNumber } from '../lib/units'
 import { isMarkup } from '../lib/markup'
 
 export default function Sidebar({
@@ -18,6 +18,7 @@ export default function Sidebar({
   onRename,
   onClear,
   onStartCalibrate,
+  onEditCalibration,
   onApplyRatio,
   onResetCalibration,
   fileName,
@@ -53,21 +54,34 @@ export default function Sidebar({
         {mmPerPt ? (
           <div className="mt-2 rounded-lg bg-orange-50 p-3 ring-1 ring-orange-200">
             <div className="flex items-center justify-between gap-2">
-              <div className="font-semibold text-orange-800">
-                {calibration.mode === 'ratio' ? `도면 축척 1:${calibration.ratio.toLocaleString('ko-KR')}` : calibration.label}
-              </div>
+              {calibration.mode === 'ratio' ? (
+                <ValueEditor
+                  key={calibration.ratio}
+                  prefix="도면 축척 1 :"
+                  value={calibration.ratio}
+                  onCommit={(value) => onApplyRatio(value)}
+                />
+              ) : (
+                <ValueEditor
+                  key={`${calibrationInput(calibration).value}|${calibrationInput(calibration).unit}`}
+                  prefix="기준"
+                  value={calibrationInput(calibration).value}
+                  unit={calibrationInput(calibration).unit}
+                  onCommit={(value, u) => onEditCalibration({ value, unit: u })}
+                />
+              )}
               {calibration.mode === 'line' && (
                 <EyeButton hidden={calibration.hidden} onClick={() => onToggleHidden('calibration')} label="기준선" />
               )}
             </div>
             <div className="mt-0.5 text-xs text-orange-700">
               {calibration.mode === 'line'
-                ? `${calibration.page}페이지의 기준선 기준 · 선택 도구로 끝점을 옮겨 보정 가능`
-                : 'PDF가 실제 용지 크기로 저장된 경우에만 정확합니다'}
+                ? `${calibration.page}페이지 기준선 · 숫자만 고치면 선은 그대로 두고 모든 값이 다시 계산돼요`
+                : '숫자를 고치면 바로 다시 계산돼요. PDF가 실제 용지 크기로 저장된 경우에만 정확합니다'}
             </div>
             <div className="mt-2 flex gap-3 text-xs">
               <button className="font-medium text-orange-700 hover:underline" onClick={onStartCalibrate}>
-                다시 지정
+                선 다시 긋기
               </button>
               <button className="text-slate-500 hover:underline" onClick={onResetCalibration}>
                 해제
@@ -169,7 +183,9 @@ export default function Sidebar({
         <summary className="cursor-pointer font-medium text-slate-600">사용 팁 · 단축키</summary>
         <ul className="mt-2 list-disc space-y-1 pl-4">
           <li>Ctrl + 마우스 휠: 확대/축소, 스페이스바 누른 채 드래그: 화면 이동</li>
-          <li>Shift 누른 채 클릭: 수평/수직/45° 로 고정</li>
+          <li>Shift 누른 채 클릭: 수평/수직/45° 로 고정 (자석이 켜져 있으면 그 방향의 선에 붙음)</li>
+          <li>자석(S 키로 켜고 끄기): 도면 선의 끝점·교차점·선 위와 이미 찍은 점에 커서가 붙어요. 스캔한 이미지 도면은 선이 없어서 찍은 점에만 붙어요</li>
+          <li>기준 길이 숫자는 오른쪽 축척 칸에서 바로 고치거나, 선택 도구로 기준선을 더블클릭해서 고쳐요</li>
           <li>선택 도구로 점이나 도형을 끌어 옮기고, Delete 로 삭제</li>
           <li>선택 도구로 빈 곳을 끌면 상자 안의 항목을 한꺼번에 선택, Shift/Ctrl+클릭으로 하나씩 더하거나 빼기, Ctrl+A 전체 선택</li>
           <li>텍스트: 클릭한 곳에 입력, Enter 완료 · Shift+Enter 줄바꿈, 선택 도구로 더블클릭하면 고치기</li>
@@ -186,6 +202,60 @@ export default function Sidebar({
         </ul>
       </details>
     </aside>
+  )
+}
+
+// 축척 칸의 숫자 입력: Enter 나 다른 곳 클릭으로 적용, Esc 로 취소
+function ValueEditor({ prefix, value, unit, onCommit }) {
+  const [text, setText] = useState(String(value))
+  const [u, setU] = useState(unit)
+  const commit = (nextUnit = u) => {
+    const n = parseNumber(text)
+    if (!n) {
+      setText(String(value))
+      return
+    }
+    if (n !== value || nextUnit !== unit) onCommit(n, nextUnit)
+  }
+  return (
+    <form
+      className="flex min-w-0 items-center gap-1 font-semibold text-orange-800"
+      onSubmit={(e) => {
+        e.preventDefault()
+        commit()
+        e.currentTarget.querySelector('input')?.blur()
+      }}
+    >
+      <span className="shrink-0">{prefix}</span>
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => commit()}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') setText(String(value))
+        }}
+        onFocus={(e) => e.target.select()}
+        inputMode="decimal"
+        title="숫자를 고치고 Enter"
+        className="w-24 min-w-0 rounded border border-orange-300 bg-white px-1.5 py-0.5 tabular-nums outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+      />
+      {unit && (
+        <select
+          value={u}
+          onChange={(e) => {
+            setU(e.target.value)
+            commit(e.target.value)
+          }}
+          className="rounded border border-orange-300 bg-white px-1 py-0.5 text-sm"
+        >
+          {Object.keys(UNITS).map((k) => (
+            <option key={k} value={k}>
+              {k}
+            </option>
+          ))}
+        </select>
+      )}
+    </form>
   )
 }
 

@@ -38,3 +38,12 @@ export function parseNumber(text) {
   const n = Number(String(text).replace(/,/g, '').trim())
   return Number.isFinite(n) && n > 0 ? n : null
 }
+
+// 기준선에 입력한 숫자와 단위. 예전에 저장된 기준선은 표시 글자("기준 5,000 mm")에서 읽어 옴
+export function calibrationInput(c) {
+  if (c.value && UNITS[c.unit]) return { value: c.value, unit: c.unit }
+  const m = /([\d,.]+)\s*(mm|cm|m)\s*$/.exec(c.label ?? '')
+  const value = m && parseNumber(m[1])
+  if (value && Math.abs(value * UNITS[m[2]].toMm - c.realMm) < 1e-6 * c.realMm) return { value, unit: m[2] }
+  return { value: Math.round(c.realMm * 1000) / 1000, unit: 'mm' }
+}
