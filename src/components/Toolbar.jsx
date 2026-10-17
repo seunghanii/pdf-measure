@@ -77,7 +77,8 @@ export default function Toolbar({
               <ToolButton key={t.id} t={t} active={tool === t.id} onClick={() => setTool(t.id)} />
             ))}
           </div>
-          {(['highlight', 'text', 'pen', 'rect', 'arrow'].includes(tool) || selectedMarkupType) && (
+          {/* 마크업 도구를 골랐거나, 선택 도구로 마크업을 골랐을 때만 */}
+          {(['highlight', 'text', 'pen', 'rect', 'arrow'].includes(tool) || (tool === 'select' && selectedMarkupType)) && (
             <MarkupStyle
               kind={selectedMarkupType && tool === 'select' ? selectedMarkupType : tool}
               style={markupStyle}
@@ -92,7 +93,7 @@ export default function Toolbar({
             disabled={!canUndo}
             title="되돌리기 (Ctrl+Z)"
           >
-            ↶<span className="hidden sm:inline"> 되돌리기</span>
+            ↶<span className="hidden min-[1600px]:inline"> 되돌리기</span>
           </button>
 
           <div className="ml-auto flex items-center gap-3">
@@ -157,7 +158,7 @@ function SyncBadge({ status }) {
       title={status === 'error' ? '인터넷 연결을 확인하세요. 다음 변경 때 다시 저장을 시도해요.' : '측정값과 마크업은 자동으로 서버에 저장돼요'}
     >
       <Icon d={look[2]} />
-      <span className="hidden lg:inline">{look[1]}</span>
+      <span className="hidden min-[1800px]:inline">{look[1]}</span>
     </span>
   )
 }
@@ -195,7 +196,7 @@ function ToolButton({ t, active, needCal, onClick, showLabel }) {
       ].join(' ')}
     >
       <Icon d={t.icon} />
-      {showLabel ? <span className="hidden sm:inline">{t.label}</span> : <span className="hidden 2xl:inline">{t.label}</span>}
+      {showLabel ? <span className="hidden min-[1600px]:inline">{t.label}</span> : <span className="hidden min-[2200px]:inline">{t.label}</span>}
     </button>
   )
 }
