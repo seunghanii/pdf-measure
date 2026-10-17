@@ -7,7 +7,7 @@
 import { EMPTY_LIBRARY, normalizeLibrary } from './library'
 
 const DB_NAME = 'pdf-measure'
-const DB_VERSION = 2
+const DB_VERSION = 3
 const MAX_RECENT = 20
 const SESSION_KEY = 'pdf-measure:session'
 const LIBRARY_KEY = 'pdf-measure:library'
@@ -23,6 +23,7 @@ function openDb() {
         if (!db.objectStoreNames.contains('files')) db.createObjectStore('files', { keyPath: 'id' })
         if (!db.objectStoreNames.contains('docs')) db.createObjectStore('docs', { keyPath: 'id' })
         if (!db.objectStoreNames.contains('cache')) db.createObjectStore('cache', { keyPath: 'key' })
+        if (!db.objectStoreNames.contains('text')) db.createObjectStore('text', { keyPath: 'id' }) // 검색용 글자 색인
       }
       req.onsuccess = () => resolve(req.result)
       req.onerror = () => reject(req.error)
@@ -118,10 +119,27 @@ export function renameFile(id, name) {
 }
 
 export function removeFile(id) {
-  return run(['files', 'docs'], 'readwrite', (files, docs) => {
+  return run(['files', 'docs', 'text'], 'readwrite', (files, docs, text) => {
     files.delete(id)
     docs.delete(id)
+    text.delete(id)
   })
+}
+
+// 검색용 글자 색인 (textIndex.js)
+export function getTextIndex(id) {
+  return run('text', 'readonly', (t) => req2promise(t.get(id))).then((r) => r?.index ?? null)
+}
+
+export function saveTextIndex(id, index) {
+  return run('text', 'readwrite', (t) => {
+    t.put({ id, index })
+  })
+}
+
+export async function listTextIndexes() {
+  const all = await run('text', 'readonly', (t) => req2promise(t.getAll()))
+  return all.map((r) => ({ id: r.id, index: r.index }))
 }
 
 // 오래된 도면은 목록에서 정리하되, 폴더에 넣어 둔 도면은 남김
@@ -182,6 +200,9 @@ export const localStore = {
   listRecent: () => listRecent(),
   removeFile,
   renameFile,
+  getTextIndex,
+  saveTextIndex,
+  listTextIndexes,
   getLibrary: async () => getLibrary(),
   saveLibrary: async (lib) => saveLibrary(lib),
 }
