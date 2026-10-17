@@ -820,12 +820,12 @@ const PageCanvas = memo(function PageCanvas({ pdfDoc, page, size, zoom, visible,
           canvas.width = off.width
           canvas.height = off.height
           canvas.getContext('2d').drawImage(off, 0, 0)
-          off.width = off.height = 0
+          off.width = off.height = 0 // 임시 캔버스 메모리 바로 비움 (크기는 아래에서 canvas 기준으로)
           baseScaleRef.current = scale
           // 캔버스 픽셀과 화면 픽셀을 1:1 로 맞춰서 브라우저가 다시 늘리며 흐려지지 않게
           if (!capped) {
-            canvas.style.width = `${off.width / dpr}px`
-            canvas.style.height = `${off.height / dpr}px`
+            canvas.style.width = `${canvas.width / dpr}px`
+            canvas.style.height = `${canvas.height / dpr}px`
           }
           setRendering(false)
           if (capped) scheduleDetail(0)
