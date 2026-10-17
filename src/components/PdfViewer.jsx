@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { distance, snapTo45 } from '../lib/geometry'
 import { TYPE_INFO } from '../lib/measure'
 import MeasurementShape from './MeasurementShape'
-import { DRAG_TOOLS, textBoxMetrics, FONT_FAMILY, itemCorners, rectOf, resizeRect, isMarkup } from '../lib/markup'
+import { DRAG_TOOLS, textBoxMetrics, textMetricsOf, minTextBoxWidth, FONT_FAMILY, itemCorners, rectOf, resizeRect, isMarkup } from '../lib/markup'
 import { SNAP_KINDS, findRaySnap, findSnap, loadSnapIndex } from '../lib/snap'
 import { useSnapEnabled } from '../lib/snapSetting'
 
@@ -246,7 +246,7 @@ export default function PdfViewer({
         onUpdateItem(ed.id, { text })
       }
     } else if (text) {
-      onComplete('text', [ed.point], ed.page, { text, fontSize: ed.fontSize, color: ed.color })
+      onComplete('text', [ed.point], ed.page, { text, fontSize: ed.fontSize, color: ed.color, align: ed.align })
     }
   }, [onBeginEdit, onComplete, onUpdateItem])
 
@@ -262,6 +262,8 @@ export default function PdfViewer({
       original: item.text,
       fontSize: item.fontSize ?? markupStyle.fontSize,
       color: item.color,
+      align: item.align,
+      boxWidth: item.boxWidth,
     })
   }
 
@@ -380,7 +382,13 @@ export default function PdfViewer({
       if (handle?.dataset.resize) {
         // 사각형·형광펜 크기 조절: 잡은 순간의 사각형 기준으로 계산
         const item = measurements.find((m) => m.id === handle.dataset.id)
-        if (item) {
+        if (item?.type === 'text') {
+          // 텍스트 상자 너비 조절: 반대쪽 변은 그대로
+          const left = item.points[0].x
+          const right = left + textMetricsOf(item).width
+          dragRef.current = { id: item.id, resize: handle.dataset.resize, text: { left, right, y: item.points[0].y, min: minTextBoxWidth(item.fontSize ?? 13) }, moved: false }
+          e.currentTarget.setPointerCapture(e.pointerId)
+        } else if (item) {
           dragRef.current = { id: item.id, resize: handle.dataset.resize, rect: rectOf(item.points[0], item.points[1] ?? item.points[0]), moved: false }
           e.currentTarget.setPointerCapture(e.pointerId)
         }
@@ -439,6 +447,7 @@ export default function PdfViewer({
         text: '',
         fontSize: markupStyle.fontSize,
         color: markupStyle.color,
+        align: markupStyle.textAlign,
       })
       return
     }
@@ -486,7 +495,12 @@ export default function PdfViewer({
           d.moved = true
           onBeginEdit()
         }
-        onSetPoints({ [d.id]: resizeRect(d.rect, d.resize, p) })
+        if (d.text) {
+          const t = d.text
+          const left = d.resize === 'w' ? Math.min(p.x, t.right - t.min) : t.left
+          const right = d.resize === 'e' ? Math.max(p.x, t.left + t.min) : t.right
+          onUpdateItem(d.id, { points: [{ x: left, y: t.y }], boxWidth: right - left })
+        } else onSetPoints({ [d.id]: resizeRect(d.rect, d.resize, p) })
       } else {
         if (!d.moved) {
           d.moved = true
@@ -929,7 +943,7 @@ function TextEditor({ editing, zoom, onChange, onCommit, onCancel }) {
     return () => clearTimeout(t)
   }, [])
   const size = editing.fontSize
-  const box = textBoxMetrics(editing.text || '텍스트 입력', size)
+  const box = textBoxMetrics(editing.text || '텍스트 입력', size, editing.boxWidth)
   return (
     <textarea
       ref={ref}
@@ -953,7 +967,12 @@ function TextEditor({ editing, zoom, onChange, onCommit, onCancel }) {
       style={{
         left: editing.point.x * zoom,
         top: editing.point.y * zoom,
-        width: Math.max(box.width * zoom + 8, 80),
+        // 너비를 정한 상자는 그 너비 그대로 (글자가 넘치면 줄바꿈), 아니면 글자에 맞춰 늘어남
+        width: editing.boxWidth ? box.width * zoom : Math.max(box.width * zoom + 8, 80),
+        textAlign: editing.align ?? 'left',
+        whiteSpace: editing.boxWidth ? 'pre-wrap' : 'pre',
+        wordBreak: 'keep-all', // 화면 표시와 같게 낱말 단위로 줄바꿈
+        overflowWrap: 'anywhere',
         height: box.height * zoom + 2,
         fontSize: size * zoom,
         lineHeight: 1.3,

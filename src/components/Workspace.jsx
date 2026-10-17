@@ -33,6 +33,7 @@ export default function Workspace({ doc, active, onOpenFile }) {
     highlightColor: '#facc15',
     fontSize: 13,
     boxOpacity: DEFAULT_BOX_OPACITY,
+    textAlign: 'left',
     strokeWidth: MARKUP_STROKE,
     ...saved?.markupStyle,
   }))
@@ -166,6 +167,7 @@ export default function Workspace({ doc, active, onOpenFile }) {
         if (type === 'text') {
           m.fontSize = markupStyle.fontSize
           m.boxOpacity = markupStyle.boxOpacity
+          m.align = markupStyle.textAlign
         }
         if (STROKE_TYPES.includes(type)) m.strokeWidth = markupStyle.strokeWidth
       }
@@ -200,7 +202,7 @@ export default function Workspace({ doc, active, onOpenFile }) {
           ...(selLine && { color: selLine.color }),
           ...(selHighlight && { highlightColor: selHighlight.color }),
           ...(selStroke && { strokeWidth: strokeOf(selStroke) }),
-          ...(selText && { fontSize: selText.fontSize ?? 13, boxOpacity: selText.boxOpacity ?? DEFAULT_BOX_OPACITY }),
+          ...(selText && { fontSize: selText.fontSize ?? 13, boxOpacity: selText.boxOpacity ?? DEFAULT_BOX_OPACITY, textAlign: selText.align ?? 'left' }),
         }
       : markupStyle
 
@@ -216,6 +218,7 @@ export default function Workspace({ doc, active, onOpenFile }) {
       if (patch.highlightColor && m.type === 'highlight') out.color = patch.highlightColor
       if (patch.fontSize && m.type === 'text') out.fontSize = patch.fontSize
       if (patch.boxOpacity !== undefined && m.type === 'text') out.boxOpacity = patch.boxOpacity
+      if (patch.textAlign && m.type === 'text') out.align = patch.textAlign
       if (patch.strokeWidth && STROKE_TYPES.includes(m.type)) out.strokeWidth = patch.strokeWidth
       return Object.keys(out).length ? out : null
     }

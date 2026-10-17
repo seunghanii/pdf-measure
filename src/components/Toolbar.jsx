@@ -226,6 +226,13 @@ function ToolButton({ t, active, needCal, onClick, showLabel }) {
   )
 }
 
+// 텍스트 정렬 버튼: [값, 이름, 아이콘]
+const ALIGN_BUTTONS = [
+  ['left', '왼쪽', 'M4 6h16M4 10h10M4 14h16M4 18h10'],
+  ['center', '가운데', 'M4 6h16M7 10h10M4 14h16M7 18h10'],
+  ['right', '오른쪽', 'M4 6h16M10 10h10M4 14h16M10 18h10'],
+]
+
 // 마크업 색상, 선 굵기, 글자 크기, 텍스트 상자 배경 투명도
 function MarkupStyle({ kind, title, style, onChange, showStroke }) {
   const isHighlight = kind === 'highlight'
@@ -282,6 +289,21 @@ function MarkupStyle({ kind, title, style, onChange, showStroke }) {
               ))}
             </select>
           </label>
+          <div className="ml-2 flex items-center rounded border border-slate-300 bg-white" role="group" aria-label="정렬">
+            {ALIGN_BUTTONS.map(([value, label, d]) => (
+              <button
+                key={value}
+                title={`${label} 정렬`}
+                aria-pressed={(style.textAlign ?? 'left') === value}
+                onClick={() => onChange({ textAlign: value })}
+                className={`flex h-6 w-6 items-center justify-center first:rounded-l last:rounded-r ${
+                  (style.textAlign ?? 'left') === value ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <Icon d={d} />
+              </button>
+            ))}
+          </div>
           <label className="ml-2 flex items-center gap-1 text-xs whitespace-nowrap text-slate-600" title="텍스트 상자 배경 투명도 (100% = 배경 없음)">
             배경 투명도
             <input

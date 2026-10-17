@@ -1,7 +1,7 @@
 import { angleArcPath, distance, polygonCentroid } from '../lib/geometry'
 import { formatLength } from '../lib/units'
 import { TYPE_INFO, describe } from '../lib/measure'
-import { DEFAULT_BOX_OPACITY, FONT_FAMILY, RESIZE_DIRS, isMarkup, rectOf, resizeHandlePos, strokeOf, textBoxMetrics } from '../lib/markup'
+import { DEFAULT_BOX_OPACITY, FONT_FAMILY, RESIZE_DIRS, isMarkup, rectOf, resizeHandlePos, strokeOf, textMetricsOf } from '../lib/markup'
 
 function Label({ x, y, text, sub, color }) {
   return (
@@ -224,6 +224,7 @@ function MarkupShape({ m, zoom, selected, showHandles, draft }) {
   let bounds = null
   let handles = false
   let resizable = false
+  let textResizable = false // 텍스트 상자는 좌우 손잡이로 너비만 조절 (줄이면 자동 줄바꿈)
 
   if (m.type === 'highlight' || m.type === 'rect') {
     const r = rectOf(pts[0], pts[1] ?? pts[0])
@@ -261,16 +262,21 @@ function MarkupShape({ m, zoom, selected, showHandles, draft }) {
     )
   } else if (m.type === 'text') {
     const size = m.fontSize ?? 13
-    const box = textBoxMetrics(m.text, size)
+    const box = textMetricsOf(m)
     const x = pts[0].x
     const y = pts[0].y
     bounds = { x, y, w: box.width * zoom, h: box.height * zoom }
+    textResizable = true
+    // 정렬: 왼쪽(기본) / 가운데 / 오른쪽
+    const align = m.align ?? 'left'
+    const tx = align === 'center' ? x + (box.width * zoom) / 2 : align === 'right' ? x + (box.width - box.pad) * zoom : x + box.pad * zoom
+    const anchor = align === 'center' ? 'middle' : align === 'right' ? 'end' : 'start'
     body = (
       <>
         <rect x={x} y={y} width={box.width * zoom} height={box.height * zoom} fill="white" fillOpacity={m.boxOpacity ?? DEFAULT_BOX_OPACITY} stroke={color} strokeWidth={Math.max(0.75, 0.8 * zoom)} rx={2 * zoom} />
-        <text fontSize={size * zoom} fontFamily={FONT_FAMILY} fill={color}>
+        <text fontSize={size * zoom} fontFamily={FONT_FAMILY} fill={color} textAnchor={anchor}>
           {box.lines.map((line, i) => (
-            <tspan key={i} x={x + box.pad * zoom} y={y + (box.pad + box.lineHeight * i + size * 1.02) * zoom} xmlSpace="preserve">
+            <tspan key={i} x={tx} y={y + (box.pad + box.lineHeight * i + size * 1.02) * zoom} xmlSpace="preserve">
               {line || ' '}
             </tspan>
           ))}
@@ -289,9 +295,9 @@ function MarkupShape({ m, zoom, selected, showHandles, draft }) {
       {/* 선택한 사각형·형광펜: 모서리와 변의 손잡이로 크기 조절 */}
       {showHandles &&
         selected &&
-        resizable &&
+        (resizable || textResizable) &&
         !draft &&
-        RESIZE_DIRS.map((dir) => {
+        (textResizable ? ['w', 'e'] : RESIZE_DIRS).map((dir) => {
           const p = resizeHandlePos(bounds, dir)
           return (
             <rect
