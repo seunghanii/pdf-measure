@@ -168,21 +168,20 @@ export default function EmptyState({
   )
 }
 
-const COLLAPSED_KEY = 'pdf-measure:folders-collapsed'
+const OPEN_FOLDER_KEY = 'pdf-measure:open-folder'
 const DRAG_TYPE = 'application/x-pdf-measure-doc'
 
-function loadCollapsed() {
+function loadOpenFolder() {
   try {
-    const v = JSON.parse(localStorage.getItem(COLLAPSED_KEY))
-    return Array.isArray(v) ? v : []
+    return localStorage.getItem(OPEN_FOLDER_KEY)
   } catch {
-    return []
+    return null
   }
 }
 
-function FolderIcon({ className, color, open }) {
+function FolderIcon({ className, color, open, fill }) {
   return (
-    <svg viewBox="0 0 24 24" className={className} fill="none" stroke={color} strokeWidth="1.8" strokeLinejoin="round">
+    <svg viewBox="0 0 24 24" className={className} fill={fill ?? 'none'} fillOpacity={fill ? 0.2 : undefined} stroke={color} strokeWidth="1.8" strokeLinejoin="round">
       {open ? (
         <path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v1H7.5a2 2 0 0 0-1.9 1.4L3.5 18M3 7v11h15.2a1 1 0 0 0 1-.7l2-6.3a1 1 0 0 0-1-1.3" />
       ) : (
@@ -194,19 +193,22 @@ function FolderIcon({ className, color, open }) {
 
 // 폴더별로 묶은 도면 목록
 function Library({ list, library, openIds, cloud, onOpen, onRemove, onRename, onUpdateLibrary, onEditFolder }) {
-  const [collapsed, setCollapsed] = useState(loadCollapsed)
+  const [openFolderId, setOpenFolderId] = useState(loadOpenFolder) // 펼쳐 본 폴더
   const [dropTarget, setDropTarget] = useState(undefined) // 폴더 id, 'none' = 폴더 밖
   const [dragging, setDragging] = useState(false)
   useEffect(() => {
     try {
-      localStorage.setItem(COLLAPSED_KEY, JSON.stringify(collapsed))
+      if (openFolderId) localStorage.setItem(OPEN_FOLDER_KEY, openFolderId)
+      else localStorage.removeItem(OPEN_FOLDER_KEY)
     } catch {
       // 무시
     }
-  }, [collapsed])
+  }, [openFolderId])
 
   const { folders, assign } = library
   const loose = list.filter((item) => !assign[item.id])
+  const openFolder = folders.find((f) => f.id === openFolderId) ?? null
+  const shown = openFolder ? list.filter((item) => assign[item.id] === openFolder.id) : loose
   const move = (docId, folderId) => onUpdateLibrary((lib) => moveDoc(lib, docId, folderId))
 
   // 도면을 끌어다 폴더(또는 폴더 밖 목록)에 놓기
@@ -253,86 +255,92 @@ function Library({ list, library, openIds, cloud, onOpen, onRemove, onRename, on
 
   return (
     <div className="space-y-3">
-      {folders.map((folder) => {
-        const items = list.filter((item) => assign[item.id] === folder.id)
-        const isCollapsed = collapsed.includes(folder.id)
-        const hex = colorHex(folder.color)
-        return (
-          <div
-            key={folder.id}
-            {...dropProps(folder.id, folder.id)}
-            className={`overflow-hidden rounded-xl bg-white shadow-sm ring-2 transition ${
-              dropTarget === folder.id ? 'ring-blue-400' : 'ring-transparent'
-            }`}
-          >
-            <div className="group flex items-center gap-2 px-3 py-2.5" style={{ borderLeft: `4px solid ${hex}` }}>
-              <button
-                className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                onClick={() =>
-                  setCollapsed((c) => (isCollapsed ? c.filter((x) => x !== folder.id) : [...c, folder.id]))
-                }
+      {folders.length > 0 && (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+          {folders.map((folder) => {
+            const items = list.filter((item) => assign[item.id] === folder.id)
+            const isOpen = folder.id === openFolderId
+            const hex = colorHex(folder.color)
+            return (
+              <div
+                key={folder.id}
+                {...dropProps(folder.id, folder.id)}
+                className={`group relative rounded-lg bg-white shadow-sm ring-2 transition ${
+                  dropTarget === folder.id ? 'ring-blue-400' : isOpen ? '' : 'ring-transparent hover:ring-slate-200'
+                }`}
+                style={isOpen && dropTarget !== folder.id ? { '--tw-ring-color': hex } : undefined}
               >
-                <svg
-                  viewBox="0 0 24 24"
-                  className={`h-4 w-4 shrink-0 text-slate-400 transition ${isCollapsed ? '' : 'rotate-90'}`}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
+                <button
+                  className="flex w-full min-w-0 items-center gap-2 px-2.5 py-2 text-left"
+                  onClick={() => setOpenFolderId(isOpen ? null : folder.id)}
+                  title={isOpen ? '폴더 닫기' : '폴더 열기'}
                 >
-                  <path d="m9 6 6 6-6 6" />
-                </svg>
-                <span style={{ color: hex }}>
-                  <FolderIcon className="h-6 w-6 shrink-0" color="currentColor" open={!isCollapsed} />
-                </span>
-                <span className="truncate font-semibold text-slate-800">{folder.name}</span>
-                <span className="shrink-0 text-xs text-slate-400">{items.length}개</span>
-              </button>
-              <button
-                onClick={() => onEditFolder(folder)}
-                title="폴더 이름·색상 바꾸기"
-                className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-              >
-                <PencilIcon />
-              </button>
-              <button
-                onClick={() => {
-                  const ask = items.length
-                    ? `"${folder.name}" 폴더를 지울까요? 안에 있는 도면 ${items.length}개는 지워지지 않고 폴더 밖으로 나와요.`
-                    : `"${folder.name}" 폴더를 지울까요?`
-                  if (window.confirm(ask)) onUpdateLibrary((lib) => deleteFolder(lib, folder.id))
-                }}
-                title="폴더 지우기"
-                className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500"
-              >
-                <TrashIcon />
-              </button>
-            </div>
-            {!isCollapsed && (
-              <ul className="divide-y divide-slate-100 border-t border-slate-100">
-                {items.length ? (
-                  items.map(row)
-                ) : (
-                  <li className="px-4 py-4 text-center text-sm text-slate-400">
-                    비어 있어요. 도면을 끌어다 놓거나 도면의 폴더 버튼으로 넣어 보세요.
-                  </li>
-                )}
-              </ul>
-            )}
-          </div>
-        )
-      })}
-
-      {(loose.length > 0 || folders.length === 0) && (
-        <div
-          {...dropProps('none', null)}
-          className={`rounded-xl ring-2 transition ${dropTarget === 'none' ? 'ring-blue-400' : 'ring-transparent'}`}
-        >
-          {folders.length > 0 && <div className="mb-1 px-1 text-xs font-medium text-slate-400">폴더 밖</div>}
-          <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl bg-white shadow-sm">{loose.map(row)}</ul>
+                  <span style={{ color: hex }}>
+                    <FolderIcon className="h-5 w-5 shrink-0" color="currentColor" open={isOpen} fill={hex} />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">{folder.name}</span>
+                  <span className="shrink-0 text-xs text-slate-400 group-hover:hidden">{items.length}</span>
+                </button>
+                <div className="absolute top-1/2 right-1 hidden -translate-y-1/2 items-center rounded bg-white group-hover:flex">
+                  <button
+                    onClick={() => onEditFolder(folder)}
+                    title="폴더 이름·색상 바꾸기"
+                    className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  >
+                    <PencilIcon />
+                  </button>
+                  <button
+                    onClick={() => {
+                      const ask = items.length
+                        ? `"${folder.name}" 폴더를 지울까요? 안에 있는 도면 ${items.length}개는 지워지지 않고 폴더 밖으로 나와요.`
+                        : `"${folder.name}" 폴더를 지울까요?`
+                      if (!window.confirm(ask)) return
+                      if (isOpen) setOpenFolderId(null)
+                      onUpdateLibrary((lib) => deleteFolder(lib, folder.id))
+                    }}
+                    title="폴더 지우기"
+                    className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500"
+                  >
+                    <TrashIcon />
+                  </button>
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
-      {loose.length === 0 && folders.length > 0 && dragging && (
+
+      {openFolder ? (
+        <div>
+          <div className="mb-1 flex items-center gap-1 px-1 text-xs font-medium text-slate-500">
+            <button onClick={() => setOpenFolderId(null)} className="hover:text-blue-600 hover:underline">
+              전체
+            </button>
+            <span>›</span>
+            <span style={{ color: colorHex(openFolder.color) }}>{openFolder.name}</span>
+          </div>
+          <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl bg-white shadow-sm">
+            {shown.length ? (
+              shown.map(row)
+            ) : (
+              <li className="px-4 py-4 text-center text-sm text-slate-400">
+                비어 있어요. 도면을 폴더 칸에 끌어다 놓거나 도면의 폴더 버튼으로 넣어 보세요.
+              </li>
+            )}
+          </ul>
+        </div>
+      ) : (
+        (shown.length > 0 || folders.length === 0) && (
+          <div
+            {...dropProps('none', null)}
+            className={`rounded-xl ring-2 transition ${dropTarget === 'none' ? 'ring-blue-400' : 'ring-transparent'}`}
+          >
+            {folders.length > 0 && <div className="mb-1 px-1 text-xs font-medium text-slate-400">폴더 밖</div>}
+            <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl bg-white shadow-sm">{shown.map(row)}</ul>
+          </div>
+        )
+      )}
+      {folders.length > 0 && dragging && (openFolder || loose.length === 0) && (
         <div
           {...dropProps('none', null)}
           className={`rounded-xl border-2 border-dashed px-4 py-3 text-center text-sm ${
