@@ -4,15 +4,19 @@
 // storage.js 의 localStore 와 같은 모양의 함수를 돌려줍니다.
 // 폴더 정보는 documents 표의 특별한 한 줄(file_key = LIBRARY_KEY)의 state 에 보관 (표를 새로 만들지 않으려고)
 // 검색용 글자 색인도 도면마다 특별한 한 줄(file_key = "@text|" + 도면 id, size 0)에 보관.
+// 도면에 넣은 사진도 사진마다 특별한 한 줄(file_key = "@img|" + 사진 id, name = 도면 id)의 state 에 base64 로 보관
+// (pdfs 보관함은 PDF 만 받도록 되어 있어서, 설정 SQL 을 다시 실행하지 않아도 되게).
 // 특별한 줄은 모두 size 가 0 이라 실제 도면(size > 0)과 구분됩니다.
 import { cacheDelete, cacheGet, cachePrune, cachePut } from './storage'
 import { normalizeLibrary } from './library'
+import { base64ToBlob, blobToBase64 } from './images'
 
 export const BUCKET = 'pdfs'
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024 // Supabase 무료 플랜의 파일 하나 최대 크기
 const MAX_RECENT = 200
 const LIBRARY_KEY = '__library__'
 const TEXT_PREFIX = '@text|'
+const IMAGE_PREFIX = '@img|'
 const COLS = 'file_key, name, size, storage_path, has_file, state, last_opened'
 
 const toRecord = (row) =>
@@ -64,6 +68,25 @@ export function createCloudStore(supabase, user) {
     }
     check(await bucket().upload(path, file, { contentType: 'application/pdf', upsert: true }))
     check(await table().update({ has_file: true }).eq('user_id', uid).eq('file_key', id))
+  }
+
+  async function putImage(docId, imageId, blob) {
+    const data = await blobToBase64(blob)
+    check(
+      await table().upsert(
+        {
+          user_id: uid,
+          file_key: IMAGE_PREFIX + imageId,
+          name: docId,
+          size: 0,
+          storage_path: '',
+          state: { type: blob.type, data },
+          last_opened: new Date(0).toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id,file_key' },
+      ),
+    )
   }
 
   async function insertRow(fields) {
@@ -179,6 +202,38 @@ export function createCloudStore(supabase, user) {
       return rows.map((r) => ({ id: r.file_key.slice(TEXT_PREFIX.length), index: r.state }))
     },
 
+    saveImage(docId, imageId, blob) {
+      return track(putImage(docId, imageId, blob))
+    },
+
+    async getImage(docId, imageId) {
+      const row = check(
+        await table().select('state').eq('user_id', uid).eq('file_key', IMAGE_PREFIX + imageId).maybeSingle(),
+      )
+      return row?.state?.data ? base64ToBlob(row.state.data, row.state.type || 'image/jpeg') : null
+    },
+
+    async listImageIds(docId) {
+      const rows = check(
+        await table().select('file_key').eq('user_id', uid).eq('size', 0).eq('name', docId).like('file_key', `${IMAGE_PREFIX}%`),
+      )
+      return rows.map((r) => r.file_key.slice(IMAGE_PREFIX.length))
+    },
+
+    removeImages(docId, ids) {
+      if (!ids.length) return Promise.resolve()
+      return track(
+        table()
+          .delete()
+          .eq('user_id', uid)
+          .in(
+            'file_key',
+            ids.map((id) => IMAGE_PREFIX + id),
+          )
+          .then(check),
+      )
+    },
+
     async getLibrary() {
       const row = check(await table().select('state').eq('user_id', uid).eq('file_key', LIBRARY_KEY).maybeSingle())
       return normalizeLibrary(row?.state)
@@ -209,11 +264,13 @@ export function createCloudStore(supabase, user) {
       if (!rec) return
       check(await bucket().remove([rec.path]))
       check(await table().delete().eq('user_id', uid).in('file_key', [id, TEXT_PREFIX + id]))
+      check(await table().delete().eq('user_id', uid).eq('size', 0).eq('name', id).like('file_key', `${IMAGE_PREFIX}%`))
       cacheDelete(rec.path).catch(() => {})
     },
 
     // 브라우저에만 있던 도면을 서버로 옮기기. 서버에 이미 있으면 서버 쪽 측정값을 그대로 둠.
-    async importLocal(doc, blob) {
+    // images: 그 도면에 넣은 사진 [{ id, blob }]
+    async importLocal(doc, blob, images = []) {
       let rec = await findRow(doc.id)
       if (!rec) {
         rec = await insertRow({
@@ -225,6 +282,7 @@ export function createCloudStore(supabase, user) {
           last_opened: new Date(doc.lastOpened || Date.now()).toISOString(),
         })
       }
+      for (const img of images) await putImage(doc.id, img.id, img.blob)
       if (!rec.hasFile && blob) await upload(doc.id, rec.path, blob)
       if (blob) cachePut(rec.path, blob).catch(() => {})
     },

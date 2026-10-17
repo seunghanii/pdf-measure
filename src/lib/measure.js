@@ -11,6 +11,7 @@ export const TYPE_INFO = {
   pen: { name: '펜', color: '#dc2626', need: null },
   rect: { name: '사각형', color: '#dc2626', need: null },
   arrow: { name: '화살표', color: '#dc2626', need: null },
+  image: { name: '사진', color: '#0891b2', need: null },
 }
 
 // 측정 하나의 표시 문자열(주 값, 보조 값)

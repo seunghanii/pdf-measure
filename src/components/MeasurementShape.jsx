@@ -2,7 +2,8 @@ import { memo } from 'react'
 import { angleArcPath, distance, polygonCentroid } from '../lib/geometry'
 import { formatLength } from '../lib/units'
 import { TYPE_INFO, describe } from '../lib/measure'
-import { DEFAULT_BOX_OPACITY, FONT_FAMILY, RESIZE_DIRS, isMarkup, rectOf, resizeHandlePos, strokeOf, textMetricsOf } from '../lib/markup'
+import { DEFAULT_BOX_OPACITY, FONT_FAMILY, RESIZE_DIRS, cropOf, fullImageRect, isMarkup, rectOf, resizeHandlePos, strokeOf, textMetricsOf } from '../lib/markup'
+import { useImageUrl } from '../lib/images'
 
 function Label({ x, y, text, sub, color }) {
   return (
@@ -76,7 +77,10 @@ function offsetLabel(a, b, dist = 14) {
   return { x: mx + nx * dist, y: my + ny * dist }
 }
 
-function MeasurementShape({ m, zoom, mmPerPt, unit, selected, showHandles, showResize, draft, closeHint, endHint }) {
+// cropping: 사진 자르기 중 (원본 전체를 흐리게 보여 주고 자르기 손잡이 표시)
+// exporting: PDF 저장용. 사진은 따로 넣으므로 테두리만 그림
+function MeasurementShape({ m, zoom, mmPerPt, unit, selected, showHandles, showResize, draft, closeHint, endHint, cropping, exporting }) {
+  if (m.type === 'image') return <ImageShape m={m} zoom={zoom} selected={selected} showHandles={showHandles} cropping={cropping} exporting={exporting} />
   if (isMarkup(m.type)) return <MarkupShape m={m} zoom={zoom} selected={selected} showHandles={showHandles} showResize={showResize} draft={draft} />
   const color = TYPE_INFO[m.type].color
   const pts = m.points.map((p) => ({ x: p.x * zoom, y: p.y * zoom }))
@@ -330,6 +334,76 @@ function MarkupShape({ m, zoom, selected, showHandles, showResize, draft }) {
         pts.map((p, i) => (
           <circle key={i} cx={p.x} cy={p.y} r={5} fill="white" stroke={color} strokeWidth={2} data-handle="" data-id={m.id} data-index={i} style={{ cursor: 'crosshair' }} />
         ))}
+    </g>
+  )
+}
+
+// 사진. points 두 점은 보이는(잘라 낸) 부분의 사각형, crop 은 원본에서 보이는 부분(0~1)
+function ImageShape({ m, zoom, selected, showHandles, cropping, exporting }) {
+  const url = useImageUrl(m.imageId)
+  const r0 = rectOf(m.points[0], m.points[1] ?? m.points[0])
+  const r = { x: r0.x * zoom, y: r0.y * zoom, w: r0.w * zoom, h: r0.h * zoom }
+  const c = cropOf(m)
+  const iw = m.imgW || 1
+  const ih = m.imgH || 1
+  const full = fullImageRect(r, c)
+  const sw = Math.max(0.75, strokeOf(m) * zoom)
+  const border = m.border && <rect x={r.x} y={r.y} width={r.w} height={r.h} fill="none" stroke={m.color ?? '#111827'} strokeWidth={sw} pointerEvents="none" />
+  if (exporting) return border || null
+
+  const picture = (rect, viewBox, opacity) =>
+    url ? (
+      <svg x={rect.x} y={rect.y} width={Math.max(rect.w, 0.01)} height={Math.max(rect.h, 0.01)} viewBox={viewBox} preserveAspectRatio="none" overflow="hidden" opacity={opacity}>
+        <image href={url} width={iw} height={ih} preserveAspectRatio="none" />
+      </svg>
+    ) : null
+  const handles = (showHandles || cropping) && selected
+  return (
+    <g data-shape={m.id} data-type="image" style={{ cursor: showHandles ? 'move' : undefined }}>
+      {/* 자르는 중: 잘려 나간 부분도 흐리게 보여 줌 */}
+      {cropping && picture(full, `0 0 ${iw} ${ih}`, 0.35)}
+      {cropping && <rect x={full.x} y={full.y} width={full.w} height={full.h} fill="none" stroke="#64748b" strokeDasharray="4 3" strokeWidth={1} pointerEvents="none" />}
+      {/* 클릭이 잘 잡히도록 (사진을 불러오는 동안에는 회색 상자) */}
+      <rect x={r.x} y={r.y} width={r.w} height={r.h} fill={url ? 'transparent' : '#e2e8f0'} />
+      {!url && (
+        <text x={r.x + r.w / 2} y={r.y + r.h / 2} textAnchor="middle" dominantBaseline="middle" fontSize={12} fill="#64748b" fontFamily={FONT_FAMILY} pointerEvents="none">
+          사진
+        </text>
+      )}
+      {picture(r, `${c.x * iw} ${c.y * ih} ${c.w * iw} ${c.h * ih}`)}
+      {border}
+      {selected && !cropping && (
+        <rect x={r.x - 3} y={r.y - 3} width={r.w + 6} height={r.h + 6} fill="none" stroke="#2563eb" strokeWidth={1} strokeDasharray="4 3" pointerEvents="none" />
+      )}
+      {handles &&
+        RESIZE_DIRS.map((dir) => {
+          const p = resizeHandlePos(r, dir)
+          const common = { 'data-handle': '', 'data-id': m.id, 'data-resize': dir, 'data-crop': cropping ? '' : undefined, style: { cursor: `${dir}-resize` } }
+          return (
+            <g key={dir}>
+              <rect x={p.x - 10} y={p.y - 10} width={20} height={20} fill="transparent" {...common} />
+              {cropping ? <CropMark p={p} dir={dir} {...common} /> : <rect x={p.x - 5} y={p.y - 5} width={10} height={10} fill="white" stroke="#2563eb" strokeWidth={1.5} {...common} />}
+            </g>
+          )
+        })}
+    </g>
+  )
+}
+
+// 자르기 손잡이: 모서리는 ㄱ자, 변은 짧은 막대 (검은 선에 흰 테두리)
+function CropMark({ p, dir, ...rest }) {
+  const L = 12
+  let d
+  if (dir.length === 2) {
+    const sx = dir.includes('w') ? 1 : -1
+    const sy = dir.includes('n') ? 1 : -1
+    d = `M${p.x} ${p.y + sy * L}L${p.x} ${p.y}L${p.x + sx * L} ${p.y}`
+  } else if (dir === 'n' || dir === 's') d = `M${p.x - L} ${p.y}L${p.x + L} ${p.y}`
+  else d = `M${p.x} ${p.y - L}L${p.x} ${p.y + L}`
+  return (
+    <g {...rest}>
+      <path d={d} fill="none" stroke="white" strokeWidth={6} strokeLinecap="square" />
+      <path d={d} fill="none" stroke="#111827" strokeWidth={3} strokeLinecap="square" />
     </g>
   )
 }

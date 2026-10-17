@@ -1,7 +1,7 @@
-// 마크업(형광펜, 텍스트, 펜, 사각형, 화살표) 공통 정의
+// 마크업(형광펜, 텍스트, 펜, 사각형, 화살표, 사진) 공통 정의
 // 마크업은 측정과 같은 목록(measurements)에 저장되고, 좌표는 PDF 페이지 좌표(pt)입니다.
 
-export const MARKUP_TYPES = ['highlight', 'text', 'pen', 'rect', 'arrow']
+export const MARKUP_TYPES = ['highlight', 'text', 'pen', 'rect', 'arrow', 'image']
 
 export const isMarkup = (type) => MARKUP_TYPES.includes(type)
 
@@ -36,6 +36,61 @@ export function resizeHandlePos(r, dir) {
   const x = dir.includes('w') ? r.x : dir.includes('e') ? r.x + r.w : r.x + r.w / 2
   const y = dir.includes('n') ? r.y : dir.includes('s') ? r.y + r.h : r.y + r.h / 2
   return { x, y }
+}
+
+// 사진: 테두리 색과 굵기 (pt)
+export const IMAGE_BORDER_COLORS = ['#111827', '#ffffff', '#dc2626', '#2563eb', '#16a34a', '#ea580c']
+export const IMAGE_BORDER_WIDTHS = [0.5, 1, 2, 3, 4, 6, 8]
+
+export const FULL_CROP = { x: 0, y: 0, w: 1, h: 1 }
+export const cropOf = (m) => m.crop ?? FULL_CROP
+export const isCropped = (m) => {
+  const c = cropOf(m)
+  return c.x > 1e-4 || c.y > 1e-4 || c.w < 1 - 1e-4 || c.h < 1 - 1e-4
+}
+
+// 잘라 낸 사진의 원본 전체가 놓일 자리 (r: 보이는 부분 사각형, c: 자르기 영역 0~1)
+export function fullImageRect(r, c) {
+  const w = r.w / c.w
+  const h = r.h / c.h
+  return { x: r.x - c.x * w, y: r.y - c.y * h, w, h }
+}
+
+// 모서리 손잡이: 가로세로 비율을 유지하며 크기 조절 (반대쪽 모서리는 그대로)
+export function resizeKeepAspect(r, dir, p) {
+  if (dir.length !== 2) return resizeRect(r, dir, p)
+  const ax = dir.includes('w') ? r.x + r.w : r.x
+  const ay = dir.includes('n') ? r.y + r.h : r.y
+  const k = Math.max(Math.abs(p.x - ax) / (r.w || 1), Math.abs(p.y - ay) / (r.h || 1), 0.02)
+  const w = r.w * k
+  const h = r.h * k
+  const x = dir.includes('w') ? ax - w : ax
+  const y = dir.includes('n') ? ay - h : ay
+  return [
+    { x, y },
+    { x: x + w, y: y + h },
+  ]
+}
+
+// 자르기 손잡이를 p 로 끌었을 때 새 보이는 영역과 자르기 값. 원본 사진 밖으로는 못 나감
+export function cropResize(r, full, dir, p) {
+  const min = Math.min(4, full.w, full.h)
+  const q = { x: Math.min(full.x + full.w, Math.max(full.x, p.x)), y: Math.min(full.y + full.h, Math.max(full.y, p.y)) }
+  let left = r.x
+  let top = r.y
+  let right = r.x + r.w
+  let bottom = r.y + r.h
+  if (dir.includes('w')) left = Math.min(q.x, right - min)
+  if (dir.includes('e')) right = Math.max(q.x, left + min)
+  if (dir.includes('n')) top = Math.min(q.y, bottom - min)
+  if (dir.includes('s')) bottom = Math.max(q.y, top + min)
+  return {
+    points: [
+      { x: left, y: top },
+      { x: right, y: bottom },
+    ],
+    crop: { x: (left - full.x) / full.w, y: (top - full.y) / full.h, w: (right - left) / full.w, h: (bottom - top) / full.h },
+  }
 }
 
 // 손잡이를 p 로 끌었을 때 새 두 점 (반대쪽 변은 그대로, 넘어가면 뒤집힘)
