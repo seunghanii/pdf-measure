@@ -1,11 +1,14 @@
 // 도면 글자 색인: 페이지마다 글자 덩어리와 그 위치를 한 번만 뽑아 저장해 두고 검색에 씁니다.
 // { v, pages: [{ items: [[글자, x, y, w, h], ...], ocr?: true }] }  (좌표는 배율 1 페이지 좌표, 뷰어와 같음)
-// PDF 에 글자 정보가 있으면 그대로 쓰고, 거의 없는 페이지(스캔본)만 OCR 합니다.
-import { Util } from 'pdfjs-dist/legacy/build/pdf.mjs'
+// PDF 에 글자 정보가 있으면 그대로 쓰고, 글자가 그림으로 들어 있을 만한 페이지는 나머지 부분을 OCR 합니다.
+import { OPS, Util } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import { mergeLine } from './textMerge'
 
-export const INDEX_VERSION = 1
-const MIN_TEXT_CHARS = 6 // 글자가 이보다 적은 페이지는 스캔 이미지로 보고 OCR
+export const INDEX_VERSION = 2 // 2: 글자와 그림 글자가 섞인 페이지도 OCR
+const MIN_TEXT_CHARS = 6 // 글자가 이보다 적으면 스캔본이거나 글자를 선으로 바꾼 도면
+const FEW_TEXT_ITEMS = 40 // 큰 도면에 글자 덩어리가 이보다 적으면 표제란만 글자이고 본체는 그림일 가능성이 큼
+const BIG_PAGE_AREA = 842 * 595 * 1.5 // A3 보다 큰 페이지
+const IMAGE_COVERAGE = 0.2 // 이미지(스캔 등)가 페이지의 이만큼 이상 덮으면
 
 const r1 = (v) => Math.round(v * 10) / 10
 
@@ -38,6 +41,36 @@ async function pdfTextItems(pdfPage) {
   return out
 }
 
+// 페이지에서 이미지가 덮는 비율 (그리기 명령을 따라가며 이미지마다 크기 계산)
+async function imageCoverage(pdfPage) {
+  const { fnArray, argsArray } = await pdfPage.getOperatorList()
+  const vp = pdfPage.getViewport({ scale: 1 })
+  let ctm = [1, 0, 0, 1, 0, 0]
+  const stack = []
+  let area = 0
+  for (let i = 0; i < fnArray.length; i++) {
+    const fn = fnArray[i]
+    if (fn === OPS.save) stack.push(ctm)
+    else if (fn === OPS.restore) ctm = stack.pop() ?? ctm
+    else if (fn === OPS.transform) ctm = Util.transform(ctm, argsArray[i])
+    else if (fn === OPS.paintFormXObjectBegin) {
+      stack.push(ctm)
+      if (argsArray[i]?.[0]) ctm = Util.transform(ctm, argsArray[i][0])
+    } else if (fn === OPS.paintFormXObjectEnd) ctm = stack.pop() ?? ctm
+    else if (fn === OPS.paintImageXObject || fn === OPS.paintInlineImageXObject || fn === OPS.paintImageMaskXObject)
+      area += Math.abs(ctm[0] * ctm[3] - ctm[1] * ctm[2]) // 이미지는 1x1 정사각형을 ctm 으로 늘려 그림
+  }
+  return Math.min(1, area / (vp.width * vp.height))
+}
+
+// 글자가 그림으로 들어 있을 만한 페이지인지
+async function needsOcr(pdfPage, items, merged) {
+  if (charCount(items) < MIN_TEXT_CHARS) return true
+  const vp = pdfPage.getViewport({ scale: 1 })
+  if (merged.length < FEW_TEXT_ITEMS && vp.width * vp.height > BIG_PAGE_AREA) return true
+  return (await imageCoverage(pdfPage).catch(() => 0)) > IMAGE_COVERAGE
+}
+
 const pack = (list) => list.map((i) => [i.s.trim().replace(/\s+/g, ' '), r1(i.x), r1(i.y), r1(i.w), r1(i.h)]).filter((i) => i[0])
 
 const charCount = (items) => items.reduce((n, i) => n + i.s.replace(/\s/g, '').length, 0)
@@ -50,13 +83,16 @@ export async function buildIndex(pdfDoc, { onProgress, signal } = {}) {
     onProgress?.({ page: n, pages: pdfDoc.numPages })
     const page = await pdfDoc.getPage(n)
     const items = await pdfTextItems(page)
-    if (charCount(items) >= MIN_TEXT_CHARS) {
-      pages.push({ items: pack(mergeLine(items)) })
+    const merged = mergeLine(items)
+    if (!(await needsOcr(page, items, merged))) {
+      pages.push({ items: pack(merged) })
       continue
     }
     const { ocrPage } = await import('./ocr')
     const words = await ocrPage(page, {
       signal,
+      mask: items, // PDF 에 이미 글자로 있는 곳은 지우고 읽음
+
       onProgress: (done) => onProgress?.({ page: n, pages: pdfDoc.numPages, ocr: true, done }),
     })
     const ocrItems = words.map(({ s, x, y, w, h }) => ({ s, x, y, w, h, flat: true }))
