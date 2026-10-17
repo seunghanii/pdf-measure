@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { distance, snapTo45 } from '../lib/geometry'
 import { TYPE_INFO } from '../lib/measure'
 import MeasurementShape from './MeasurementShape'
-import { DRAG_TOOLS, textBoxMetrics, FONT_FAMILY, itemCorners, rectOf } from '../lib/markup'
+import { DRAG_TOOLS, textBoxMetrics, FONT_FAMILY, itemCorners, rectOf, resizeRect } from '../lib/markup'
 
 const MAX_CANVAS_PIXELS = 16_000_000 // 모바일 사파리 캔버스 한도 근처
 const CLOSE_RADIUS_PX = 10 // 면적: 첫 점 / 길이: 마지막 점 근처 클릭 시 완료
@@ -329,6 +329,15 @@ export default function PdfViewer({
     // 선택 도구: 점 잡아서 옮기기 / 도형 통째로 옮기기 / 선택
     if (tool === 'select') {
       const handle = e.target.closest?.('[data-handle]')
+      if (handle?.dataset.resize) {
+        // 사각형·형광펜 크기 조절: 잡은 순간의 사각형 기준으로 계산
+        const item = measurements.find((m) => m.id === handle.dataset.id)
+        if (item) {
+          dragRef.current = { id: item.id, resize: handle.dataset.resize, rect: rectOf(item.points[0], item.points[1] ?? item.points[0]), moved: false }
+          e.currentTarget.setPointerCapture(e.pointerId)
+        }
+        return
+      }
       if (handle) {
         dragRef.current = { id: handle.dataset.id, index: Number(handle.dataset.index), moved: false }
         onSelect([handle.dataset.id])
@@ -424,6 +433,12 @@ export default function PdfViewer({
         const next = {}
         for (const [id, pts] of Object.entries(d.orig)) next[id] = pts.map((q) => ({ x: q.x + dx, y: q.y + dy }))
         onSetPoints(next)
+      } else if (d.resize) {
+        if (!d.moved) {
+          d.moved = true
+          onBeginEdit()
+        }
+        onSetPoints({ [d.id]: resizeRect(d.rect, d.resize, p) })
       } else {
         if (!d.moved) {
           d.moved = true
@@ -495,7 +510,7 @@ export default function PdfViewer({
   const renderPreview = (page) => {
     if (draft?.dragging && draft.page === page) {
       const color = tool === 'highlight' ? markupStyle.highlightColor : markupStyle.color
-      return <MeasurementShape m={{ id: 'draft', type: tool, points: draft.points, color }} zoom={zoom} draft />
+      return <MeasurementShape m={{ id: 'draft', type: tool, points: draft.points, color, strokeWidth: markupStyle.strokeWidth }} zoom={zoom} draft />
     }
     if (!drawing || !draft || draft.page !== page) return null
     const c = cursor && cursor.page === page ? cursor.p : null

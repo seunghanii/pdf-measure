@@ -1,7 +1,7 @@
 import { angleArcPath, distance, polygonCentroid } from '../lib/geometry'
 import { formatLength } from '../lib/units'
 import { TYPE_INFO, describe } from '../lib/measure'
-import { DEFAULT_BOX_OPACITY, FONT_FAMILY, MARKUP_STROKE, isMarkup, rectOf, textBoxMetrics } from '../lib/markup'
+import { DEFAULT_BOX_OPACITY, FONT_FAMILY, RESIZE_DIRS, isMarkup, rectOf, resizeHandlePos, strokeOf, textBoxMetrics } from '../lib/markup'
 
 function Label({ x, y, text, sub, color }) {
   return (
@@ -219,15 +219,16 @@ function EndTick({ p, q, color }) {
 function MarkupShape({ m, zoom, selected, showHandles, draft }) {
   const color = m.color ?? TYPE_INFO[m.type].color
   const pts = m.points.map((p) => ({ x: p.x * zoom, y: p.y * zoom }))
-  const sw = Math.max(1, MARKUP_STROKE * zoom)
+  const sw = Math.max(0.75, strokeOf(m) * zoom)
   let body = null
   let bounds = null
   let handles = false
+  let resizable = false
 
   if (m.type === 'highlight' || m.type === 'rect') {
     const r = rectOf(pts[0], pts[1] ?? pts[0])
     bounds = r
-    handles = true
+    resizable = true
     body =
       m.type === 'highlight' ? (
         <rect x={r.x} y={r.y} width={r.w} height={r.h} fill={color} fillOpacity={0.38} style={{ mixBlendMode: 'multiply' }} />
@@ -255,7 +256,7 @@ function MarkupShape({ m, zoom, selected, showHandles, draft }) {
     body = (
       <>
         <polyline points={d} fill="none" stroke="transparent" strokeWidth={Math.max(12, sw * 4)} strokeLinecap="round" strokeLinejoin="round" />
-        <polyline points={d} fill="none" stroke={color} strokeWidth={sw * 1.2} strokeLinecap="round" strokeLinejoin="round" />
+        <polyline points={d} fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
       </>
     )
   } else if (m.type === 'text') {
@@ -281,9 +282,34 @@ function MarkupShape({ m, zoom, selected, showHandles, draft }) {
   return (
     <g data-shape={draft ? undefined : m.id} data-type={m.type} style={{ cursor: showHandles ? 'move' : undefined }} opacity={draft ? 0.8 : 1}>
       {body}
-      {selected && bounds && !draft && (
-        <rect x={bounds.x - 3} y={bounds.y - 3} width={bounds.w + 6} height={bounds.h + 6} fill="none" stroke="#2563eb" strokeWidth={1} strokeDasharray="4 3" pointerEvents="none" />
-      )}
+      {selected && bounds && !draft && (() => {
+        const g = m.type === 'rect' ? sw / 2 + 3 : 3
+        return <rect x={bounds.x - g} y={bounds.y - g} width={bounds.w + g * 2} height={bounds.h + g * 2} fill="none" stroke="#2563eb" strokeWidth={1} strokeDasharray="4 3" pointerEvents="none" />
+      })()}
+      {/* 선택한 사각형·형광펜: 모서리와 변의 손잡이로 크기 조절 */}
+      {showHandles &&
+        selected &&
+        resizable &&
+        !draft &&
+        RESIZE_DIRS.map((dir) => {
+          const p = resizeHandlePos(bounds, dir)
+          return (
+            <rect
+              key={dir}
+              x={p.x - 4.5}
+              y={p.y - 4.5}
+              width={9}
+              height={9}
+              fill="white"
+              stroke="#2563eb"
+              strokeWidth={1.5}
+              data-handle=""
+              data-id={m.id}
+              data-resize={dir}
+              style={{ cursor: `${dir}-resize` }}
+            />
+          )
+        })}
       {showHandles &&
         handles &&
         !draft &&

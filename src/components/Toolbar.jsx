@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { TOOLS, digitForTool } from '../lib/tools'
-import { DEFAULT_BOX_OPACITY, HIGHLIGHT_COLORS, MARKUP_COLORS, TEXT_SIZES } from '../lib/markup'
+import { DEFAULT_BOX_OPACITY, HIGHLIGHT_COLORS, MARKUP_COLORS, STROKE_TYPES, STROKE_WIDTHS, TEXT_SIZES } from '../lib/markup'
 
 function Icon({ d }) {
   return (
@@ -26,6 +26,7 @@ export default function Toolbar({
   markupStyle,
   onChangeMarkupStyle,
   selectedMarkupType,
+  selectedHasStroke, // 선택한 것 중에 사각형·화살표·펜이 있으면 굵기도 보여 줌
   onSave,
   saving,
   syncStatus, // 서버 저장 상태: 'saved' | 'saving' | 'error' (로그인했을 때만)
@@ -81,6 +82,7 @@ export default function Toolbar({
               kind={selectedMarkupType && tool === 'select' ? selectedMarkupType : tool}
               style={markupStyle}
               onChange={onChangeMarkupStyle}
+              showStroke={selectedHasStroke}
             />
           )}
 
@@ -198,13 +200,14 @@ function ToolButton({ t, active, needCal, onClick, showLabel }) {
   )
 }
 
-// 마크업 색상, 글자 크기, 텍스트 상자 배경 투명도
-function MarkupStyle({ kind, style, onChange }) {
+// 마크업 색상, 선 굵기, 글자 크기, 텍스트 상자 배경 투명도
+function MarkupStyle({ kind, style, onChange, showStroke }) {
   const isHighlight = kind === 'highlight'
   const colors = isHighlight ? HIGHLIGHT_COLORS : MARKUP_COLORS
   const current = isHighlight ? style.highlightColor : style.color
   // 예전에 저장된 크기처럼 목록에 없는 값도 그대로 보이게
   const sizes = TEXT_SIZES.includes(style.fontSize) ? TEXT_SIZES : [...TEXT_SIZES, style.fontSize].sort((a, b) => a - b)
+  const widths = STROKE_WIDTHS.includes(style.strokeWidth) ? STROKE_WIDTHS : [...STROKE_WIDTHS, style.strokeWidth].sort((a, b) => a - b)
   const transparency = Math.round((1 - (style.boxOpacity ?? DEFAULT_BOX_OPACITY)) * 100)
   return (
     <div className="flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-1">
@@ -217,6 +220,25 @@ function MarkupStyle({ kind, style, onChange }) {
           style={{ background: c }}
         />
       ))}
+      {(STROKE_TYPES.includes(kind) || showStroke) && (
+        <label className="ml-2 flex items-center gap-1 text-xs text-slate-600" title="선 굵기 (pt). 화살촉은 굵기에 맞춰 커져요">
+          굵기
+          <select
+            value={style.strokeWidth}
+            onChange={(e) => onChange({ strokeWidth: Number(e.target.value) })}
+            className="rounded border border-slate-300 bg-white px-1 py-0.5 text-xs tabular-nums"
+          >
+            {widths.map((n) => (
+              <option key={n} value={n}>
+                {Math.round(n * 100) / 100}
+              </option>
+            ))}
+          </select>
+          <svg viewBox="0 0 24 12" className="h-3 w-6" aria-hidden="true">
+            <line x1="2" y1="6" x2="22" y2="6" stroke={style.color} strokeWidth={Math.min(10, Math.max(0.75, style.strokeWidth))} strokeLinecap="round" />
+          </svg>
+        </label>
+      )}
       {kind === 'text' && (
         <>
           <label className="ml-2 flex items-center gap-1 text-xs text-slate-600" title="글자 크기 (pt)">
