@@ -75,8 +75,8 @@ function offsetLabel(a, b, dist = 14) {
   return { x: mx + nx * dist, y: my + ny * dist }
 }
 
-export default function MeasurementShape({ m, zoom, mmPerPt, unit, selected, showHandles, draft, closeHint, endHint }) {
-  if (isMarkup(m.type)) return <MarkupShape m={m} zoom={zoom} selected={selected} showHandles={showHandles} draft={draft} />
+export default function MeasurementShape({ m, zoom, mmPerPt, unit, selected, showHandles, showResize, draft, closeHint, endHint }) {
+  if (isMarkup(m.type)) return <MarkupShape m={m} zoom={zoom} selected={selected} showHandles={showHandles} showResize={showResize} draft={draft} />
   const color = TYPE_INFO[m.type].color
   const pts = m.points.map((p) => ({ x: p.x * zoom, y: p.y * zoom }))
   const strokeWidth = selected ? 3 : 2
@@ -216,7 +216,7 @@ function EndTick({ p, q, color }) {
 }
 
 // 마크업: 형광펜, 텍스트 상자, 펜, 사각형, 화살표. 굵기와 글자 크기는 도면과 함께 확대됩니다.
-function MarkupShape({ m, zoom, selected, showHandles, draft }) {
+function MarkupShape({ m, zoom, selected, showHandles, showResize, draft }) {
   const color = m.color ?? TYPE_INFO[m.type].color
   const pts = m.points.map((p) => ({ x: p.x * zoom, y: p.y * zoom }))
   const sw = Math.max(0.75, strokeOf(m) * zoom)
@@ -292,28 +292,35 @@ function MarkupShape({ m, zoom, selected, showHandles, draft }) {
         const g = m.type === 'rect' ? sw / 2 + 3 : 3
         return <rect x={bounds.x - g} y={bounds.y - g} width={bounds.w + g * 2} height={bounds.h + g * 2} fill="none" stroke="#2563eb" strokeWidth={1} strokeDasharray="4 3" pointerEvents="none" />
       })()}
-      {/* 선택한 사각형·형광펜: 모서리와 변의 손잡이로 크기 조절 */}
-      {showHandles &&
+      {/* 선택한 사각형·형광펜: 모서리와 변의 손잡이로 크기 조절. 텍스트는 좌우 변 전체를 잡아 너비 조절 */}
+      {(showHandles || showResize) && selected && textResizable && !draft &&
+        ['w', 'e'].map((dir) => (
+          <rect
+            key={`edge-${dir}`}
+            x={(dir === 'w' ? bounds.x : bounds.x + bounds.w) - 6}
+            y={bounds.y}
+            width={12}
+            height={bounds.h}
+            fill="transparent"
+            data-handle=""
+            data-id={m.id}
+            data-resize={dir}
+            style={{ cursor: 'ew-resize' }}
+          />
+        ))}
+      {(showHandles || showResize) &&
         selected &&
         (resizable || textResizable) &&
         !draft &&
         (textResizable ? ['w', 'e'] : RESIZE_DIRS).map((dir) => {
           const p = resizeHandlePos(bounds, dir)
+          const common = { 'data-handle': '', 'data-id': m.id, 'data-resize': dir, style: { cursor: `${dir}-resize` } }
           return (
-            <rect
-              key={dir}
-              x={p.x - 4.5}
-              y={p.y - 4.5}
-              width={9}
-              height={9}
-              fill="white"
-              stroke="#2563eb"
-              strokeWidth={1.5}
-              data-handle=""
-              data-id={m.id}
-              data-resize={dir}
-              style={{ cursor: `${dir}-resize` }}
-            />
+            <g key={dir}>
+              {/* 눈에 보이는 손잡이보다 넓게 잡히도록 (터치·트랙패드) */}
+              <rect x={p.x - 10} y={p.y - 10} width={20} height={20} fill="transparent" {...common} />
+              <rect x={p.x - 5} y={p.y - 5} width={10} height={10} fill="white" stroke="#2563eb" strokeWidth={1.5} {...common} />
+            </g>
           )
         })}
       {showHandles &&
