@@ -1,7 +1,7 @@
 import { useRef } from 'react'
 import { TOOLS, digitForTool } from '../lib/tools'
 import { toggleSnap, useSnapEnabled } from '../lib/snapSetting'
-import { DEFAULT_BOX_OPACITY, HIGHLIGHT_COLORS, MARKUP_COLORS, STROKE_TYPES, STROKE_WIDTHS, TEXT_SIZES } from '../lib/markup'
+import { DEFAULT_BOX_OPACITY, HIGHLIGHT_COLORS, IMAGE_BORDER_COLORS, IMAGE_BORDER_WIDTHS, MARKUP_COLORS, STROKE_TYPES, STROKE_WIDTHS, TEXT_SIZES } from '../lib/markup'
 
 const MARKUP_TOOL_IDS = TOOLS.filter((t) => t.group === 'markup').map((t) => t.id)
 
@@ -30,6 +30,8 @@ export default function Toolbar({
   onChangeMarkupStyle,
   selectedMarkupType,
   selectedHasStroke, // 선택한 것 중에 사각형·화살표·펜이 있으면 굵기도 보여 줌
+  onInsertImage, // 사진 넣기 (파일 고르기)
+  imageActions, // 사진만 선택했을 때: 자르기·숨기기 { cropping, cropped, onToggleCrop, onResetCrop, onHide }
   onSave,
   saving,
   syncStatus, // 서버 저장 상태: 'saved' | 'saving' | 'error' (로그인했을 때만)
@@ -80,6 +82,14 @@ export default function Toolbar({
             {TOOLS.filter((t) => t.group === 'markup').map((t) => (
               <ToolButton key={t.id} t={t} active={tool === t.id} onClick={() => setTool(t.id)} />
             ))}
+            <button
+              title="사진 넣기 (I) · 복사한 사진은 Ctrl+V 로 바로 붙여넣기, 사진 파일을 도면에 끌어다 놓아도 돼요"
+              onClick={onInsertImage}
+              className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium whitespace-nowrap text-slate-700 transition hover:bg-slate-100"
+            >
+              <Icon d="M4 5h16v14H4zM4 16l5-5 4 4 2-2 5 5M15.5 9.5h.01" />
+              <span className="hidden min-[1800px]:inline">사진</span>
+            </button>
           </div>
           <button
             className="rounded-md px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 disabled:opacity-40"
@@ -145,6 +155,7 @@ export default function Toolbar({
             style={markupStyle}
             onChange={onChangeMarkupStyle}
             showStroke={selectedHasStroke}
+            imageActions={imageActions}
           />
         </div>
       )}
@@ -234,7 +245,8 @@ const ALIGN_BUTTONS = [
 ]
 
 // 마크업 색상, 선 굵기, 글자 크기, 텍스트 상자 배경 투명도
-function MarkupStyle({ kind, title, style, onChange, showStroke }) {
+function MarkupStyle({ kind, title, style, onChange, showStroke, imageActions }) {
+  if (kind === 'image') return <ImageStyle title={title === '선택한 마크업' ? '사진' : title} style={style} onChange={onChange} actions={imageActions} />
   const isHighlight = kind === 'highlight'
   const colors = isHighlight ? HIGHLIGHT_COLORS : MARKUP_COLORS
   const current = isHighlight ? style.highlightColor : style.color
@@ -317,6 +329,82 @@ function MarkupStyle({ kind, title, style, onChange, showStroke }) {
             />
             <span className="w-8 text-right tabular-nums">{transparency}%</span>
           </label>
+        </>
+      )}
+    </div>
+  )
+}
+
+// 사진 설정: 자르기, 테두리(켜고 끄기·색·굵기), 숨기기
+function ImageStyle({ title, style, onChange, actions }) {
+  const on = !!style.imageBorder
+  const widths = IMAGE_BORDER_WIDTHS.includes(style.imageBorderWidth)
+    ? IMAGE_BORDER_WIDTHS
+    : [...IMAGE_BORDER_WIDTHS, style.imageBorderWidth].sort((a, b) => a - b)
+  const btn = (active) =>
+    `flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium whitespace-nowrap ${
+      active ? 'bg-slate-800 text-white' : 'text-slate-700 ring-1 ring-slate-300 hover:bg-slate-100'
+    }`
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-white/95 px-2.5 py-1.5 shadow-md backdrop-blur">
+      <span className="mr-1 text-xs font-semibold whitespace-nowrap text-slate-700">{title}</span>
+      {actions && (
+        <>
+          <button
+            className={btn(actions.cropping)}
+            onClick={actions.onToggleCrop}
+            aria-pressed={actions.cropping}
+            title={actions.cropping ? '자르기 끝내기 (Enter 또는 Esc)' : '자르기: 테두리의 검은 손잡이를 끌어 필요한 부분만 남겨요 (사진 더블클릭도 돼요)'}
+          >
+            <Icon d="M6 2v14a2 2 0 002 2h14M2 6h14a2 2 0 012 2v14" />
+            {actions.cropping ? '자르기 끝' : '자르기'}
+          </button>
+          {actions.cropped && (
+            <button className={btn(false)} onClick={actions.onResetCrop} title="자르기 전의 사진 전체로 되돌리기">
+              원래대로
+            </button>
+          )}
+        </>
+      )}
+      <span className="mx-1 h-4 w-px bg-slate-200" />
+      <button className={btn(on)} onClick={() => onChange({ imageBorder: !on })} aria-pressed={on} title="사진 테두리 켜고 끄기">
+        <Icon d="M4 4h16v16H4z" />
+        테두리 {on ? '켬' : '끔'}
+      </button>
+      {on && (
+        <>
+          {IMAGE_BORDER_COLORS.map((c) => (
+            <button
+              key={c}
+              title="테두리 색"
+              onClick={() => onChange({ imageBorderColor: c })}
+              className={`h-5 w-5 rounded-full border border-black/15 ${style.imageBorderColor === c ? 'ring-2 ring-slate-700 ring-offset-1' : ''}`}
+              style={{ background: c }}
+            />
+          ))}
+          <label className="ml-1 flex items-center gap-1 text-xs text-slate-600" title="테두리 굵기 (pt)">
+            굵기
+            <select
+              value={style.imageBorderWidth}
+              onChange={(e) => onChange({ imageBorderWidth: Number(e.target.value) })}
+              className="rounded border border-slate-300 bg-white px-1 py-0.5 text-xs tabular-nums"
+            >
+              {widths.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+        </>
+      )}
+      {actions && (
+        <>
+          <span className="mx-1 h-4 w-px bg-slate-200" />
+          <button className={btn(false)} onClick={actions.onHide} title="화면과 저장한 PDF에서 숨기기 (오른쪽 목록의 눈 아이콘으로 다시 보여요)">
+            <Icon d="M3 3l18 18M10.6 10.6a2 2 0 002.8 2.8M9.9 5.1A9.8 9.8 0 0112 5c5 0 9 4.5 10 7a13 13 0 01-3.2 4.3M6.2 6.2A13 13 0 002 12c1 2.5 5 7 10 7a9.6 9.6 0 004.1-.9" />
+            숨기기
+          </button>
         </>
       )}
     </div>

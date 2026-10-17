@@ -7,7 +7,7 @@
 import { EMPTY_LIBRARY, normalizeLibrary } from './library'
 
 const DB_NAME = 'pdf-measure'
-const DB_VERSION = 3
+const DB_VERSION = 4
 const MAX_RECENT = 20
 const SESSION_KEY = 'pdf-measure:session'
 const LIBRARY_KEY = 'pdf-measure:library'
@@ -24,6 +24,8 @@ function openDb() {
         if (!db.objectStoreNames.contains('docs')) db.createObjectStore('docs', { keyPath: 'id' })
         if (!db.objectStoreNames.contains('cache')) db.createObjectStore('cache', { keyPath: 'key' })
         if (!db.objectStoreNames.contains('text')) db.createObjectStore('text', { keyPath: 'id' }) // 검색용 글자 색인
+        // 도면에 넣은 사진 { id, docId, blob }
+        if (!db.objectStoreNames.contains('images')) db.createObjectStore('images', { keyPath: 'id' }).createIndex('docId', 'docId')
       }
       req.onsuccess = () => resolve(req.result)
       req.onerror = () => reject(req.error)
@@ -119,11 +121,39 @@ export function renameFile(id, name) {
 }
 
 export function removeFile(id) {
-  return run(['files', 'docs', 'text'], 'readwrite', (files, docs, text) => {
+  return run(['files', 'docs', 'text', 'images'], 'readwrite', async (files, docs, text, images) => {
     files.delete(id)
     docs.delete(id)
     text.delete(id)
+    const keys = await req2promise(images.index('docId').getAllKeys(id))
+    keys.forEach((k) => images.delete(k))
   })
+}
+
+// 도면에 넣은 사진 (images.js)
+export function saveImage(docId, imageId, blob) {
+  return run('images', 'readwrite', (images) => {
+    images.put({ id: imageId, docId, blob })
+  })
+}
+
+export function getImage(docId, imageId) {
+  return run('images', 'readonly', (images) => req2promise(images.get(imageId))).then((r) => r?.blob ?? null)
+}
+
+export function listImageIds(docId) {
+  return run('images', 'readonly', (images) => req2promise(images.index('docId').getAllKeys(docId)))
+}
+
+export function removeImages(docId, ids) {
+  return run('images', 'readwrite', (images) => ids.forEach((k) => images.delete(k)))
+}
+
+// 서버로 옮길 때 쓰는 도면의 사진 전부 [{ id, blob }]
+export function listImages(docId) {
+  return run('images', 'readonly', (images) => req2promise(images.index('docId').getAll(docId))).then((rows) =>
+    rows.map((r) => ({ id: r.id, blob: r.blob })),
+  )
 }
 
 // 검색용 글자 색인 (textIndex.js)
@@ -203,6 +233,11 @@ export const localStore = {
   getTextIndex,
   saveTextIndex,
   listTextIndexes,
+  saveImage,
+  getImage,
+  listImageIds,
+  removeImages,
+  listImages,
   getLibrary: async () => getLibrary(),
   saveLibrary: async (lib) => saveLibrary(lib),
 }

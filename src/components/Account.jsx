@@ -266,7 +266,8 @@ export function MigrationCard({ store, onDone }) {
     for (const doc of items) {
       try {
         const blob = await localStore.getFile(doc.id)
-        await store.importLocal(doc, blob)
+        const images = await localStore.listImages(doc.id).catch(() => [])
+        await store.importLocal(doc, blob, images)
         await localStore.removeFile(doc.id) // 서버에 옮긴 뒤 브라우저 사본은 지움
         moved.push(doc.id)
         done++

@@ -2,7 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { distance } from '../lib/geometry'
 import { PT_TO_PAPER_MM, UNITS, calibrationInput } from '../lib/units'
 import { TYPE_INFO } from '../lib/measure'
-import { DEFAULT_BOX_OPACITY, MARKUP_STROKE, STROKE_TYPES, isMarkup, strokeOf } from '../lib/markup'
+import { DEFAULT_BOX_OPACITY, FULL_CROP, MARKUP_STROKE, STROKE_TYPES, isCropped, isMarkup, rectOf, strokeOf } from '../lib/markup'
+import { ImageSource, getImageBlob, isImageFile, newImageId, prepareImage, rememberImage } from '../lib/images'
 import { TOOLS, toolForDigit } from '../lib/tools'
 import { toggleSnap } from '../lib/snapSetting'
 import PdfViewer from './PdfViewer'
@@ -36,8 +37,14 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
     boxOpacity: DEFAULT_BOX_OPACITY,
     textAlign: 'left',
     strokeWidth: MARKUP_STROKE,
+    imageBorder: false,
+    imageBorderColor: '#111827',
+    imageBorderWidth: 1,
     ...saved?.markupStyle,
   }))
+  const [croppingId, setCroppingId] = useState(null) // 자르는 중인 사진
+  const placeRef = useRef(null) // 뷰어가 사진 넣을 자리를 알려 주는 함수
+  const imageInputRef = useRef(null)
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState('')
   // 툴바·목록에서 특정 페이지로 이동 요청 (뷰어가 스크롤)
@@ -199,10 +206,13 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
   // 선택된 마크업. 텍스트가 섞여 있으면 툴바에 텍스트 설정(글자 크기·투명도)을 보여 줌
   const selectedMarkups = measurements.filter((m) => selectedIds.includes(m.id) && isMarkup(m.type))
   const selText = selectedMarkups.find((m) => m.type === 'text')
-  const selLine = selectedMarkups.find((m) => m.type !== 'highlight')
+  const selLine = selectedMarkups.find((m) => m.type !== 'highlight' && m.type !== 'image')
   const selHighlight = selectedMarkups.find((m) => m.type === 'highlight')
   const selStroke = selectedMarkups.find((m) => STROKE_TYPES.includes(m.type))
-  const selectedMarkupType = selText ? 'text' : selLine ? selLine.type : selHighlight ? 'highlight' : null
+  const selImages = selectedMarkups.filter((m) => m.type === 'image')
+  const selImage = selImages[0]
+  const onlyImages = selImages.length > 0 && selImages.length === selectedMarkups.length
+  const selectedMarkupType = selText ? 'text' : onlyImages ? 'image' : selLine ? selLine.type : selHighlight ? 'highlight' : null
   // 툴바에는 선택된 마크업의 현재 값을 보여 줌
   const shownStyle =
     tool === 'select' && selectedMarkups.length
@@ -212,6 +222,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
           ...(selHighlight && { highlightColor: selHighlight.color }),
           ...(selStroke && { strokeWidth: strokeOf(selStroke) }),
           ...(selText && { fontSize: selText.fontSize ?? 13, boxOpacity: selText.boxOpacity ?? DEFAULT_BOX_OPACITY, textAlign: selText.align ?? 'left' }),
+          ...(selImage && { imageBorder: !!selImage.border, imageBorderColor: selImage.color ?? '#111827', imageBorderWidth: strokeOf(selImage) }),
         }
       : markupStyle
 
@@ -229,6 +240,11 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
       if (patch.boxOpacity !== undefined && m.type === 'text') out.boxOpacity = patch.boxOpacity
       if (patch.textAlign && m.type === 'text') out.align = patch.textAlign
       if (patch.strokeWidth && STROKE_TYPES.includes(m.type)) out.strokeWidth = patch.strokeWidth
+      if (m.type === 'image') {
+        if (patch.imageBorder !== undefined) out.border = patch.imageBorder
+        if (patch.imageBorderColor) out.color = patch.imageBorderColor
+        if (patch.imageBorderWidth) out.strokeWidth = patch.imageBorderWidth
+      }
       return Object.keys(out).length ? out : null
     }
     const targets = tool === 'select' ? selectedMarkups.filter(itemPatch) : []
@@ -247,7 +263,8 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
     setNotice('')
     try {
       const { exportPdfWithMarkups, downloadBytes } = await import('../lib/exportPdf.jsx')
-      const bytes = await exportPdfWithMarkups({ pdfDoc, items: measurementsRef.current, calibration, mmPerPt, unit })
+      const getImage = (imageId) => getImageBlob({ store, docId: doc.id }, imageId)
+      const bytes = await exportPdfWithMarkups({ pdfDoc, items: measurementsRef.current, calibration, mmPerPt, unit, getImage })
       const base = fileName.replace(/\.pdf$/i, '')
       downloadBytes(bytes, `${base}_마크업.pdf`)
       setNotice(`"${base}_마크업.pdf" 로 저장했어요. 브라우저의 다운로드 폴더를 확인하세요.`)
@@ -257,7 +274,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
     } finally {
       setSaving(false)
     }
-  }, [calibration, fileName, mmPerPt, pdfDoc, saving, unit])
+  }, [calibration, doc.id, fileName, mmPerPt, pdfDoc, saving, store, unit])
 
   useEffect(() => {
     if (!notice) return
@@ -274,6 +291,124 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
       prev.map((m) => (m.id === id ? { ...m, points: m.points.map((q, i) => (i === index ? p : q)) } : m)),
     )
   }, [])
+
+  // ---------- 사진 넣기 (파일 선택, 붙여넣기, 끌어다 놓기) ----------
+  const imageSource = useMemo(() => ({ store, docId: doc.id }), [store, doc.id])
+  const insertImages = useCallback(
+    async (files, clientX, clientY) => {
+      const added = []
+      let failed = 0
+      for (const file of files.filter(isImageFile)) {
+        let img
+        try {
+          img = await prepareImage(file)
+        } catch (e) {
+          console.warn('사진 읽기 실패', e)
+          failed++
+          continue
+        }
+        const spot = placeRef.current?.(clientX, clientY)
+        if (!spot) continue
+        const imageId = newImageId()
+        rememberImage(imageId, img.blob)
+        store.saveImage(doc.id, imageId, img.blob).catch((e) => {
+          console.warn('사진 저장 실패', e)
+          setNotice('사진을 저장하지 못했어요. 인터넷 연결을 확인하고 다시 넣어 주세요.')
+        })
+        // 원래 크기(96dpi 기준)로 넣되, 화면에 보이는 크기의 40% 를 넘지 않게
+        const k = Math.min(0.75, (spot.maxW * 0.4) / img.width, (spot.maxH * 0.4) / img.height)
+        const w = img.width * k
+        const h = img.height * k
+        const shift = added.length * 16 // 여러 장이면 조금씩 비켜서
+        const x = Math.max(0, spot.x - w / 2 + shift)
+        const y = Math.max(0, spot.y - h / 2 + shift)
+        counters.current.image = (counters.current.image ?? 0) + 1
+        added.push({
+          id: newId(),
+          type: 'image',
+          page: spot.page,
+          points: [
+            { x, y },
+            { x: x + w, y: y + h },
+          ],
+          name: `${TYPE_INFO.image.name} ${counters.current.image}`,
+          imageId,
+          imgW: img.width,
+          imgH: img.height,
+          crop: FULL_CROP,
+          border: markupStyle.imageBorder,
+          color: markupStyle.imageBorderColor,
+          strokeWidth: markupStyle.imageBorderWidth,
+        })
+      }
+      if (failed) setNotice('이 사진 형식은 열 수 없어요. JPG나 PNG 사진을 넣어 주세요.')
+      if (!added.length) return
+      commit((prev) => [...prev, ...added])
+      setTool('select')
+      setSelectedIds(added.map((m) => m.id))
+    },
+    [commit, doc.id, markupStyle, store],
+  )
+
+  // Ctrl+V: 복사해 둔 사진을 바로 넣기 (마우스가 도면 위에 있으면 그 자리에)
+  useEffect(() => {
+    if (!active) return
+    const onPaste = (e) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || e.target.isContentEditable) return
+      const files = [...(e.clipboardData?.files ?? [])].filter(isImageFile)
+      if (!files.length) return
+      e.preventDefault()
+      insertImages(files)
+    }
+    window.addEventListener('paste', onPaste)
+    return () => window.removeEventListener('paste', onPaste)
+  }, [active, insertImages])
+
+  // 지운 사진 정리: 도면을 열 때 어디에도 쓰이지 않는 사진(지운 뒤 저장된 것)을 저장소에서 지움
+  useEffect(() => {
+    const t = setTimeout(async () => {
+      try {
+        const ids = await store.listImageIds(doc.id)
+        if (!ids.length) return
+        const used = new Set()
+        for (const list of [measurementsRef.current, ...historyRef.current])
+          for (const m of list) if (m.type === 'image') used.add(m.imageId)
+        const unused = ids.filter((id) => !used.has(id))
+        if (unused.length) await store.removeImages(doc.id, unused)
+      } catch (e) {
+        console.warn('사진 정리 실패', e)
+      }
+    }, 3000)
+    return () => clearTimeout(t)
+  }, [doc.id, store])
+
+  // 자르기는 그 사진이 선택돼 있고 선택 도구일 때만
+  const cropping = croppingId && tool === 'select' && selectedIds.includes(croppingId) ? croppingId : null
+  const startCrop = useCallback((id) => {
+    setTool('select')
+    setSelectedIds([id])
+    setCroppingId(id)
+  }, [])
+  const resetCrop = (ids) => {
+    const targets = measurementsRef.current.filter((m) => ids.includes(m.id) && m.type === 'image' && isCropped(m))
+    if (!targets.length) return
+    beginEdit()
+    const byId = new Map(targets.map((m) => [m.id, m]))
+    setMeasurements((prev) =>
+      prev.map((m) => {
+        const t = byId.get(m.id)
+        if (!t) return m
+        // 보이던 부분의 크기 비율 그대로 원본 전체를 보여 줌
+        const r = rectOf(t.points[0], t.points[1])
+        const c = t.crop
+        const w = r.w / c.w
+        const h = r.h / c.h
+        const x = r.x - c.x * w
+        const y = r.y - c.y * h
+        return { ...m, crop: FULL_CROP, points: [{ x, y }, { x: x + w, y: y + h }] }
+      }),
+    )
+  }
 
   // ids: 지울 항목 id 배열 (기준선은 목록에서 따로 지움)
   const deleteItems = useCallback(
@@ -367,6 +502,18 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
         toggleSnap()
         return
       }
+      // 사진 자르기 끝내기
+      if (cropping && (e.key === 'Escape' || e.key === 'Enter')) {
+        e.preventDefault()
+        setCroppingId(null)
+        return
+      }
+      // I: 사진 넣기 (파일 고르기)
+      if (e.code === 'KeyI' && !e.shiftKey) {
+        e.preventDefault()
+        imageInputRef.current?.click()
+        return
+      }
       const t = TOOLS.find((x) => x.key.toLowerCase() === e.key.toLowerCase())?.id
       if (t && pdfDoc) setTool(t)
       if (e.key === 'Delete' || (e.key === 'Backspace' && tool === 'select')) {
@@ -389,7 +536,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [active, deleteItems, jumpTo, pageNum, pdfDoc, pendingCalibration, savePdf, selectedIds, tool, undo])
+  }, [active, cropping, deleteItems, jumpTo, pageNum, pdfDoc, pendingCalibration, savePdf, selectedIds, tool, undo])
 
   const visibleMeasurements = measurements.filter((m) => !m.hidden)
 
@@ -417,7 +564,18 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
   if (!active) return null
 
   return (
-    <>
+    <ImageSource.Provider value={imageSource}>
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          insertImages([...(e.target.files ?? [])])
+          e.target.value = ''
+        }}
+      />
       <Toolbar
         onOpenFile={onOpenFile}
         pdfDoc={pdfDoc}
@@ -435,6 +593,21 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
         onChangeMarkupStyle={changeMarkupStyle}
         selectedMarkupType={selectedMarkupType}
         selectedHasStroke={tool === 'select' && !!selStroke}
+        onInsertImage={() => imageInputRef.current?.click()}
+        imageActions={
+          tool === 'select' && onlyImages
+            ? {
+                cropping: !!cropping,
+                cropped: selImages.some(isCropped),
+                onToggleCrop: () => (cropping ? setCroppingId(null) : startCrop(selImage.id)),
+                onResetCrop: () => resetCrop(selImages.map((m) => m.id)),
+                onHide: () => {
+                  setCroppingId(null)
+                  selImages.forEach((m) => toggleHidden(m.id))
+                },
+              }
+            : null
+        }
         onSave={savePdf}
         saving={saving}
         syncStatus={cloud ? syncStatus : null}
@@ -474,6 +647,10 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
           markupStyle={markupStyle}
           mmPerPt={mmPerPt}
           unit={unit}
+          croppingId={cropping}
+          onCropImage={startCrop}
+          onDropImages={insertImages}
+          placeRef={placeRef}
         />
         <Sidebar
           calibration={calibration}
@@ -517,6 +694,6 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
           onConfirm={applyCalibration}
         />
       )}
-    </>
+    </ImageSource.Provider>
   )
 }

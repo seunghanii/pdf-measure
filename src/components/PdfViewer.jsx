@@ -2,7 +2,8 @@ import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 
 import { distance, snapTo45 } from '../lib/geometry'
 import { TYPE_INFO } from '../lib/measure'
 import MeasurementShape from './MeasurementShape'
-import { DRAG_TOOLS, textBoxMetrics, textMetricsOf, minTextBoxWidth, FONT_FAMILY, itemCorners, rectOf, resizeRect, isMarkup } from '../lib/markup'
+import { DRAG_TOOLS, textBoxMetrics, textMetricsOf, minTextBoxWidth, FONT_FAMILY, itemCorners, rectOf, resizeRect, isMarkup, cropOf, cropResize, fullImageRect, resizeKeepAspect } from '../lib/markup'
+import { isImageFile } from '../lib/images'
 import { SNAP_KINDS, findRaySnap, findSnap, loadSnapIndex } from '../lib/snap'
 import { useSnapEnabled } from '../lib/snapSetting'
 
@@ -39,6 +40,10 @@ export default function PdfViewer({
   markupStyle,
   mmPerPt,
   unit,
+  croppingId, // 자르는 중인 사진
+  onCropImage, // (id) 사진 더블클릭: 자르기 시작
+  onDropImages, // (files, clientX, clientY) 사진 파일을 도면에 끌어다 놓음
+  placeRef, // 사진 넣을 자리 계산 함수를 여기에 넣어 줌
 }) {
   const containerRef = useRef(null)
   const pageEls = useRef([])
@@ -57,6 +62,7 @@ export default function PdfViewer({
   const [, forceRender] = useState(0)
   const snapOn = useSnapEnabled()
   const snapIndexes = useRef(new Map()) // 페이지 번호 → 도면 선 색인 (자석용, 필요할 때 한 번 읽음)
+  const pointerRef = useRef(null) // 마지막 마우스 위치 { page, p } (붙여넣은 사진을 놓을 자리)
 
   // ---------- 모든 페이지 크기 불러오기 ----------
   useEffect(() => {
@@ -118,6 +124,39 @@ export default function PdfViewer({
     el.scrollLeft += pr.left + anchor.pageX * z - (rect.left + anchor.offsetX)
     el.scrollTop += pr.top + anchor.pageY * z - (rect.top + anchor.offsetY)
   }, [])
+
+  // ---------- 사진 넣을 자리: 끌어다 놓은 곳 → 도면 위 마우스 위치 → 화면 가운데 ----------
+  // { page, x, y (가운데, pt), maxW, maxH (화면에 보이는 크기, pt) }
+  useLayoutEffect(() => {
+    if (!placeRef) return
+    placeRef.current = (clientX, clientY) => {
+      const el = containerRef.current
+      if (!el || !sizes) return null
+      let page
+      let x
+      let y
+      if (clientX != null) {
+        const a = anchorAt(clientX, clientY)
+        if (!a) return null
+        ;({ page, pageX: x, pageY: y } = a)
+      } else if (pointerRef.current) {
+        page = pointerRef.current.page - 1
+        ;({ x, y } = pointerRef.current.p)
+      } else {
+        const a = anchorAt()
+        if (!a) return null
+        ;({ page, pageX: x, pageY: y } = a)
+      }
+      const s = sizes[page]
+      return {
+        page: page + 1,
+        x: Math.min(s.width, Math.max(0, x)),
+        y: Math.min(s.height, Math.max(0, y)),
+        maxW: Math.min(s.width, el.clientWidth / zoom),
+        maxH: Math.min(s.height, el.clientHeight / zoom),
+      }
+    }
+  })
 
   // ---------- 확대/축소: 마우스 위치(없으면 화면 가운데)를 고정 ----------
   useLayoutEffect(() => {
@@ -416,7 +455,12 @@ export default function PdfViewer({
       if (editing) commitText()
       const item = measurements.find((m) => m.id === resizeHandle.dataset.id)
       const dir = resizeHandle.dataset.resize
-      if (item?.type === 'text') {
+      if (item?.type === 'image') {
+        const r = rectOf(item.points[0], item.points[1] ?? item.points[0])
+        // 자르기 손잡이: 원본 사진 자리는 그대로 두고 보이는 부분만 바꿈. 아니면 모서리는 비율 유지(Shift: 자유롭게)
+        dragRef.current = 'crop' in resizeHandle.dataset ? { id: item.id, resize: dir, rect: r, crop: fullImageRect(r, cropOf(item)), moved: false } : { id: item.id, resize: dir, rect: r, aspect: true, moved: false }
+        e.currentTarget.setPointerCapture(e.pointerId)
+      } else if (item?.type === 'text') {
         // 텍스트 상자 너비 조절: 반대쪽 변은 그대로
         const left = item.points[0].x
         const right = left + textMetricsOf(item).width
@@ -516,6 +560,7 @@ export default function PdfViewer({
       return
     }
     const p = toPage(e, e.currentTarget)
+    pointerRef.current = { page, p }
     const d = dragRef.current
     if (d) {
       if (d.whole) {
@@ -539,7 +584,9 @@ export default function PdfViewer({
           const left = d.resize === 'w' ? Math.min(p.x, t.right - t.min) : t.left
           const right = d.resize === 'e' ? Math.max(p.x, t.left + t.min) : t.right
           onUpdateItem(d.id, { points: [{ x: left, y: t.y }], boxWidth: right - left })
-        } else onSetPoints({ [d.id]: resizeRect(d.rect, d.resize, p) })
+        } else if (d.crop) onUpdateItem(d.id, cropResize(d.rect, d.crop, d.resize, p))
+        else if (d.aspect && !e.shiftKey) onSetPoints({ [d.id]: resizeKeepAspect(d.rect, d.resize, p) })
+        else onSetPoints({ [d.id]: resizeRect(d.rect, d.resize, p) })
       } else {
         if (!d.moved) {
           d.moved = true
@@ -644,7 +691,19 @@ export default function PdfViewer({
         ref={containerRef}
         className="absolute inset-0 overflow-auto bg-slate-200"
         onScroll={onScroll}
-        onPointerLeave={() => setCursor(null)}
+        onPointerLeave={() => {
+          setCursor(null)
+          pointerRef.current = null
+        }}
+        onDragOver={(e) => {
+          if ([...e.dataTransfer.items].some((it) => it.kind === 'file' && it.type.startsWith('image/'))) e.preventDefault()
+        }}
+        onDrop={(e) => {
+          const images = [...e.dataTransfer.files].filter(isImageFile)
+          if (!images.length) return
+          e.preventDefault()
+          onDropImages(images, e.clientX, e.clientY)
+        }}
       >
         <div className="flex min-w-full flex-col items-center" style={{ padding: PAD, gap: PAGE_GAP, width: 'max-content' }}>
           {sizes.map((size, i) => {
@@ -676,7 +735,9 @@ export default function PdfViewer({
                       // 포인터 캡처 때문에 e.target 이 svg 일 수 있어 좌표로 다시 찾음
                       const hit = document.elementFromPoint(e.clientX, e.clientY)
                       const t = hit?.closest('[data-type="text"]')
+                      const img = hit?.closest('[data-type="image"]')
                       if (t) editExisting(t.dataset.shape)
+                      else if (img) onCropImage(img.dataset.shape)
                       else if (hit?.closest('[data-shape="calibration"]')) onEditCalibration()
                     } else finishMulti()
                   }}
@@ -707,6 +768,7 @@ export default function PdfViewer({
                         selected={selectedIds.includes(m.id)}
                         showHandles={tool === 'select'}
                         showResize={tool === 'text' && m.type === 'text'}
+                        cropping={m.id === croppingId}
                       />
                     ))}
                   {renderPreview(page)}
