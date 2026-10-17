@@ -2,6 +2,8 @@ import { useRef } from 'react'
 import { TOOLS, digitForTool } from '../lib/tools'
 import { DEFAULT_BOX_OPACITY, HIGHLIGHT_COLORS, MARKUP_COLORS, STROKE_TYPES, STROKE_WIDTHS, TEXT_SIZES } from '../lib/markup'
 
+const MARKUP_TOOL_IDS = TOOLS.filter((t) => t.group === 'markup').map((t) => t.id)
+
 function Icon({ d }) {
   return (
     <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -36,13 +38,13 @@ export default function Toolbar({
   const numPages = pdfDoc?.numPages ?? 0
 
   return (
-    <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-slate-200 bg-white px-3 py-2 shadow-sm">
+    <header className="relative z-20 flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-slate-200 bg-white px-3 py-2 shadow-sm">
       <div className="flex items-center gap-2">
         <svg viewBox="0 0 32 32" className="h-6 w-6">
           <rect x="2" y="10" width="28" height="12" rx="2" fill="#2563eb" />
           <path d="M7 10v5M12 10v7M17 10v5M22 10v7M27 10v5" stroke="#fff" strokeWidth="1.6" />
         </svg>
-        <span className="hidden font-bold sm:inline">PDF 도면 측정기</span>
+        <span className="hidden font-bold xl:inline">PDF 도면 측정기</span>
       </div>
 
       <button
@@ -77,16 +79,6 @@ export default function Toolbar({
               <ToolButton key={t.id} t={t} active={tool === t.id} onClick={() => setTool(t.id)} />
             ))}
           </div>
-          {/* 마크업 도구를 골랐거나, 선택 도구로 마크업을 골랐을 때만 */}
-          {(['highlight', 'text', 'pen', 'rect', 'arrow'].includes(tool) || (tool === 'select' && selectedMarkupType)) && (
-            <MarkupStyle
-              kind={selectedMarkupType && tool === 'select' ? selectedMarkupType : tool}
-              style={markupStyle}
-              onChange={onChangeMarkupStyle}
-              showStroke={selectedHasStroke}
-            />
-          )}
-
           <button
             className="rounded-md px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 disabled:opacity-40"
             onClick={onUndo}
@@ -142,6 +134,18 @@ export default function Toolbar({
         </>
       )}
       {right && <div className="ml-auto">{right}</div>}
+      {/* 마크업 설정 바: 마크업 도구를 골랐거나, 선택 도구로 마크업을 골랐을 때 툴바 아래에 떠서 보임 (도면을 밀어내지 않음) */}
+      {pdfDoc && (MARKUP_TOOL_IDS.includes(tool) || (tool === 'select' && selectedMarkupType)) && (
+        <div className="absolute top-full left-1/2 z-20 mt-2 max-w-[calc(100%-1rem)] -translate-x-1/2">
+          <MarkupStyle
+            kind={selectedMarkupType && tool === 'select' ? selectedMarkupType : tool}
+            title={tool === 'select' ? '선택한 마크업' : TOOLS.find((t) => t.id === tool)?.label}
+            style={markupStyle}
+            onChange={onChangeMarkupStyle}
+            showStroke={selectedHasStroke}
+          />
+        </div>
+      )}
     </header>
   )
 }
@@ -158,7 +162,7 @@ function SyncBadge({ status }) {
       title={status === 'error' ? '인터넷 연결을 확인하세요. 다음 변경 때 다시 저장을 시도해요.' : '측정값과 마크업은 자동으로 서버에 저장돼요'}
     >
       <Icon d={look[2]} />
-      <span className="hidden min-[1800px]:inline">{look[1]}</span>
+      <span className="hidden min-[2000px]:inline">{look[1]}</span>
     </span>
   )
 }
@@ -196,13 +200,13 @@ function ToolButton({ t, active, needCal, onClick, showLabel }) {
       ].join(' ')}
     >
       <Icon d={t.icon} />
-      {showLabel ? <span className="hidden min-[1600px]:inline">{t.label}</span> : <span className="hidden min-[2200px]:inline">{t.label}</span>}
+      {showLabel ? <span className="hidden min-[1600px]:inline">{t.label}</span> : <span className="hidden min-[1800px]:inline">{t.label}</span>}
     </button>
   )
 }
 
 // 마크업 색상, 선 굵기, 글자 크기, 텍스트 상자 배경 투명도
-function MarkupStyle({ kind, style, onChange, showStroke }) {
+function MarkupStyle({ kind, title, style, onChange, showStroke }) {
   const isHighlight = kind === 'highlight'
   const colors = isHighlight ? HIGHLIGHT_COLORS : MARKUP_COLORS
   const current = isHighlight ? style.highlightColor : style.color
@@ -211,7 +215,8 @@ function MarkupStyle({ kind, style, onChange, showStroke }) {
   const widths = STROKE_WIDTHS.includes(style.strokeWidth) ? STROKE_WIDTHS : [...STROKE_WIDTHS, style.strokeWidth].sort((a, b) => a - b)
   const transparency = Math.round((1 - (style.boxOpacity ?? DEFAULT_BOX_OPACITY)) * 100)
   return (
-    <div className="flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-1">
+    <div className="flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-white/95 px-2.5 py-1.5 shadow-md backdrop-blur">
+      {title && <span className="mr-1.5 text-xs font-semibold whitespace-nowrap text-slate-700">{title}</span>}
       {colors.map((c) => (
         <button
           key={c}
