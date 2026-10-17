@@ -56,16 +56,55 @@ export function resizeRect(r, dir, p) {
 
 let measureCtx = null
 
-// 텍스트 상자 크기 (pt 단위, fontSize 기준)
-export function textBoxMetrics(text, fontSize) {
+export const TEXT_ALIGNS = ['left', 'center', 'right']
+
+// 너비를 줄인 텍스트 상자의 최소 너비 (pt)
+export const minTextBoxWidth = (fontSize) => fontSize * 2.3
+
+// 한 줄을 maxWidth 안에 들어가게 나눔. 띄어쓰기에서 먼저 끊고, 긴 낱말은 글자 단위로 끊음
+function wrapLine(line, maxWidth) {
+  const out = []
+  let cur = ''
+  for (const ch of line) {
+    if (!cur || measureCtx.measureText(cur + ch).width <= maxWidth) {
+      cur += ch
+      continue
+    }
+    const sp = cur.lastIndexOf(' ')
+    if (ch === ' ') {
+      out.push(cur)
+      cur = ''
+    } else if (sp > 0) {
+      out.push(cur.slice(0, sp))
+      cur = cur.slice(sp + 1) + ch
+    } else {
+      out.push(cur)
+      cur = ch
+    }
+  }
+  out.push(cur)
+  return out
+}
+
+// 텍스트 상자 크기 (pt 단위, fontSize 기준).
+// boxWidth(상자 너비 pt)가 있으면 그 안에서 자동 줄바꿈, 없으면 가장 긴 줄에 맞춤 (예전 텍스트)
+export function textBoxMetrics(text, fontSize, boxWidth) {
   if (!measureCtx) measureCtx = document.createElement('canvas').getContext('2d')
   measureCtx.font = `${fontSize}px ${FONT_FAMILY}`
-  const lines = String(text || ' ').split('\n')
-  const width = Math.max(...lines.map((l) => measureCtx.measureText(l || ' ').width))
   const lineHeight = fontSize * 1.3
   const pad = fontSize * 0.4
-  return { lines, lineHeight, pad, width: width + pad * 2, height: lines.length * lineHeight + pad * 2 }
+  let lines = String(text || ' ').split('\n')
+  let width
+  if (boxWidth) {
+    width = Math.max(boxWidth, minTextBoxWidth(fontSize))
+    lines = lines.flatMap((l) => wrapLine(l, width - pad * 2))
+  } else {
+    width = Math.max(...lines.map((l) => measureCtx.measureText(l || ' ').width)) + pad * 2
+  }
+  return { lines, lineHeight, pad, width, height: lines.length * lineHeight + pad * 2 }
 }
+
+export const textMetricsOf = (m) => textBoxMetrics(m.text, m.fontSize ?? 13, m.boxWidth)
 
 // 두 점으로 만든 사각형 (x, y, w, h)
 export function rectOf(a, b) {
@@ -81,6 +120,6 @@ export function rectOf(a, b) {
 export function itemCorners(m) {
   if (m.type !== 'text') return m.points
   const p = m.points[0]
-  const box = textBoxMetrics(m.text, m.fontSize ?? 13)
+  const box = textMetricsOf(m)
   return [p, { x: p.x + box.width, y: p.y }, { x: p.x, y: p.y + box.height }, { x: p.x + box.width, y: p.y + box.height }]
 }
