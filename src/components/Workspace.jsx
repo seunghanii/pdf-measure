@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { distance } from '../lib/geometry'
-import { PT_TO_PAPER_MM, UNITS } from '../lib/units'
+import { PT_TO_PAPER_MM, UNITS, calibrationInput } from '../lib/units'
 import { TYPE_INFO } from '../lib/measure'
 import { DEFAULT_BOX_OPACITY, MARKUP_STROKE, STROKE_TYPES, isMarkup, strokeOf } from '../lib/markup'
 import { TOOLS, toolForDigit } from '../lib/tools'
+import { toggleSnap } from '../lib/snapSetting'
 import PdfViewer from './PdfViewer'
 import Toolbar from './Toolbar'
 import Sidebar from './Sidebar'
@@ -273,23 +274,34 @@ export default function Workspace({ doc, active, onOpenFile }) {
     [commit],
   )
 
-  const applyCalibration = ({ value, unit: u }) => {
-    const realMm = value * UNITS[u].toMm
-    setCalibration({
-      mode: 'line',
-      page: pendingCalibration.page,
-      points: pendingCalibration.points,
-      realMm,
-      label: `기준 ${value.toLocaleString('ko-KR')} ${u}`,
-    })
-    setUnit(u)
+  const lineCalibration = ({ value, unit: u }) => ({
+    realMm: value * UNITS[u].toMm,
+    value,
+    unit: u,
+    label: `기준 ${value.toLocaleString('ko-KR')} ${u}`,
+  })
+
+  const applyCalibration = (input) => {
+    if (pendingCalibration.edit) {
+      editCalibration(input)
+      setPendingCalibration(null)
+      return
+    }
+    setCalibration({ mode: 'line', page: pendingCalibration.page, points: pendingCalibration.points, ...lineCalibration(input) })
+    setUnit(input.unit)
     setPendingCalibration(null)
     setTool('length')
   }
 
+  // 이미 그은 기준선의 길이 숫자만 바꾸기 (선은 그대로, 축척과 모든 측정값이 바로 다시 계산됨)
+  const editCalibration = (input) => {
+    setCalibration((c) => (c?.mode === 'line' ? { ...c, ...lineCalibration(input) } : c))
+    setUnit(input.unit)
+  }
+
   const applyRatio = (ratio) => {
     setCalibration({ mode: 'ratio', ratio })
-    setTool('length')
+    if (tool === 'calibrate') setTool('length')
   }
 
   // 단축키
@@ -330,6 +342,12 @@ export default function Workspace({ doc, active, onOpenFile }) {
         return
       }
       if (ctrl || e.altKey) return
+      // S: 자석 켜고 끄기 (한글 입력 상태에서도 되게 키 위치로 확인)
+      if (e.code === 'KeyS' && !e.shiftKey) {
+        e.preventDefault()
+        toggleSnap()
+        return
+      }
       const t = TOOLS.find((x) => x.key.toLowerCase() === e.key.toLowerCase())?.id
       if (t && pdfDoc) setTool(t)
       if (e.key === 'Delete' || (e.key === 'Backspace' && tool === 'select')) {
@@ -433,6 +451,7 @@ export default function Workspace({ doc, active, onOpenFile }) {
           onSetPoints={onSetPoints}
           onBeginEdit={beginEdit}
           onUpdateItem={updateItem}
+          onEditCalibration={() => setPendingCalibration({ edit: true })}
           markupStyle={markupStyle}
           mmPerPt={mmPerPt}
           unit={unit}
@@ -463,6 +482,7 @@ export default function Workspace({ doc, active, onOpenFile }) {
             setSelectedIds([])
           }}
           onStartCalibrate={() => setTool('calibrate')}
+          onEditCalibration={editCalibration}
           onApplyRatio={applyRatio}
           onResetCalibration={() => setCalibration(null)}
           fileName={fileName}
@@ -472,6 +492,7 @@ export default function Workspace({ doc, active, onOpenFile }) {
       {pendingCalibration && (
         <CalibrationDialog
           defaultUnit={unit}
+          initial={pendingCalibration.edit && calibration?.mode === 'line' ? calibrationInput(calibration) : null}
           onCancel={() => setPendingCalibration(null)}
           onConfirm={applyCalibration}
         />
