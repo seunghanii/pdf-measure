@@ -9,6 +9,8 @@ import Toolbar from './components/Toolbar'
 import TabBar from './components/TabBar'
 import EmptyState from './components/EmptyState'
 import { AccountMenu, PasswordDialog } from './components/Account'
+import SearchPanel, { SearchIcon } from './components/SearchPanel'
+import { ensureIndexed, forgetIndex } from './lib/indexer'
 
 export default function App() {
   // ---------- 로그인 ----------
@@ -65,6 +67,8 @@ function Session({ store, user, onLogout, onChangePassword }) {
   const [uploading, setUploading] = useState([]) // 서버에 올리는 중인 파일 이름
   const [loading, setLoading] = useState(false)
   const [restored, setRestored] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false) // 홈 화면 돋보기
+  const [searchJump, setSearchJump] = useState(null) // 검색에서 고른 위치 { id, page, rect }
   const docsRef = useRef(docs)
   const opening = useRef(new Set())
 
@@ -157,6 +161,8 @@ function Session({ store, user, onLogout, onChangePassword }) {
         const doc = { id, name: record?.name ?? file.name, pdfDoc, savedState: record?.state ?? null, store: s }
         setDocs((prev) => (prev.some((d) => d.id === id) ? prev : [...prev, doc]))
         if (activate) setActiveId(id)
+        // 검색용 글자 색인이 없으면 뒤에서 만들어 저장 (스캔본은 OCR)
+        ensureIndexed(s, id, doc.name, () => (pdfDoc.loadingTask?.destroyed ? null : pdfDoc))
         return true
       } finally {
         opening.current.delete(id)
@@ -291,6 +297,19 @@ function Session({ store, user, onLogout, onChangePassword }) {
     onLogout() // 서버에 닿지 않아도 이 브라우저에서는 로그아웃
   }, [onLogout])
 
+  // 홈 화면에서 Ctrl+F: 모든 도면 검색
+  useEffect(() => {
+    if (activeId !== null) return
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        setSearchOpen(true)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [activeId])
+
   // Ctrl+Tab 대신 Alt+←/→ 로 탭 이동
   useEffect(() => {
     const onKey = (e) => {
@@ -348,7 +367,17 @@ function Session({ store, user, onLogout, onChangePassword }) {
         <Toolbar
           onOpenFile={openFiles}
           right={
-            cloudConfigured ? <AccountMenu user={user} onLogout={logout} onChangePassword={onChangePassword} /> : null
+            <>
+              <button
+                onClick={() => setSearchOpen(true)}
+                title="도면 속 글자 검색 (Ctrl+F)"
+                className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+              >
+                <SearchIcon />
+                <span className="hidden sm:inline">검색</span>
+              </button>
+              {cloudConfigured && <AccountMenu user={user} onLogout={logout} onChangePassword={onChangePassword} />}
+            </>
           }
         />
       )}
@@ -380,7 +409,13 @@ function Session({ store, user, onLogout, onChangePassword }) {
       )}
 
       {docs.map((doc) => (
-        <Workspace key={doc.id} doc={doc} active={doc.id === activeId} onOpenFile={openFiles} />
+        <Workspace
+          key={doc.id}
+          doc={doc}
+          active={doc.id === activeId}
+          onOpenFile={openFiles}
+          searchJump={searchJump?.id === doc.id ? searchJump : null}
+        />
       ))}
 
       {activeId === null && (
@@ -397,6 +432,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
           onRemoveRecent={async (item) => {
             try {
               await storeRef.current.removeFile(item.id)
+              forgetIndex(storeRef.current, item.id)
               if (library.assign[item.id]) updateLibrary((lib) => moveDoc(lib, item.id, null))
             } catch (e) {
               setError(networkHint(e) ?? `"${item.name}" 을(를) 지우지 못했어요.`)
@@ -407,6 +443,20 @@ function Session({ store, user, onLogout, onChangePassword }) {
           showLogin={cloudConfigured && !user}
           store={store}
           onMigrated={refreshRecent}
+        />
+      )}
+
+      {searchOpen && activeId === null && (
+        <SearchPanel
+          store={store}
+          recent={recent}
+          library={library}
+          onClose={() => setSearchOpen(false)}
+          onOpenHit={async (item, hit) => {
+            setSearchOpen(false)
+            await openRecent(item)
+            setSearchJump({ id: item.id, page: hit.page, rect: hit.rect, nonce: Date.now() })
+          }}
         />
       )}
 

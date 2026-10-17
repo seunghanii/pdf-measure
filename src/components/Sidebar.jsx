@@ -22,6 +22,7 @@ export default function Sidebar({
   onApplyRatio,
   onResetCalibration,
   fileName,
+  top, // 맨 위 (도면 안 검색 창)
 }) {
   const [ratioText, setRatioText] = useState('100')
   const [showRatio, setShowRatio] = useState(false)
@@ -48,6 +49,7 @@ export default function Sidebar({
 
   return (
     <aside className="flex max-h-[35vh] w-full shrink-0 flex-col border-t border-slate-200 bg-white md:max-h-none md:w-80 md:border-t-0 md:border-l">
+      {top}
       {/* 축척 */}
       <section className="border-b border-slate-200 p-4">
         <h3 className="text-xs font-semibold tracking-wide text-slate-500">축척</h3>

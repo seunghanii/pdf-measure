@@ -174,17 +174,47 @@ export default function PdfViewer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitKey, fittedKey, sizes])
 
-  // ---------- 페이지 이동 요청(툴바, 측정 목록) ----------
+  // ---------- 페이지 이동 요청(툴바, 측정 목록, 검색) ----------
+  // 검색 결과(rect 가 있음)는 그 글자가 화면 가운데 읽을 만한 크기로 오게 확대하고 잠깐 표시
   const lastJump = useRef(null)
+  const [flash, setFlash] = useState(null) // { page, rect }
   useEffect(() => {
-    if (!sizes || !jump || lastJump.current === jump.nonce) return
+    if (!sizes || !jump || lastJump.current === jump.nonce || fitKey !== fittedKey) return
     const el = containerRef.current
     const pe = pageEls.current[jump.page - 1]
     if (!el || !pe) return
     lastJump.current = jump.nonce
+    if (jump.rect) {
+      const r = jump.rect
+      const readable = Math.min(8, 14 / Math.max(r.h, 0.5), (el.clientWidth * 0.7) / Math.max(r.w, 1))
+      const z = Math.max(0.1, zoom > readable ? zoom : readable)
+      const anchor = {
+        page: jump.page - 1,
+        pageX: r.x + r.w / 2,
+        pageY: r.y + r.h / 2,
+        offsetX: el.clientWidth / 2,
+        offsetY: el.clientHeight / 2,
+      }
+      setFlash({ page: jump.page, rect: r, nonce: jump.nonce })
+      if (Math.abs(z - zoom) > 1e-6) {
+        zoomAnchorRef.current = anchor
+        onZoom(z)
+      } else {
+        restoreAnchor(anchor, zoom)
+        viewAnchorRef.current = anchorAt()
+      }
+      return
+    }
     el.scrollTop += pe.getBoundingClientRect().top - el.getBoundingClientRect().top - PAD
     viewAnchorRef.current = anchorAt()
-  }, [jump, sizes, anchorAt])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jump, sizes, anchorAt, fitKey, fittedKey])
+
+  useEffect(() => {
+    if (!flash) return
+    const t = setTimeout(() => setFlash(null), 2600)
+    return () => clearTimeout(t)
+  }, [flash])
 
   // ---------- 스크롤: 현재 페이지 번호 갱신 ----------
   const scrollRaf = useRef(0)
@@ -697,6 +727,22 @@ export default function PdfViewer({
                     <circle cx={cursor.p.x * zoom} cy={cursor.p.y * zoom} r={3} fill={TYPE_INFO[tool].color} />
                   )}
                   {cursor?.snap && cursor.page === page && <SnapMarker snap={cursor.snap} zoom={zoom} />}
+                  {flash && flash.page === page && (
+                    <rect
+                      key={flash.nonce}
+                      className="search-flash"
+                      x={flash.rect.x * zoom - 4}
+                      y={flash.rect.y * zoom - 4}
+                      width={flash.rect.w * zoom + 8}
+                      height={flash.rect.h * zoom + 8}
+                      rx={3}
+                      fill="#fbbf24"
+                      fillOpacity={0.3}
+                      stroke="#f59e0b"
+                      strokeWidth={2.5}
+                      pointerEvents="none"
+                    />
+                  )}
                 </svg>
                 {sizes.length > 1 && (
                   <div className="pointer-events-none absolute -bottom-px left-1/2 translate-y-full -translate-x-1/2 pt-0.5 text-[11px] text-slate-500">

@@ -9,11 +9,12 @@ import PdfViewer from './PdfViewer'
 import Toolbar from './Toolbar'
 import Sidebar from './Sidebar'
 import CalibrationDialog from './CalibrationDialog'
+import DocSearch from './DocSearch'
 
 const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`
 
 // 도면 하나(탭 하나)의 작업 공간. 탭을 바꿔도 마운트된 채로 남아서 상태가 유지됩니다.
-export default function Workspace({ doc, active, onOpenFile }) {
+export default function Workspace({ doc, active, onOpenFile, searchJump }) {
   const { pdfDoc, name: fileName } = doc
   const saved = doc.savedState
   const [pageNum, setPageNum] = useState(() => Math.min(saved?.pageNum ?? 1, pdfDoc.numPages))
@@ -45,6 +46,14 @@ export default function Workspace({ doc, active, onOpenFile }) {
     (page) => setJump({ page: Math.min(Math.max(1, page), pdfDoc.numPages), nonce: Date.now() + Math.random() }),
     [pdfDoc],
   )
+  // 검색 결과로 이동: 그 글자가 화면 가운데 오도록 확대하고 잠깐 깜빡임
+  const jumpToHit = useCallback(
+    (hit) => setJump({ page: hit.page, rect: hit.rect, nonce: Date.now() + Math.random() }),
+    [],
+  )
+  // 홈 화면 검색에서 고른 위치 ({ page, rect, nonce }) 와 이 화면의 이동 요청 중 나중 것
+  const viewerJump = searchJump && (!jump || searchJump.nonce > jump.nonce) ? searchJump : jump
+  const searchRef = useRef(null)
 
   // 측정값이 바뀌면 잠시 뒤 자동 저장 (로그인했으면 서버, 아니면 이 브라우저).
   // 서버 저장은 한 번에 하나씩, 밀린 것은 가장 최근 상태만 보냄.
@@ -313,6 +322,13 @@ export default function Workspace({ doc, active, onOpenFile }) {
     const onKey = (e) => {
       const ctrl = e.ctrlKey || e.metaKey
       // 브라우저 기본 동작 가로채기: 저장(Ctrl+S), 화면 확대(Ctrl +/-/0) → PDF 만 확대
+      // Ctrl+F: 브라우저 찾기 대신 도면 검색 창
+      if (ctrl && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        searchRef.current?.focus()
+        searchRef.current?.select()
+        return
+      }
       if (ctrl && e.key.toLowerCase() === 's') {
         e.preventDefault()
         savePdf()
@@ -438,7 +454,7 @@ export default function Workspace({ doc, active, onOpenFile }) {
           pdfDoc={pdfDoc}
           pageNum={pageNum}
           onPageChange={setPageNum}
-          jump={jump}
+          jump={viewerJump}
           zoom={zoom}
           onZoom={setZoom}
           fitKey={fitKey}
@@ -489,6 +505,7 @@ export default function Workspace({ doc, active, onOpenFile }) {
           onApplyRatio={applyRatio}
           onResetCalibration={() => setCalibration(null)}
           fileName={fileName}
+          top={<DocSearch ref={searchRef} doc={doc} onGo={jumpToHit} />}
         />
       </div>
 

@@ -135,7 +135,7 @@ export default function Toolbar({
           </div>
         </>
       )}
-      {right && <div className="ml-auto">{right}</div>}
+      {right && <div className="ml-auto flex items-center gap-2">{right}</div>}
       {/* 마크업 설정 바: 마크업 도구를 골랐거나, 선택 도구로 마크업을 골랐을 때 툴바 아래에 떠서 보임 (도면을 밀어내지 않음) */}
       {pdfDoc && (MARKUP_TOOL_IDS.includes(tool) || (tool === 'select' && selectedMarkupType)) && (
         <div className="absolute top-full left-1/2 z-20 mt-2 max-w-[calc(100%-1rem)] -translate-x-1/2">

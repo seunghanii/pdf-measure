@@ -9,3 +9,13 @@ body,
 body {
   font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
 }
+
+/* 검색 결과로 이동했을 때 찾은 글자 표시 */
+@keyframes search-flash {
+  0%, 40%, 80% { opacity: 1; }
+  20%, 60% { opacity: 0.25; }
+  100% { opacity: 0; }
+}
+.search-flash {
+  animation: search-flash 2.6s ease-out forwards;
+}
