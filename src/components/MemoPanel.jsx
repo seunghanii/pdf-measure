@@ -26,6 +26,19 @@ function renderMarkdown(text) {
     .replace(/<input disabled="" type="checkbox"/g, '<input type="checkbox"') // 체크 상자는 눌러서 바꿀 수 있게
 }
 
+// 메모장 크기 (사용자가 끌어서 바꾼 크기, 이 브라우저에 기억)
+const SIZE_KEY = 'pdf-measure:memo-size'
+const MIN_W = 280
+const MIN_H = 200
+function loadSize() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SIZE_KEY))
+    return s && s.w > 0 ? s : null
+  } catch {
+    return null
+  }
+}
+
 // 할 일 목록의 n번째 체크 상자 켜고 끄기
 function toggleTask(text, n) {
   let i = 0
@@ -54,6 +67,42 @@ export default function MemoPanel({
   const [, setLoaded] = useState(0)
   const [zoomed, setZoomed] = useState(null) // 크게 보는 사진 주소
   const [busy, setBusy] = useState(0) // 사진 넣는 중
+  const [size, setSize] = useState(loadSize) // { w, h } px, 없으면 기본 크기
+  const panelRef = useRef(null)
+
+  // 왼쪽 변·아래 변·왼쪽 아래 모서리를 끌어 크기 조절 (메모장은 오른쪽 위에 붙어 있음)
+  const startResize = (e, dir) => {
+    e.preventDefault()
+    const el = panelRef.current
+    const parent = el?.parentElement
+    if (!el || !parent) return
+    const r = el.getBoundingClientRect()
+    const pr = parent.getBoundingClientRect()
+    const start = { x: e.clientX, y: e.clientY, w: r.width, h: r.height }
+    const maxW = pr.width - 24
+    const maxH = pr.bottom - r.top - 12
+    let next = { w: r.width, h: r.height }
+    const move = (ev) => {
+      next = {
+        w: dir.includes('w') ? Math.min(maxW, Math.max(MIN_W, start.w + (start.x - ev.clientX))) : start.w,
+        h: dir.includes('s') ? Math.min(maxH, Math.max(MIN_H, start.h + (ev.clientY - start.y))) : start.h,
+      }
+      setSize(next)
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      document.body.style.cursor = ''
+      try {
+        localStorage.setItem(SIZE_KEY, JSON.stringify({ w: Math.round(next.w), h: Math.round(next.h) }))
+      } catch {
+        // 저장 못 해도 이번에는 그 크기로 보임
+      }
+    }
+    document.body.style.cursor = dir === 'sw' ? 'nesw-resize' : dir === 'w' ? 'ew-resize' : 'ns-resize'
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
   const areaRef = useRef(null)
   const fileRef = useRef(null)
   const pending = useRef(null) // 아직 저장 안 된 글
@@ -95,7 +144,7 @@ export default function MemoPanel({
 
   const loadedKey = imageIds.map(cachedImageUrl).join() // 사진을 다 불러오면 다시 그림
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const html = useMemo(() => (editing ? '' : renderMarkdown(text)), [editing, text, loadedKey])
+  const html = useMemo(() => renderMarkdown(text), [text, loadedKey])
 
   // ---------- 쓰기 도우미 ----------
   // 고른 글자를 앞뒤로 감싸기 (굵게 등)
@@ -173,13 +222,27 @@ export default function MemoPanel({
     }
   }
 
+  // 보기·미리보기에서 사진 누르면 크게, 체크 상자 누르면 체크
+  const onPreviewClick = (e) => {
+    const img = e.target.closest('img[data-img]')
+    if (img) return setZoomed(img.getAttribute('src'))
+    if (e.target.matches('input[type="checkbox"]')) {
+      e.preventDefault()
+      const boxes = [...e.currentTarget.querySelectorAll('input[type="checkbox"]')]
+      updateText(toggleTask(text, boxes.indexOf(e.target)))
+      flush()
+    }
+  }
+
   const color = memo.color ?? '#f59e0b'
   const link = memo.link
   const toolBtn = 'flex h-7 min-w-7 items-center justify-center rounded px-1.5 text-sm text-slate-600 hover:bg-slate-100'
 
   return (
     <div
-      className="absolute top-14 right-3 z-20 flex max-h-[calc(100%-4.25rem)] w-[min(400px,calc(100%-1.5rem))] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
+      ref={panelRef}
+      style={size ? { width: size.w, height: size.h } : undefined}
+      className={`absolute top-14 right-3 z-20 flex max-h-[calc(100%-4.25rem)] max-w-[calc(100%-1.5rem)] min-w-0 flex-col overflow-hidden ${size ? '' : `w-[400px] ${editing ? 'h-[560px]' : ''}`} rounded-xl border border-slate-200 bg-white shadow-2xl`}
       onKeyDown={(e) => {
         if (e.key === 'Escape') {
           e.stopPropagation()
@@ -324,8 +387,15 @@ export default function MemoPanel({
             }}
             placeholder={'메모를 적어 주세요.\n\n# 제목\n- 목록\n- [ ] 할 일\n**굵게**\n\n사진은 Ctrl+V 로 붙여넣거나 끌어다 놓으세요.'}
             spellCheck={false}
-            className="min-h-56 flex-1 resize-none px-3 py-2 font-mono text-[13px] leading-relaxed text-slate-800 outline-none"
+            className="min-h-20 flex-1 basis-0 resize-none px-3 py-2 font-mono text-[13px] leading-relaxed text-slate-800 outline-none"
           />
+          {/* 쓰는 대로 바로 보이는 미리보기 (제목·목록·굵게·사진) */}
+          <div className="flex min-h-20 flex-1 basis-0 flex-col border-t border-slate-200 bg-slate-50/60">
+            <div className="px-3 pt-1.5 text-[11px] font-medium text-slate-400">미리보기</div>
+            <div className="flex-1 overflow-y-auto px-4 pt-1 pb-3" onClick={onPreviewClick}>
+              {text.trim() ? <div className="memo-md" dangerouslySetInnerHTML={{ __html: html }} /> : <div className="text-sm text-slate-400">적은 내용이 여기에 보기 좋게 보여요</div>}
+            </div>
+          </div>
           <div className="flex items-center border-t border-slate-100 px-3 py-1.5 text-[11px] text-slate-400">
             마크다운으로 적을 수 있어요
             <button onClick={onDelete} className="ml-auto rounded px-2 py-0.5 text-xs text-red-500 hover:bg-red-50">
@@ -340,17 +410,7 @@ export default function MemoPanel({
             if (e.target.closest('a, input, img')) return
             setEditing(true)
           }}
-          onClick={(e) => {
-            const img = e.target.closest('img[data-img]')
-            if (img) return setZoomed(img.getAttribute('src'))
-            if (e.target.matches('input[type="checkbox"]')) {
-              e.preventDefault()
-              const boxes = [...e.currentTarget.querySelectorAll('input[type="checkbox"]')]
-              const next = toggleTask(text, boxes.indexOf(e.target))
-              updateText(next)
-              flush()
-            }
-          }}
+          onClick={onPreviewClick}
         >
           {text.trim() ? (
             <div className="memo-md" dangerouslySetInnerHTML={{ __html: html }} />
@@ -362,6 +422,14 @@ export default function MemoPanel({
         </div>
       )}
 
+      {/* 크기 조절 손잡이: 왼쪽 변, 아래 변, 왼쪽 아래 모서리 */}
+      <div onPointerDown={(e) => startResize(e, 'w')} className="absolute top-0 bottom-3 left-0 w-1.5 cursor-ew-resize" title="끌어서 너비 조절" />
+      <div onPointerDown={(e) => startResize(e, 's')} className="absolute right-0 bottom-0 left-3 h-1.5 cursor-ns-resize" title="끌어서 높이 조절" />
+      <div onPointerDown={(e) => startResize(e, 'sw')} className="absolute bottom-0 left-0 h-4 w-4 cursor-nesw-resize" title="끌어서 크기 조절">
+        <svg viewBox="0 0 16 16" className="h-4 w-4 text-slate-300" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+          <path d="M3 7l6 6M3 11l2 2" />
+        </svg>
+      </div>
       {zoomed && (
         <div className="fixed inset-0 z-50 flex cursor-zoom-out items-center justify-center bg-black/75 p-6" onClick={() => setZoomed(null)}>
           <img src={zoomed} alt="" className="max-h-full max-w-full rounded-lg shadow-2xl" />
