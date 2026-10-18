@@ -1,12 +1,12 @@
-// 마크업(형광펜, 텍스트, 펜, 사각형, 화살표, 사진) 공통 정의
+// 마크업(형광펜, 텍스트, 펜, 사각형, 화살표, 사진, 메모 범위) 공통 정의
 // 마크업은 측정과 같은 목록(measurements)에 저장되고, 좌표는 PDF 페이지 좌표(pt)입니다.
 
-export const MARKUP_TYPES = ['highlight', 'text', 'pen', 'rect', 'arrow', 'image']
+export const MARKUP_TYPES = ['highlight', 'text', 'pen', 'rect', 'arrow', 'image', 'memo']
 
 export const isMarkup = (type) => MARKUP_TYPES.includes(type)
 
 // 드래그로 그리는 도구 (누른 채 끌었다 놓기)
-export const DRAG_TOOLS = ['highlight', 'pen', 'rect', 'arrow']
+export const DRAG_TOOLS = ['highlight', 'pen', 'rect', 'arrow', 'memo']
 
 export const HIGHLIGHT_COLORS = ['#facc15', '#4ade80', '#f472b6', '#60a5fa']
 export const MARKUP_COLORS = ['#dc2626', '#2563eb', '#16a34a', '#111827', '#ea580c']

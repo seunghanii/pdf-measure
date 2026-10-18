@@ -214,6 +214,17 @@ function Session({ store, user, onLogout, onChangePassword }) {
     [openDoc, refreshRecent],
   )
 
+  // 메모 범위에 연결한 도면 열기 (이미 열려 있으면 그 탭으로), 고른 페이지로 이동
+  const openLinked = useCallback(
+    async (link) => {
+      if (!link?.id) return
+      await openRecent({ id: link.id, name: link.name })
+      if (docsRef.current.some((d) => d.id === link.id) || link.page > 1)
+        setSearchJump({ id: link.id, page: Math.max(1, link.page || 1), nonce: Date.now() })
+    },
+    [openRecent],
+  )
+
   const openSample = useCallback(async () => {
     const res = await fetch(`${import.meta.env.BASE_URL}sample.pdf`)
     const blob = await res.blob()
@@ -415,6 +426,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
           active={doc.id === activeId}
           onOpenFile={openFiles}
           searchJump={searchJump?.id === doc.id ? searchJump : null}
+          onOpenLink={openLinked}
         />
       ))}
 

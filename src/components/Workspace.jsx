@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { distance } from '../lib/geometry'
 import { PT_TO_PAPER_MM, UNITS, calibrationInput } from '../lib/units'
 import { TYPE_INFO } from '../lib/measure'
 import { DEFAULT_BOX_OPACITY, FULL_CROP, MARKUP_STROKE, STROKE_TYPES, isCropped, isMarkup, rectOf, strokeOf } from '../lib/markup'
-import { ImageSource, getImageBlob, isImageFile, newImageId, prepareImage, rememberImage } from '../lib/images'
+import { ImageSource, freshImageIds, getImageBlob, isImageFile, newImageId, prepareImage, rememberImage } from '../lib/images'
 import { TOOLS, toolForDigit } from '../lib/tools'
 import { toggleSnap } from '../lib/snapSetting'
 import PdfViewer from './PdfViewer'
@@ -11,11 +11,16 @@ import Toolbar from './Toolbar'
 import Sidebar from './Sidebar'
 import CalibrationDialog from './CalibrationDialog'
 import DocSearch from './DocSearch'
+import LinkPicker from './LinkPicker'
+import { DEFAULT_MEMO_COLOR, isLinkOnly, memoImageIds, memosAt } from '../lib/memo'
+
+// 메모장은 마크다운 읽는 도구까지 필요할 때만 불러옴
+const MemoPanel = lazy(() => import('./MemoPanel'))
 
 const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`
 
 // 도면 하나(탭 하나)의 작업 공간. 탭을 바꿔도 마운트된 채로 남아서 상태가 유지됩니다.
-export default function Workspace({ doc, active, onOpenFile, searchJump }) {
+export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenLink }) {
   const { pdfDoc, name: fileName } = doc
   const saved = doc.savedState
   const [pageNum, setPageNum] = useState(() => Math.min(saved?.pageNum ?? 1, pdfDoc.numPages))
@@ -40,9 +45,13 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
     imageBorder: false,
     imageBorderColor: '#111827',
     imageBorderWidth: 1,
+    memoColor: DEFAULT_MEMO_COLOR,
+    memoKind: 'note', // 새 메모 범위: 'note' 메모장 | 'link' 다른 도면 열기
     ...saved?.markupStyle,
   }))
   const [croppingId, setCroppingId] = useState(null) // 자르는 중인 사진
+  const [memoOpen, setMemoOpen] = useState(null) // 열린 메모장 { id, others: 같은 자리에 겹친 메모 id 들, edit }
+  const [linkPicking, setLinkPicking] = useState(null) // 도면 연결 고르는 중인 메모 { id, fresh: 방금 그린 범위 }
   const placeRef = useRef(null) // 뷰어가 사진 넣을 자리를 알려 주는 함수
   const imageInputRef = useRef(null)
   const [saving, setSaving] = useState(false)
@@ -59,7 +68,8 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
     [],
   )
   // 홈 화면 검색에서 고른 위치 ({ page, rect, nonce }) 와 이 화면의 이동 요청 중 나중 것
-  const viewerJump = searchJump && (!jump || searchJump.nonce > jump.nonce) ? searchJump : jump
+  const pickedJump = searchJump && (!jump || searchJump.nonce > jump.nonce) ? searchJump : jump
+  const viewerJump = pickedJump && pickedJump.page > pdfDoc.numPages ? { ...pickedJump, page: pdfDoc.numPages } : pickedJump
   const searchRef = useRef(null)
 
   // 측정값이 바뀌면 잠시 뒤 자동 저장 (로그인했으면 서버, 아니면 이 브라우저).
@@ -179,7 +189,8 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
         name: `${TYPE_INFO[type].name} ${counters.current[type]}`,
       }
       if (isMarkup(type)) {
-        m.color = type === 'highlight' ? markupStyle.highlightColor : markupStyle.color
+        m.color = type === 'highlight' ? markupStyle.highlightColor : type === 'memo' ? markupStyle.memoColor : markupStyle.color
+        if (type === 'memo') m.text = ''
         if (type === 'text') {
           m.fontSize = markupStyle.fontSize
           m.boxOpacity = markupStyle.boxOpacity
@@ -190,6 +201,13 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
       Object.assign(m, extra)
       commit((prev) => [...prev, m])
       setSelectedIds([m.id])
+      // 새 메모 범위: 바로 메모장(쓰기)을 열거나, 연결할 도면을 고름
+      if (type === 'memo') {
+        if (markupStyle.memoKind === 'link') {
+          setMemoOpen(null)
+          setLinkPicking({ id: m.id, fresh: true })
+        } else setMemoOpen({ id: m.id, others: [], edit: true })
+      }
     },
     [commit, markupStyle],
   )
@@ -206,13 +224,15 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
   // 선택된 마크업. 텍스트가 섞여 있으면 툴바에 텍스트 설정(글자 크기·투명도)을 보여 줌
   const selectedMarkups = measurements.filter((m) => selectedIds.includes(m.id) && isMarkup(m.type))
   const selText = selectedMarkups.find((m) => m.type === 'text')
-  const selLine = selectedMarkups.find((m) => m.type !== 'highlight' && m.type !== 'image')
+  const selLine = selectedMarkups.find((m) => m.type !== 'highlight' && m.type !== 'image' && m.type !== 'memo')
+  const selMemos = selectedMarkups.filter((m) => m.type === 'memo')
+  const onlyMemos = selMemos.length > 0 && selMemos.length === selectedMarkups.length
   const selHighlight = selectedMarkups.find((m) => m.type === 'highlight')
   const selStroke = selectedMarkups.find((m) => STROKE_TYPES.includes(m.type))
   const selImages = selectedMarkups.filter((m) => m.type === 'image')
   const selImage = selImages[0]
   const onlyImages = selImages.length > 0 && selImages.length === selectedMarkups.length
-  const selectedMarkupType = selText ? 'text' : onlyImages ? 'image' : selLine ? selLine.type : selHighlight ? 'highlight' : null
+  const selectedMarkupType = selText ? 'text' : onlyImages ? 'image' : onlyMemos ? 'memo' : selLine ? selLine.type : selHighlight ? 'highlight' : null
   // 툴바에는 선택된 마크업의 현재 값을 보여 줌
   const shownStyle =
     tool === 'select' && selectedMarkups.length
@@ -222,6 +242,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
           ...(selHighlight && { highlightColor: selHighlight.color }),
           ...(selStroke && { strokeWidth: strokeOf(selStroke) }),
           ...(selText && { fontSize: selText.fontSize ?? 13, boxOpacity: selText.boxOpacity ?? DEFAULT_BOX_OPACITY, textAlign: selText.align ?? 'left' }),
+          ...(selMemos[0] && { memoColor: selMemos[0].color ?? DEFAULT_MEMO_COLOR }),
           ...(selImage && { imageBorder: !!selImage.border, imageBorderColor: selImage.color ?? '#111827', imageBorderWidth: strokeOf(selImage) }),
         }
       : markupStyle
@@ -234,7 +255,8 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
     setMarkupStyle((st) => ({ ...st, ...patch }))
     const itemPatch = (m) => {
       const out = {}
-      if (patch.color && m.type !== 'highlight') out.color = patch.color
+      if (patch.color && m.type !== 'highlight' && m.type !== 'memo') out.color = patch.color
+      if (patch.memoColor && m.type === 'memo') out.color = patch.memoColor
       if (patch.highlightColor && m.type === 'highlight') out.color = patch.highlightColor
       if (patch.fontSize && m.type === 'text') out.fontSize = patch.fontSize
       if (patch.boxOpacity !== undefined && m.type === 'text') out.boxOpacity = patch.boxOpacity
@@ -372,8 +394,11 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
         if (!ids.length) return
         const used = new Set()
         for (const list of [measurementsRef.current, ...historyRef.current])
-          for (const m of list) if (m.type === 'image') used.add(m.imageId)
-        const unused = ids.filter((id) => !used.has(id))
+          for (const m of list) {
+            if (m.type === 'image') used.add(m.imageId)
+            if (m.type === 'memo') memoImageIds(m.text).forEach((id) => used.add(id))
+          }
+        const unused = ids.filter((id) => !used.has(id) && !freshImageIds.has(id))
         if (unused.length) await store.removeImages(doc.id, unused)
       } catch (e) {
         console.warn('사진 정리 실패', e)
@@ -409,6 +434,48 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
       }),
     )
   }
+
+  // ---------- 메모 범위 ----------
+  // 누른 자리에 메모가 겹쳐 있으면 가장 작은 범위(같은 크기면 나중에 만든 것)를 열고, 나머지는 메모장 위쪽에 보여 줌.
+  // 내용 없이 도면만 연결된 범위는 바로 그 도면을 엶 (force: 더블클릭·목록에서 누름 → 항상 메모장)
+  const openMemoAt = useCallback(
+    (id, page, p, { force = false } = {}) => {
+      const list = measurementsRef.current
+      const stack = p ? memosAt(list, page, p) : []
+      const target = (force ? list.find((m) => m.id === id) : stack[0]) ?? list.find((m) => m.id === id)
+      if (!target) return
+      if (!force && isLinkOnly(target)) {
+        onOpenLink?.(target.link)
+        return
+      }
+      setLinkPicking(null)
+      setMemoOpen((cur) => ({
+        id: target.id,
+        others: stack.length > 1 ? stack.map((m) => m.id) : [],
+        edit: cur?.id === target.id ? cur.edit : !String(target.text ?? '').trim() && !target.link,
+      }))
+    },
+    [onOpenLink],
+  )
+
+  // 메모 글·이름·연결 고치기. 메모장을 연 동안의 변경은 되돌리기 한 번으로 묶음
+  const memoGesture = useRef(null)
+  const editMemo = useCallback(
+    (id, patch) => {
+      if (memoGesture.current !== id) {
+        memoGesture.current = id
+        beginEdit()
+      }
+      updateItem(id, patch)
+    },
+    [beginEdit, updateItem],
+  )
+  useEffect(() => {
+    memoGesture.current = null
+  }, [memoOpen?.id])
+
+  const memoItem = memoOpen && measurements.find((m) => m.id === memoOpen.id && m.type === 'memo' && !m.hidden)
+  const linkItem = linkPicking && measurements.find((m) => m.id === linkPicking.id)
 
   // ids: 지울 항목 id 배열 (기준선은 목록에서 따로 지움)
   const deleteItems = useCallback(
@@ -522,6 +589,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
           deleteItems(selectedIds)
         }
       }
+      if (e.key === 'Escape' && memoOpen) setMemoOpen(null)
       if (e.key === 'Escape' && tool === 'select') setSelectedIds([])
       if (e.key === '+' || e.key === '=') setZoom((z) => Math.min(8, z * 1.25))
       if (e.key === '-') setZoom((z) => Math.max(0.1, z / 1.25))
@@ -536,7 +604,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [active, cropping, deleteItems, jumpTo, pageNum, pdfDoc, pendingCalibration, savePdf, selectedIds, tool, undo])
+  }, [active, cropping, deleteItems, jumpTo, memoOpen, pageNum, pdfDoc, pendingCalibration, savePdf, selectedIds, tool, undo])
 
   const visibleMeasurements = measurements.filter((m) => !m.hidden)
 
@@ -594,6 +662,18 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
         selectedMarkupType={selectedMarkupType}
         selectedHasStroke={tool === 'select' && !!selStroke}
         onInsertImage={() => imageInputRef.current?.click()}
+        memoActions={
+          tool === 'select' && onlyMemos
+            ? {
+                onOpen: () => openMemoAt(selMemos[0].id, null, null, { force: true }),
+                onLink: () => {
+                  setMemoOpen(null)
+                  setLinkPicking({ id: selMemos[0].id })
+                },
+                linked: !!selMemos[0].link,
+              }
+            : null
+        }
         imageActions={
           tool === 'select' && onlyImages
             ? {
@@ -623,35 +703,61 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
       )}
 
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <PdfViewer
-          pdfDoc={pdfDoc}
-          pageNum={pageNum}
-          onPageChange={setPageNum}
-          jump={viewerJump}
-          zoom={zoom}
-          onZoom={setZoom}
-          fitKey={fitKey}
-          fittedKey={fittedKey}
-          onFitted={setFittedKey}
-          tool={tool}
-          measurements={visibleMeasurements}
-          calibration={calibration?.mode === 'line' && !calibration.hidden ? calibration : null}
-          selectedIds={selectedIds}
-          onSelect={setSelectedIds}
-          onComplete={onComplete}
-          onMovePoint={onMovePoint}
-          onSetPoints={onSetPoints}
-          onBeginEdit={beginEdit}
-          onUpdateItem={updateItem}
-          onEditCalibration={() => setPendingCalibration({ edit: true })}
-          markupStyle={markupStyle}
-          mmPerPt={mmPerPt}
-          unit={unit}
-          croppingId={cropping}
-          onCropImage={startCrop}
-          onDropImages={insertImages}
-          placeRef={placeRef}
-        />
+        <div className="relative flex min-h-0 min-w-0 flex-1">
+          <PdfViewer
+            pdfDoc={pdfDoc}
+            pageNum={pageNum}
+            onPageChange={setPageNum}
+            jump={viewerJump}
+            zoom={zoom}
+            onZoom={setZoom}
+            fitKey={fitKey}
+            fittedKey={fittedKey}
+            onFitted={setFittedKey}
+            tool={tool}
+            measurements={visibleMeasurements}
+            calibration={calibration?.mode === 'line' && !calibration.hidden ? calibration : null}
+            selectedIds={selectedIds}
+            onSelect={setSelectedIds}
+            onComplete={onComplete}
+            onMovePoint={onMovePoint}
+            onSetPoints={onSetPoints}
+            onBeginEdit={beginEdit}
+            onUpdateItem={updateItem}
+            onEditCalibration={() => setPendingCalibration({ edit: true })}
+            markupStyle={markupStyle}
+            mmPerPt={mmPerPt}
+            unit={unit}
+            croppingId={cropping}
+            onCropImage={startCrop}
+            onDropImages={insertImages}
+            placeRef={placeRef}
+            onOpenMemo={openMemoAt}
+          />
+          {memoItem && (
+            <Suspense fallback={null}>
+              <MemoPanel
+                key={memoItem.id}
+                memo={memoItem}
+                others={memoOpen.others.map((id) => measurements.find((m) => m.id === id)).filter((m) => m && !m.hidden)}
+                startEditing={memoOpen.edit}
+                onEditingChange={(edit) => setMemoOpen((cur) => (cur ? { ...cur, edit } : cur))}
+                onSwitch={(id) => setMemoOpen((cur) => ({ ...cur, id, edit: false }))}
+                onChange={(patch) => editMemo(memoItem.id, patch)}
+                onClose={() => setMemoOpen(null)}
+                onDelete={() => {
+                  setMemoOpen(null)
+                  deleteItems([memoItem.id])
+                }}
+                onOpenLink={onOpenLink}
+                onPickLink={() => setLinkPicking({ id: memoItem.id })}
+                store={store}
+                docId={doc.id}
+                onNotice={setNotice}
+              />
+            </Suspense>
+          )}
+        </div>
         <Sidebar
           calibration={calibration}
           mmPerPt={mmPerPt}
@@ -668,6 +774,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
             setSelectedIds([m.id])
             if (m.hidden) toggleHidden(m.id)
             jumpTo(m.page)
+            if (m.type === 'memo') openMemoAt(m.id, null, null, { force: true })
           }}
           onDelete={(id) => deleteItems([id])}
           onToggleHidden={toggleHidden}
@@ -685,6 +792,32 @@ export default function Workspace({ doc, active, onOpenFile, searchJump }) {
           top={<DocSearch ref={searchRef} doc={doc} onGo={jumpToHit} />}
         />
       </div>
+
+      {linkItem && (
+        <LinkPicker
+          store={store}
+          currentId={doc.id}
+          currentName={fileName}
+          initial={linkItem.link}
+          onCancel={() => {
+            // 방금 그린 범위에서 연결을 취소하면 빈 범위는 남기지 않음
+            if (linkPicking.fresh && !linkItem.link && !String(linkItem.text ?? '').trim()) deleteItems([linkItem.id])
+            setLinkPicking(null)
+          }}
+          onUnlink={
+            linkItem.link
+              ? () => {
+                  editMemo(linkItem.id, { link: null })
+                  setLinkPicking(null)
+                }
+              : null
+          }
+          onConfirm={(link) => {
+            editMemo(linkItem.id, { link })
+            setLinkPicking(null)
+          }}
+        />
+      )}
 
       {pendingCalibration && (
         <CalibrationDialog

@@ -18,6 +18,7 @@ export const TOOLS = [
   { id: 'pen', label: '펜', key: 'P', group: 'markup', icon: 'M3 17c3-1 4-6 7-6s2 6 5 6 4-4 6-5' },
   { id: 'rect', label: '사각형', key: 'R', group: 'markup', icon: 'M4 6h16v12H4z' },
   { id: 'arrow', label: '화살표', key: 'W', group: 'markup', icon: 'M5 19L19 5M19 5h-8M19 5v8' },
+  { id: 'memo', label: '메모', key: 'N', group: 'markup', icon: 'M5 4h10l4 4v12H5zM15 4v4h4M8 12h8M8 16h5' },
 ]
 
 export const DIGIT_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']

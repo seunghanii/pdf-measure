@@ -4,6 +4,7 @@ import { formatLength } from '../lib/units'
 import { TYPE_INFO, describe } from '../lib/measure'
 import { DEFAULT_BOX_OPACITY, FONT_FAMILY, RESIZE_DIRS, cropOf, fullImageRect, isMarkup, rectOf, resizeHandlePos, strokeOf, textMetricsOf } from '../lib/markup'
 import { useImageUrl } from '../lib/images'
+import { isLinkOnly, memoSummary } from '../lib/memo'
 
 function Label({ x, y, text, sub, color }) {
   return (
@@ -241,6 +242,49 @@ function MarkupShape({ m, zoom, selected, showHandles, showResize, draft }) {
       ) : (
         <rect x={r.x} y={r.y} width={r.w} height={r.h} fill="transparent" stroke={color} strokeWidth={sw} />
       )
+  } else if (m.type === 'memo') {
+    // 메모 범위: 평소엔 아주 옅게 (마우스를 올리면 index.css 에서 조금 진하게)
+    const r = rectOf(pts[0], pts[1] ?? pts[0])
+    bounds = r
+    resizable = true
+    const link = isLinkOnly(m)
+    const s = 16
+    const ix = r.x + r.w - s - 3
+    const iy = r.y + 3
+    body = (
+      <>
+        <title>{memoSummary(m) || (link ? '연결된 도면 열기' : '메모 열기')}</title>
+        <rect
+          className={draft ? undefined : 'memo-area'}
+          x={r.x}
+          y={r.y}
+          width={r.w}
+          height={r.h}
+          rx={3}
+          fill={color}
+          fillOpacity={draft ? 0.12 : undefined}
+          stroke={color}
+          strokeWidth={1.2}
+          strokeDasharray="5 3"
+        />
+        {!draft && r.w > s + 6 && r.h > s + 6 && (
+          <g className="memo-icon" pointerEvents="none">
+            <rect x={ix} y={iy} width={s} height={s} rx={3} fill={color} />
+            <path
+              d={
+                link
+                  ? `M${ix + 4} ${iy + 12}L${ix + 12} ${iy + 4}M${ix + 7} ${iy + 4}h5v5`
+                  : `M${ix + 4} ${iy + 5}h8M${ix + 4} ${iy + 8}h8M${ix + 4} ${iy + 11}h5`
+              }
+              stroke="white"
+              strokeWidth={1.5}
+              strokeLinecap="round"
+              fill="none"
+            />
+          </g>
+        )}
+      </>
+    )
   } else if (m.type === 'arrow') {
     const [a, b] = pts
     if (b) {
@@ -291,7 +335,7 @@ function MarkupShape({ m, zoom, selected, showHandles, showResize, draft }) {
   }
 
   return (
-    <g data-shape={draft ? undefined : m.id} data-type={m.type} style={{ cursor: showHandles ? 'move' : undefined }} opacity={draft ? 0.8 : 1}>
+    <g data-shape={draft ? undefined : m.id} data-type={m.type} style={{ cursor: showHandles ? (m.type === 'memo' ? 'pointer' : 'move') : undefined }} opacity={draft ? 0.8 : 1}>
       {body}
       {selected && bounds && !draft && (() => {
         const g = m.type === 'rect' ? sw / 2 + 3 : 3

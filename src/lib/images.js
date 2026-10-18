@@ -78,9 +78,19 @@ export function base64ToBlob(b64, type) {
 const cache = new Map()
 const listeners = new Map()
 
+// 이번에 새로 넣은 사진 (아직 저장 안 된 메모 글에만 있을 수 있어 정리 대상에서 뺌)
+export const freshImageIds = new Set()
+
 export function rememberImage(imageId, blob) {
+  freshImageIds.add(imageId)
   cache.set(imageId, { blob, url: URL.createObjectURL(blob) })
   listeners.get(imageId)?.forEach((fn) => fn())
+}
+
+// 이미 불러온 사진의 화면 주소 (없으면 null)
+export function cachedImageUrl(imageId) {
+  const hit = cache.get(imageId)
+  return hit && !(hit instanceof Promise) ? hit.url : null
 }
 
 // 사진 Blob (없으면 저장소에서 불러옴). 못 찾으면 null
