@@ -16,9 +16,10 @@ const toBlob = (canvas, type, quality) =>
   new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('사진 변환 실패'))), type, quality))
 
 // 파일(또는 붙여넣은 사진) → { blob, width, height } (줄인 크기, px)
-export async function prepareImage(file) {
+// maxSide: 긴 변 최대 px (메모 사진은 자세히 보도록 더 크게)
+export async function prepareImage(file, { maxSide = MAX_SIDE } = {}) {
   const bmp = await createImageBitmap(file) // 휴대폰 사진의 회전 정보도 반영됨
-  const k = Math.min(1, MAX_SIDE / Math.max(bmp.width, bmp.height))
+  const k = Math.min(1, maxSide / Math.max(bmp.width, bmp.height))
   const width = Math.max(1, Math.round(bmp.width * k))
   const height = Math.max(1, Math.round(bmp.height * k))
   const canvas = document.createElement('canvas')
