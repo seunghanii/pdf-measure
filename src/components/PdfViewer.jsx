@@ -4,6 +4,7 @@ import { TYPE_INFO } from '../lib/measure'
 import MeasurementShape from './MeasurementShape'
 import { DRAG_TOOLS, textBoxMetrics, textMetricsOf, minTextBoxWidth, FONT_FAMILY, itemCorners, rectOf, resizeRect, isMarkup, cropOf, cropResize, fullImageRect, resizeKeepAspect } from '../lib/markup'
 import { isImageFile } from '../lib/images'
+import { memoDrawOrder } from '../lib/memo'
 import { SNAP_KINDS, findRaySnap, findSnap, loadSnapIndex } from '../lib/snap'
 import { useSnapEnabled } from '../lib/snapSetting'
 
@@ -44,6 +45,7 @@ export default function PdfViewer({
   onCropImage, // (id) 사진 더블클릭: 자르기 시작
   onDropImages, // (files, clientX, clientY) 사진 파일을 도면에 끌어다 놓음
   placeRef, // 사진 넣을 자리 계산 함수를 여기에 넣어 줌
+  onOpenMemo, // (id, page, point, { force }) 메모 범위를 누름
 }) {
   const containerRef = useRef(null)
   const pageEls = useRef([])
@@ -441,7 +443,7 @@ export default function PdfViewer({
     if (e.button === 1 || (e.button === 0 && panning)) {
       e.preventDefault()
       const el = containerRef.current
-      panRef.current = { x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop }
+      panRef.current = { x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop, button: e.button }
       e.currentTarget.setPointerCapture(e.pointerId)
       forceRender((n) => n + 1)
       return
@@ -499,7 +501,7 @@ export default function PdfViewer({
         const orig = {}
         for (const m of measurements) if (group.includes(m.id)) orig[m.id] = m.points
         if (Object.keys(orig).length) {
-          dragRef.current = { whole: true, start, orig, moved: false }
+          dragRef.current = { whole: true, start, orig, moved: false, clickId: id, page }
           e.currentTarget.setPointerCapture(e.pointerId)
         }
         return
@@ -620,11 +622,23 @@ export default function PdfViewer({
     }
   }
 
-  const onPointerUp = () => {
+  // 그 자리의 메모 범위 (포인터 캡처 때문에 e.target 이 svg 일 수 있어 좌표로 찾음)
+  const memoAtPointer = (e) => document.elementFromPoint(e.clientX, e.clientY)?.closest?.('[data-type="memo"]')?.dataset.shape
+
+  const onPointerUp = (e, page) => {
     if (panRef.current) {
+      // 이동 도구로 끌지 않고 누르기만 하면 메모 열기
+      const pr = panRef.current
+      if (pr.button === 0 && Math.hypot(e.clientX - pr.x, e.clientY - pr.y) < 3) {
+        const id = memoAtPointer(e)
+        if (id) onOpenMemo(id, page, toPage(e, e.currentTarget))
+      }
       panRef.current = null
       forceRender((n) => n + 1)
     }
+    // 선택 도구로 메모 범위를 누르기만 하면(끌지 않으면) 메모 열기
+    const dr = dragRef.current
+    if (dr?.whole && !dr.moved && dr.clickId && measurements.find((m) => m.id === dr.clickId)?.type === 'memo') onOpenMemo(dr.clickId, dr.page, dr.start)
     if (dragRef.current && !drawing) setCursor(null) // 점 끌기 때 보이던 자석 표시 지우기
     dragRef.current = null
     if (marquee) {
@@ -642,6 +656,11 @@ export default function PdfViewer({
       const pts = draft.points
       const big = tool === 'pen' ? pts.length > 1 : distance(pts[0], pts[pts.length - 1]) * zoom > 4
       if (big) onComplete(tool, pts, draft.page)
+      else if (tool === 'memo') {
+        // 메모 도구로 이미 있는 범위를 누르기만 하면 그 메모 열기
+        const id = memoAtPointer(e)
+        if (id) onOpenMemo(id, draft.page, pts[0])
+      }
       setDraft(null)
     }
   }
@@ -663,7 +682,7 @@ export default function PdfViewer({
   // 그리는 중인 도형 미리보기
   const renderPreview = (page) => {
     if (draft?.dragging && draft.page === page) {
-      const color = tool === 'highlight' ? markupStyle.highlightColor : markupStyle.color
+      const color = tool === 'highlight' ? markupStyle.highlightColor : tool === 'memo' ? markupStyle.memoColor : markupStyle.color
       return <MeasurementShape m={{ id: 'draft', type: tool, points: draft.points, color, strokeWidth: markupStyle.strokeWidth }} zoom={zoom} draft />
     }
     if (!drawing || !draft || draft.page !== page) return null
@@ -725,18 +744,20 @@ export default function PdfViewer({
                 <svg
                   width={w}
                   height={h}
-                  className="absolute inset-0 touch-none select-none"
+                  className={`absolute inset-0 touch-none select-none ${tool === 'select' || tool === 'memo' || panning ? 'memo-hover' : ''}`}
                   style={{ cursor: cursorStyle }}
                   onPointerDown={(e) => onPointerDown(e, page)}
                   onPointerMove={(e) => onPointerMove(e, page)}
-                  onPointerUp={onPointerUp}
+                  onPointerUp={(e) => onPointerUp(e, page)}
                   onDoubleClick={(e) => {
                     if (tool === 'select') {
                       // 포인터 캡처 때문에 e.target 이 svg 일 수 있어 좌표로 다시 찾음
                       const hit = document.elementFromPoint(e.clientX, e.clientY)
                       const t = hit?.closest('[data-type="text"]')
                       const img = hit?.closest('[data-type="image"]')
+                      const memo = hit?.closest('[data-type="memo"]')
                       if (t) editExisting(t.dataset.shape)
+                      else if (memo) onOpenMemo(memo.dataset.shape, page, toPage(e, e.currentTarget), { force: true })
                       else if (img) onCropImage(img.dataset.shape)
                       else if (hit?.closest('[data-shape="calibration"]')) onEditCalibration()
                     } else finishMulti()
@@ -756,9 +777,11 @@ export default function PdfViewer({
                       showHandles={tool === 'select'}
                     />
                   )}
-                  {measurements
-                    .filter((m) => m.page === page && m.id !== editing?.id)
-                    .map((m) => (
+                  {[
+                    // 메모 범위는 다른 항목 아래에, 큰 범위부터 그려서 겹친 작은 범위도 누를 수 있게
+                    ...measurements.filter((m) => m.page === page && m.type === 'memo').sort(memoDrawOrder),
+                    ...measurements.filter((m) => m.page === page && m.type !== 'memo' && m.id !== editing?.id),
+                  ].map((m) => (
                       <MeasurementShape
                         key={m.id}
                         m={m}

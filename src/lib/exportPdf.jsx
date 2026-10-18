@@ -29,7 +29,8 @@ export async function exportPdfWithMarkups({ pdfDoc, items, calibration, mmPerPt
 
   for (let i = 0; i < pdfDoc.numPages; i++) {
     const pageNo = i + 1
-    const pageItems = items.filter((m) => m.page === pageNo && !m.hidden)
+    // 메모 범위는 화면에서만 쓰는 것이라 PDF 에는 그리지 않음
+    const pageItems = items.filter((m) => m.page === pageNo && !m.hidden && m.type !== 'memo')
     const cal = calibration?.mode === 'line' && !calibration.hidden && calibration.page === pageNo ? calibration : null
     if (!pageItems.length && !cal) continue
 

@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import { TOOLS, digitForTool } from '../lib/tools'
 import { toggleSnap, useSnapEnabled } from '../lib/snapSetting'
+import { MEMO_COLORS } from '../lib/memo'
 import { DEFAULT_BOX_OPACITY, HIGHLIGHT_COLORS, IMAGE_BORDER_COLORS, IMAGE_BORDER_WIDTHS, MARKUP_COLORS, STROKE_TYPES, STROKE_WIDTHS, TEXT_SIZES } from '../lib/markup'
 
 const MARKUP_TOOL_IDS = TOOLS.filter((t) => t.group === 'markup').map((t) => t.id)
@@ -31,6 +32,7 @@ export default function Toolbar({
   selectedMarkupType,
   selectedHasStroke, // 선택한 것 중에 사각형·화살표·펜이 있으면 굵기도 보여 줌
   onInsertImage, // 사진 넣기 (파일 고르기)
+  memoActions, // 메모 범위만 선택했을 때: { onOpen, onLink, linked }
   imageActions, // 사진만 선택했을 때: 자르기·숨기기 { cropping, cropped, onToggleCrop, onResetCrop, onHide }
   onSave,
   saving,
@@ -156,6 +158,7 @@ export default function Toolbar({
             onChange={onChangeMarkupStyle}
             showStroke={selectedHasStroke}
             imageActions={imageActions}
+            memoActions={memoActions}
           />
         </div>
       )}
@@ -245,7 +248,8 @@ const ALIGN_BUTTONS = [
 ]
 
 // 마크업 색상, 선 굵기, 글자 크기, 텍스트 상자 배경 투명도
-function MarkupStyle({ kind, title, style, onChange, showStroke, imageActions }) {
+function MarkupStyle({ kind, title, style, onChange, showStroke, imageActions, memoActions }) {
+  if (kind === 'memo') return <MemoStyle title="메모 범위" style={style} onChange={onChange} actions={memoActions} />
   if (kind === 'image') return <ImageStyle title={title === '선택한 마크업' ? '사진' : title} style={style} onChange={onChange} actions={imageActions} />
   const isHighlight = kind === 'highlight'
   const colors = isHighlight ? HIGHLIGHT_COLORS : MARKUP_COLORS
@@ -407,6 +411,62 @@ function ImageStyle({ title, style, onChange, actions }) {
           </button>
         </>
       )}
+    </div>
+  )
+}
+
+// 메모 범위 설정: 새로 그릴 종류(메모장 / 다른 도면 열기)와 색. 선택했을 때는 메모 열기·도면 연결
+function MemoStyle({ title, style, onChange, actions }) {
+  const btn = (active) =>
+    `flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium whitespace-nowrap ${
+      active ? 'bg-slate-800 text-white' : 'text-slate-700 ring-1 ring-slate-300 hover:bg-slate-100'
+    }`
+  const kind = style.memoKind ?? 'note'
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-white/95 px-2.5 py-1.5 shadow-md backdrop-blur">
+      <span className="mr-1 text-xs font-semibold whitespace-nowrap text-slate-700">{title}</span>
+      {actions ? (
+        <>
+          <button className={btn(false)} onClick={actions.onOpen} title="메모장 열기 (범위를 더블클릭해도 돼요)">
+            <Icon d="M5 4h10l4 4v12H5zM15 4v4h4M8 12h8M8 16h5" />
+            메모 열기
+          </button>
+          <button className={btn(false)} onClick={actions.onLink} title="누르면 열릴 도면을 고르기">
+            <Icon d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1" />
+            {actions.linked ? '연결 바꾸기' : '도면 연결'}
+          </button>
+        </>
+      ) : (
+        <div className="flex items-center rounded ring-1 ring-slate-300" role="group" aria-label="메모 범위 종류">
+          {[
+            ['note', '메모장', '범위를 누르면 메모장이 열려요 (마크다운, 사진)'],
+            ['link', '도면 열기', '범위를 누르면 고른 도면이 열려요'],
+          ].map(([value, label, tip]) => (
+            <button
+              key={value}
+              title={tip}
+              aria-pressed={kind === value}
+              onClick={() => onChange({ memoKind: value })}
+              className={`px-2 py-0.5 text-xs font-medium whitespace-nowrap first:rounded-l last:rounded-r ${
+                kind === value ? 'bg-slate-800 text-white' : 'text-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+      <span className="mx-1 h-4 w-px bg-slate-200" />
+      {MEMO_COLORS.map((c) => (
+        <button
+          key={c}
+          title="범위 색"
+          onClick={() => onChange({ memoColor: c })}
+          className={`h-5 w-5 rounded-full border border-black/10 ${style.memoColor === c ? 'ring-2 ring-slate-700 ring-offset-1' : ''}`}
+          style={{ background: c }}
+        />
+      ))}
+      {!actions && <span className="ml-1 hidden text-xs whitespace-nowrap text-slate-400 lg:inline">도면에서 끌어 범위를 정하세요</span>}
     </div>
   )
 }

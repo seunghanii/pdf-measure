@@ -1,5 +1,6 @@
 import { angleDeg, polygonArea, polygonPerimeter, polylineLength } from './geometry'
 import { formatAngle, formatArea, formatLength } from './units'
+import { memoSummary } from './memo'
 
 export const TYPE_INFO = {
   length: { name: '길이', color: '#2563eb', need: null }, // 여러 점을 이어서 총 길이
@@ -12,6 +13,7 @@ export const TYPE_INFO = {
   rect: { name: '사각형', color: '#dc2626', need: null },
   arrow: { name: '화살표', color: '#dc2626', need: null },
   image: { name: '사진', color: '#0891b2', need: null },
+  memo: { name: '메모', color: '#f59e0b', need: null },
 }
 
 // 측정 하나의 표시 문자열(주 값, 보조 값)
@@ -34,5 +36,6 @@ export function describe(m, mmPerPt, unit) {
     return { main: formatAngle(angleDeg(m.points[0], m.points[1], m.points[2])) }
   }
   if (m.type === 'text') return { main: m.text }
+  if (m.type === 'memo') return { main: memoSummary(m) }
   return { main: '' }
 }
