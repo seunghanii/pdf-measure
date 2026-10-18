@@ -12,7 +12,7 @@ import Sidebar from './Sidebar'
 import CalibrationDialog from './CalibrationDialog'
 import DocSearch from './DocSearch'
 import LinkPicker from './LinkPicker'
-import { DEFAULT_MEMO_COLOR, isLinkOnly, memoImageIds, memosAt } from '../lib/memo'
+import { DEFAULT_MEMO_COLOR, isLinkOnly, memoPhotoIds, memosAt } from '../lib/memo'
 
 // 메모장은 마크다운 읽는 도구까지 필요할 때만 불러옴
 const MemoPanel = lazy(() => import('./MemoPanel'))
@@ -50,7 +50,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
     ...saved?.markupStyle,
   }))
   const [croppingId, setCroppingId] = useState(null) // 자르는 중인 사진
-  const [memoOpen, setMemoOpen] = useState(null) // 열린 메모장 { id, others: 같은 자리에 겹친 메모 id 들, edit }
+  const [memoOpen, setMemoOpen] = useState(null) // 열린 메모장 { id, others: 같은 자리에 겹친 메모 id 들 }
   const [linkPicking, setLinkPicking] = useState(null) // 도면 연결 고르는 중인 메모 { id, fresh: 방금 그린 범위 }
   const placeRef = useRef(null) // 뷰어가 사진 넣을 자리를 알려 주는 함수
   const imageInputRef = useRef(null)
@@ -206,7 +206,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
         if (markupStyle.memoKind === 'link') {
           setMemoOpen(null)
           setLinkPicking({ id: m.id, fresh: true })
-        } else setMemoOpen({ id: m.id, others: [], edit: true })
+        } else setMemoOpen({ id: m.id, others: [] })
       }
     },
     [commit, markupStyle],
@@ -396,7 +396,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
         for (const list of [measurementsRef.current, ...historyRef.current])
           for (const m of list) {
             if (m.type === 'image') used.add(m.imageId)
-            if (m.type === 'memo') memoImageIds(m.text).forEach((id) => used.add(id))
+            if (m.type === 'memo') memoPhotoIds(m).forEach((id) => used.add(id))
           }
         const unused = ids.filter((id) => !used.has(id) && !freshImageIds.has(id))
         if (unused.length) await store.removeImages(doc.id, unused)
@@ -449,11 +449,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
         return
       }
       setLinkPicking(null)
-      setMemoOpen((cur) => ({
-        id: target.id,
-        others: stack.length > 1 ? stack.map((m) => m.id) : [],
-        edit: cur?.id === target.id ? cur.edit : !String(target.text ?? '').trim() && !target.link,
-      }))
+      setMemoOpen({ id: target.id, others: stack.length > 1 ? stack.map((m) => m.id) : [] })
     },
     [onOpenLink],
   )
@@ -740,9 +736,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
                 key={memoItem.id}
                 memo={memoItem}
                 others={memoOpen.others.map((id) => measurements.find((m) => m.id === id)).filter((m) => m && !m.hidden)}
-                startEditing={memoOpen.edit}
-                onEditingChange={(edit) => setMemoOpen((cur) => (cur ? { ...cur, edit } : cur))}
-                onSwitch={(id) => setMemoOpen((cur) => ({ ...cur, id, edit: false }))}
+                onSwitch={(id) => setMemoOpen((cur) => ({ ...cur, id }))}
                 onChange={(patch) => editMemo(memoItem.id, patch)}
                 onClose={() => setMemoOpen(null)}
                 onDelete={() => {

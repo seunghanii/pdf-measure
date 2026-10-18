@@ -1,36 +1,41 @@
-// 메모 범위: 도면 위 사각형 범위를 누르면 메모장(마크다운, 사진)이 열리거나, 연결한 다른 도면이 열립니다.
-// 항목 모양: { type: 'memo', points: [두 모서리], color, text (마크다운), link?: { id, name, page } }
-// 메모 속 사진은 도면에 넣는 사진과 같은 저장소(images.js)에 두고, 글에는 ![사진](img:사진id) 로 적습니다.
+// 메모 범위: 도면 위 사각형 범위를 누르면 메모장(글, 사진)이 열리거나, 연결한 다른 도면이 열립니다.
+// 항목 모양: { type: 'memo', points: [두 모서리], color, text (글), images: [사진 id], link?: { id, name, page } }
+// 메모 속 사진은 도면에 넣는 사진과 같은 저장소(images.js)에 둡니다.
+// (처음 판은 글 속에 ![사진](img:사진id) 로 넣었음. 그런 메모는 열 때 images 로 옮김)
 import { rectOf } from './markup'
 
 export const MEMO_COLORS = ['#f59e0b', '#2563eb', '#16a34a', '#db2777', '#64748b']
 export const DEFAULT_MEMO_COLOR = MEMO_COLORS[0]
 
 const IMG_REF = /\(img:([a-z0-9]+)\)/g
+const IMG_LINE = /^[ \t]*!\[[^\]]*\]\(img:[a-z0-9]+\)[ \t]*\n?/gm
 
-// 메모 글에 들어 있는 사진 id 들
+// 예전 메모 글 속에 들어 있는 사진 id 들
 export function memoImageIds(text) {
   return [...String(text ?? '').matchAll(IMG_REF)].map((m) => m[1])
 }
 
-export const memoImageMarkdown = (imageId) => `![사진](img:${imageId})`
+// 메모의 사진 id 전부 (예전 글 속 사진 포함)
+export const memoPhotoIds = (m) => [...new Set([...(m.images ?? []), ...memoImageIds(m.text)])]
+
+// 예전 메모: 글 속 사진 줄을 빼고 사진 목록으로 옮김. 옮길 게 없으면 null
+export function migrateMemo(m) {
+  if (!memoImageIds(m.text).length) return null
+  return { text: String(m.text).replace(IMG_LINE, '').replace(/\n{3,}/g, '\n\n').trim(), images: memoPhotoIds(m) }
+}
 
 // 메모 내용이 비어 있고 도면만 연결된 범위는 누르면 바로 그 도면이 열림
-export const isLinkOnly = (m) => !!m.link && !String(m.text ?? '').trim()
+export const isLinkOnly = (m) => !!m.link && !String(m.text ?? '').trim() && !memoPhotoIds(m).length
 
 // 목록·툴팁에 보여 줄 한 줄 요약
 export function memoSummary(m) {
   const first = String(m.text ?? '')
     .split('\n')
-    .map((l) =>
-      l
-        .replace(/!\[[^\]]*\]\([^)]*\)/g, '[사진]')
-        .replace(/^[#>\-*+\s]+|\[[ xX]\]\s*/g, '')
-        .replace(/[*_`~]/g, '')
-        .trim(),
-    )
+    .map((l) => l.replace(/!\[[^\]]*\]\(img:[^)]*\)/g, '').trim())
     .find(Boolean)
   if (first) return first
+  const photos = memoPhotoIds(m).length
+  if (photos) return `사진 ${photos}장`
   if (m.link) return `→ ${m.link.name}${m.link.page > 1 ? ` ${m.link.page}쪽` : ''}`
   return ''
 }
