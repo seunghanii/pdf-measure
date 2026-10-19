@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import { TOOLS, digitForTool } from '../lib/tools'
 import { toggleSnap, useSnapEnabled } from '../lib/snapSetting'
 import { MEMO_COLORS } from '../lib/memo'
+import { MAX_ZOOM, MIN_ZOOM } from '../lib/zoom'
 import { DEFAULT_BOX_OPACITY, HIGHLIGHT_COLORS, IMAGE_BORDER_COLORS, IMAGE_BORDER_WIDTHS, MARKUP_COLORS, STROKE_TYPES, STROKE_WIDTHS, TEXT_SIZES } from '../lib/markup'
 
 const MARKUP_TOOL_IDS = TOOLS.filter((t) => t.group === 'markup').map((t) => t.id)
@@ -133,11 +134,11 @@ export default function Toolbar({
               </div>
             )}
             <div className="flex items-center gap-1 text-sm">
-              <SmallButton onClick={() => setZoom(Math.max(0.1, zoom / 1.25))} title="축소 (-)">
+              <SmallButton onClick={() => setZoom(Math.max(MIN_ZOOM, zoom / 1.25))} title="축소 (-)">
                 −
               </SmallButton>
               <span className="w-12 text-center tabular-nums">{Math.round(zoom * 100)}%</span>
-              <SmallButton onClick={() => setZoom(Math.min(8, zoom * 1.25))} title="확대 (+)">
+              <SmallButton onClick={() => setZoom(Math.min(MAX_ZOOM, zoom * 1.25))} title="확대 (+)">
                 +
               </SmallButton>
               <button className="ml-1 rounded-md px-2 py-1 text-slate-600 hover:bg-slate-100" onClick={onFit}>

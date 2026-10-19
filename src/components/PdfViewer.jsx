@@ -7,6 +7,7 @@ import { isImageFile } from '../lib/images'
 import { memoDrawOrder } from '../lib/memo'
 import { SNAP_KINDS, findRaySnap, findSnap, loadSnapIndex } from '../lib/snap'
 import { useSnapEnabled } from '../lib/snapSetting'
+import { MAX_ZOOM, MIN_ZOOM } from '../lib/zoom'
 
 const MAX_CANVAS_PIXELS = 16_000_000 // 모바일 사파리 캔버스 한도 근처
 // 크게 확대해서 상세 캔버스가 덮을 때 밑그림 해상도. 낮을수록 확대·축소할 때 덜 버벅임
@@ -191,7 +192,7 @@ export default function PdfViewer({
       const el = containerRef.current
       const inside = el && el.contains(e.target)
       const factor = Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0025))
-      at(Math.min(8, Math.max(0.1, z * factor)), inside ? e.clientX : undefined, inside ? e.clientY : undefined)
+      at(Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z * factor)), inside ? e.clientX : undefined, inside ? e.clientY : undefined)
     }
     // 사파리 트랙패드 핀치
     const onGesture = (e) => e.preventDefault()
@@ -212,7 +213,7 @@ export default function PdfViewer({
     const s = sizes[Math.max(0, pageNum - 1)] ?? sizes[0]
     const fit = Math.min((el.clientWidth - PAD * 2) / s.width, (el.clientHeight - PAD * 2) / s.height)
     viewAnchorRef.current = { page: pageNum - 1, pageX: s.width / 2, pageY: 0, offsetX: el.clientWidth / 2, offsetY: PAD }
-    onZoom(Math.max(0.1, Math.min(8, fit)))
+    onZoom(Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, fit)))
     onFitted(fitKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitKey, fittedKey, sizes])
@@ -230,7 +231,7 @@ export default function PdfViewer({
     if (jump.rect) {
       const r = jump.rect
       const readable = Math.min(8, 14 / Math.max(r.h, 0.5), (el.clientWidth * 0.7) / Math.max(r.w, 1))
-      const z = Math.max(0.1, zoom > readable ? zoom : readable)
+      const z = Math.max(MIN_ZOOM, zoom > readable ? zoom : readable)
       const anchor = {
         page: jump.page - 1,
         pageX: r.x + r.w / 2,
