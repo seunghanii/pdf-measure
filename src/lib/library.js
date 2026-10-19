@@ -17,6 +17,26 @@ export const colorHex = (id) => (FOLDER_COLORS.find((c) => c.id === id) ?? FOLDE
 
 export const EMPTY_LIBRARY = { folders: [], assign: {} }
 
+// 홈 화면에서 눌러 연 폴더 (이 브라우저에만 기억)
+const OPEN_FOLDER_KEY = 'pdf-measure:open-folder'
+
+export function loadOpenFolder() {
+  try {
+    return localStorage.getItem(OPEN_FOLDER_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function saveOpenFolder(id) {
+  try {
+    if (id) localStorage.setItem(OPEN_FOLDER_KEY, id)
+    else localStorage.removeItem(OPEN_FOLDER_KEY)
+  } catch {
+    // 무시
+  }
+}
+
 export function normalizeLibrary(lib) {
   const folders = Array.isArray(lib?.folders) ? lib.folders.filter((f) => f && f.id && typeof f.name === 'string') : []
   const ids = new Set(folders.map((f) => f.id))
