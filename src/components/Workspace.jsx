@@ -13,6 +13,7 @@ import CalibrationDialog from './CalibrationDialog'
 import DocSearch from './DocSearch'
 import LinkPicker from './LinkPicker'
 import { DEFAULT_MEMO_COLOR, isLinkOnly, memoPhotoIds, memosAt } from '../lib/memo'
+import { MAX_ZOOM, MIN_ZOOM } from '../lib/zoom'
 
 // 메모장은 마크다운 읽는 도구까지 필요할 때만 불러옴
 const MemoPanel = lazy(() => import('./MemoPanel'))
@@ -535,7 +536,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
       if (ctrl && (e.key === '=' || e.key === '+' || e.key === '-' || e.key === '0')) {
         e.preventDefault()
         if (e.key === '0') setFitKey((k) => k + 1)
-        else setZoom((z) => (e.key === '-' ? Math.max(0.1, z / 1.25) : Math.min(8, z * 1.25)))
+        else setZoom((z) => (e.key === '-' ? Math.max(MIN_ZOOM, z / 1.25) : Math.min(MAX_ZOOM, z * 1.25)))
         return
       }
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || pendingCalibration) return
@@ -587,8 +588,8 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
       }
       if (e.key === 'Escape' && memoOpen) setMemoOpen(null)
       if (e.key === 'Escape' && tool === 'select') setSelectedIds([])
-      if (e.key === '+' || e.key === '=') setZoom((z) => Math.min(8, z * 1.25))
-      if (e.key === '-') setZoom((z) => Math.max(0.1, z / 1.25))
+      if (e.key === '+' || e.key === '=') setZoom((z) => Math.min(MAX_ZOOM, z * 1.25))
+      if (e.key === '-') setZoom((z) => Math.max(MIN_ZOOM, z / 1.25))
       if (e.key === 'PageDown') {
         e.preventDefault()
         jumpTo(pageNum + 1)
