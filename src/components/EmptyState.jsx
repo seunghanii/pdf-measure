@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { AuthPanel, MigrationCard } from './Account'
 import { FOLDER_COLORS, addFolder, colorHex, deleteFolder, editFolder, moveDoc } from '../lib/library'
 
@@ -42,6 +42,8 @@ export default function EmptyState({
   library,
   onUpdateLibrary,
   onRename,
+  openFolderId, // 펼쳐 본 폴더. 이때 연 PDF 는 이 폴더에 들어감
+  setOpenFolderId,
   cloud, // 로그인해서 서버에 저장 중
   showLogin,
   store,
@@ -125,6 +127,8 @@ export default function EmptyState({
                 onRename={onRename}
                 onUpdateLibrary={onUpdateLibrary}
                 onEditFolder={(folder) => setFolderDialog(folder)}
+                openFolderId={openFolderId}
+                setOpenFolderId={setOpenFolderId}
               />
             )}
             <button onClick={onOpenSample} className="mt-3 px-1 text-sm text-blue-600 hover:underline">
@@ -168,16 +172,7 @@ export default function EmptyState({
   )
 }
 
-const OPEN_FOLDER_KEY = 'pdf-measure:open-folder'
 const DRAG_TYPE = 'application/x-pdf-measure-doc'
-
-function loadOpenFolder() {
-  try {
-    return localStorage.getItem(OPEN_FOLDER_KEY)
-  } catch {
-    return null
-  }
-}
 
 function FolderIcon({ className, color, open, fill }) {
   return (
@@ -192,18 +187,9 @@ function FolderIcon({ className, color, open, fill }) {
 }
 
 // 폴더별로 묶은 도면 목록
-function Library({ list, library, openIds, cloud, onOpen, onRemove, onRename, onUpdateLibrary, onEditFolder }) {
-  const [openFolderId, setOpenFolderId] = useState(loadOpenFolder) // 펼쳐 본 폴더
+function Library({ list, library, openIds, cloud, onOpen, onRemove, onRename, onUpdateLibrary, onEditFolder, openFolderId, setOpenFolderId }) {
   const [dropTarget, setDropTarget] = useState(undefined) // 폴더 id, 'none' = 폴더 밖
   const [dragging, setDragging] = useState(false)
-  useEffect(() => {
-    try {
-      if (openFolderId) localStorage.setItem(OPEN_FOLDER_KEY, openFolderId)
-      else localStorage.removeItem(OPEN_FOLDER_KEY)
-    } catch {
-      // 무시
-    }
-  }, [openFolderId])
 
   const { folders, assign } = library
   const loose = list.filter((item) => !assign[item.id])
@@ -324,7 +310,7 @@ function Library({ list, library, openIds, cloud, onOpen, onRemove, onRename, on
               shown.map(row)
             ) : (
               <li className="px-4 py-4 text-center text-sm text-slate-400">
-                비어 있어요. 도면을 폴더 칸에 끌어다 놓거나 도면의 폴더 버튼으로 넣어 보세요.
+                비어 있어요. 지금 PDF 를 열면 이 폴더에 들어가요. 다른 도면은 폴더 칸에 끌어다 놓거나 도면의 폴더 버튼으로 넣어 보세요.
               </li>
             )}
           </ul>

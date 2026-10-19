@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { loadPdf } from './lib/pdf'
 import { fileIdOf, loadSession, localStore, saveSession } from './lib/storage'
 import { createCloudStore, MAX_UPLOAD_BYTES } from './lib/cloudStore'
-import { EMPTY_LIBRARY, moveDoc } from './lib/library'
+import { EMPTY_LIBRARY, loadOpenFolder, moveDoc, saveOpenFolder } from './lib/library'
 import { cloudConfigured, networkHint, signOut, supabase } from './lib/supabase'
 import Workspace from './components/Workspace'
 import Toolbar from './components/Toolbar'
@@ -60,6 +60,8 @@ export default function App() {
 function Session({ store, user, onLogout, onChangePassword }) {
   const [docs, setDocs] = useState([]) // 열린 탭: { id, name, pdfDoc, savedState, store }
   const [activeId, setActiveId] = useState(null) // null = 홈(최근 파일)
+  const [openFolderId, setOpenFolderId] = useState(loadOpenFolder) // 홈 화면에서 펼쳐 본 폴더
+  useEffect(() => saveOpenFolder(openFolderId), [openFolderId])
   const [recent, setRecent] = useState(store.kind === 'cloud' ? null : []) // null = 서버에서 불러오는 중
   const [library, setLibrary] = useState(EMPTY_LIBRARY) // 홈 화면 폴더
   const [error, setError] = useState('')
@@ -179,7 +181,9 @@ function Session({ store, user, onLogout, onChangePassword }) {
       try {
         if (storeRef.current.kind === 'cloud' && file.size > MAX_UPLOAD_BYTES)
           setWarning(`"${file.name}" 은(는) 50MB 가 넘어 PDF 파일은 서버에 올라가지 않아요. 측정값은 서버에 저장돼요.`)
-        await openDoc(fileIdOf(file), file)
+        const id = fileIdOf(file)
+        await openDoc(id, file)
+        return id
       } catch (e) {
         console.error(e)
         setError(`"${file.name}" 을(를) 열 수 없습니다. 암호가 걸려 있거나 손상된 PDF인지 확인해 주세요.`)
@@ -352,11 +356,17 @@ function Session({ store, user, onLogout, onChangePassword }) {
     const files = [...e.dataTransfer.files].filter(
       (f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'),
     )
-    for (const f of files) await openFile(f)
+    await openFiles(files)
   }
 
+  // 홈 화면에서 폴더를 열어 둔 채 PDF 를 열면 그 폴더에 넣음.
+  // 이미 다른 폴더에 있던 도면은 그대로 둠.
   const openFiles = async (files) => {
-    for (const f of files) await openFile(f)
+    const folderId = activeId === null && library.folders.some((f) => f.id === openFolderId) ? openFolderId : null
+    for (const f of files) {
+      const id = await openFile(f)
+      if (id && folderId) updateLibrary((lib) => (lib.assign[id] ? lib : moveDoc(lib, id, folderId)))
+    }
   }
 
   return (
@@ -441,6 +451,8 @@ function Session({ store, user, onLogout, onChangePassword }) {
           library={library}
           onUpdateLibrary={updateLibrary}
           onRename={renameDoc}
+          openFolderId={openFolderId}
+          setOpenFolderId={setOpenFolderId}
           onRemoveRecent={async (item) => {
             try {
               await storeRef.current.removeFile(item.id)
