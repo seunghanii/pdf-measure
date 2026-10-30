@@ -2,6 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { distance } from '../lib/geometry'
 import { PT_TO_PAPER_MM, UNITS, calibrationInput } from '../lib/units'
 import { TYPE_INFO } from '../lib/measure'
+import { canCategorize, newCategoryId, nextCategoryColor, withCategory } from '../lib/categories'
 import { DEFAULT_BOX_OPACITY, FULL_CROP, MARKUP_STROKE, STROKE_TYPES, isCropped, isMarkup, rectOf, strokeOf } from '../lib/markup'
 import { ImageSource, freshImageIds, getImageBlob, isImageFile, newImageId, prepareImage, rememberImage } from '../lib/images'
 import { TOOLS, toolForDigit } from '../lib/tools'
@@ -33,6 +34,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
   const [tool, setTool] = useState(saved?.calibration ? 'length' : 'calibrate')
   const [measurements, setMeasurements] = useState(saved?.measurements ?? [])
   const [history, setHistory] = useState([])
+  const [categories, setCategories] = useState(saved?.categories ?? []) // 측정 분류 [{ id, name, color }]
   const [calibration, setCalibration] = useState(saved?.calibration ?? null)
   const [pendingCalibration, setPendingCalibration] = useState(null)
   const [selectedIds, setSelectedIds] = useState([]) // 선택된 항목들 (드래그·Shift+클릭으로 여러 개)
@@ -50,6 +52,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
     imageBorderWidth: 1,
     memoColor: DEFAULT_MEMO_COLOR,
     memoKind: 'note', // 새 메모 범위: 'note' 메모장 | 'link' 다른 도면 열기
+    measureCat: null, // 새로 재는 길이·면적·각도에 붙일 분류 id
     ...saved?.markupStyle,
   }))
   const [croppingId, setCroppingId] = useState(null) // 자르는 중인 사진
@@ -78,7 +81,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
   // 측정값이 바뀌면 잠시 뒤 자동 저장 (로그인했으면 서버, 아니면 이 브라우저)
   const store = doc.store
   const cloud = store.kind === 'cloud'
-  const syncStatus = useAutosave({ store, docId: doc.id, measurements, calibration, unit, markupStyle, counters, pageNum })
+  const syncStatus = useAutosave({ store, docId: doc.id, measurements, categories, calibration, unit, markupStyle, counters, pageNum })
 
   // 축척: PDF 1pt 가 실제 몇 mm 인지
   const mmPerPt = useMemo(() => {
@@ -140,7 +143,8 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
         if (STROKE_TYPES.includes(type)) m.strokeWidth = markupStyle.strokeWidth
       }
       Object.assign(m, extra)
-      commit((prev) => [...prev, m])
+      const cat = !isMarkup(type) && markupStyle.measureCat && categories.find((c) => c.id === markupStyle.measureCat)
+      commit((prev) => [...prev, cat ? withCategory(m, cat) : m])
       setSelectedIds([m.id])
       // 새 메모 범위: 바로 메모장(쓰기)을 열거나, 연결할 도면을 고름
       if (type === 'memo') {
@@ -150,7 +154,41 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
         } else setMemoOpen({ id: m.id, others: [] })
       }
     },
-    [commit, markupStyle],
+    [categories, commit, markupStyle],
+  )
+
+  // ---------- 측정 분류 ----------
+  const addCategory = (name) => {
+    const cat = { id: newCategoryId(), name, color: nextCategoryColor(categories) }
+    setCategories((list) => [...list, cat])
+    return cat
+  }
+  // 이름·색 바꾸기. 색이 바뀌면 그 분류 항목들의 색도 함께 (분류 설정이라 되돌리기 목록에는 넣지 않음)
+  const updateCategory = (id, patch) => {
+    const cat = { ...categories.find((c) => c.id === id), ...patch }
+    setCategories((list) => list.map((c) => (c.id === id ? cat : c)))
+    if (patch.color) {
+      const recolor = (ms) => ms.map((m) => (m.cat === id ? withCategory(m, cat) : m))
+      setMeasurements(recolor)
+      setHistory((h) => h.map(recolor))
+    }
+  }
+  // 분류를 지우면 그 분류였던 항목은 분류 없음으로
+  const deleteCategory = (id) => {
+    const strip = (ms) => ms.map((m) => (m.cat === id ? withCategory(m, null) : m))
+    setCategories((list) => list.filter((c) => c.id !== id))
+    setMeasurements(strip)
+    setHistory((h) => h.map(strip))
+    if (markupStyle.measureCat === id) setMarkupStyle((st) => ({ ...st, measureCat: null }))
+  }
+  // 항목들에 분류 붙이기 (catId 가 null 이면 떼기). Ctrl+Z 로 되돌릴 수 있음
+  const assignCategory = useCallback(
+    (ids, catId) => {
+      const cat = catId ? categories.find((c) => c.id === catId) : null
+      const set = new Set(ids)
+      commit((prev) => prev.map((m) => (set.has(m.id) && canCategorize(m) ? withCategory(m, cat) : m)))
+    },
+    [categories, commit],
   )
 
   // { id: points } 로 여러 항목의 점을 한꺼번에 바꾸기 (선택한 것 함께 옮기기)
@@ -730,6 +768,13 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
           onToggleHidden={toggleHidden}
           onSetAllHidden={setAllHidden}
           onRename={(id, name) => setMeasurements((prev) => prev.map((m) => (m.id === id ? { ...m, name } : m)))}
+          categories={categories}
+          activeCategory={markupStyle.measureCat}
+          onSetActiveCategory={(id) => setMarkupStyle((st) => ({ ...st, measureCat: id }))}
+          onAddCategory={addCategory}
+          onUpdateCategory={updateCategory}
+          onDeleteCategory={deleteCategory}
+          onAssignCategory={assignCategory}
           onClear={(group) => {
             commit((prev) => prev.filter((m) => (group === 'markup') !== isMarkup(m.type)))
             setSelectedIds([])
@@ -744,6 +789,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
               ref={searchRef}
               doc={doc}
               measurements={measurements}
+              categories={categories}
               onGo={jumpToHit}
               action={<SidebarToggle open onClick={() => setSidebarOpen(false)} />}
             />

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 // counters: 종류별 번호를 담은 ref
-export function useAutosave({ store, docId, measurements, calibration, unit, markupStyle, counters, pageNum }) {
+export function useAutosave({ store, docId, measurements, categories, calibration, unit, markupStyle, counters, pageNum }) {
   const cloud = store.kind === 'cloud'
   const [syncStatus, setSyncStatus] = useState('saved')
   const queue = useRef({ busy: false, next: null })
@@ -40,7 +40,7 @@ export function useAutosave({ store, docId, measurements, calibration, unit, mar
   const stateRef = useRef(null)
   useLayoutEffect(() => {
     pageRef.current = pageNum
-    stateRef.current = { measurements, calibration, unit, markupStyle, counters: counters.current }
+    stateRef.current = { measurements, categories, calibration, unit, markupStyle, counters: counters.current }
   })
   useEffect(() => {
     // 처음 열었을 때는 불러온 그대로라 저장할 필요 없음
@@ -48,7 +48,7 @@ export function useAutosave({ store, docId, measurements, calibration, unit, mar
       firstRun.current = false
       return
     }
-    const state = { measurements, calibration, unit, markupStyle, counters: counters.current }
+    const state = { measurements, categories, calibration, unit, markupStyle, counters: counters.current }
     latest.current = state
     const t = setTimeout(() => {
       latest.current = null
@@ -56,7 +56,7 @@ export function useAutosave({ store, docId, measurements, calibration, unit, mar
       persist({ ...state, pageNum: pageRef.current })
     }, store.saveDelay)
     return () => clearTimeout(t)
-  }, [measurements, calibration, unit, markupStyle, counters, persist, store.saveDelay])
+  }, [measurements, categories, calibration, unit, markupStyle, counters, persist, store.saveDelay])
 
   // 탭을 닫거나 창을 닫을 때 아직 저장 안 된 변경(페이지 이동 포함)이 있으면 바로 저장
   useEffect(() => {

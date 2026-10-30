@@ -24,6 +24,7 @@ Tailwind 기본 색은 꺼 두었습니다(`--color-*: initial`). 아래 이름�
 | `desk` | `#e4e7ed` | 도면 뒤 바탕 |
 
 도면 위에 그리는 측정·마크업 색(`lib/markup.js`, `lib/measure.js`, `lib/memo.js`)은 사용자가 고른 데이터라 토큰과 별개입니다.
+측정 분류 색(`lib/categories.js` `CATEGORY_COLORS`)도 데이터 색이지만, 파랑·주황·분홍과 헷갈리지 않도록 청록·보라·갈색·빨강 계열만 둡니다.
 색을 바꾸려면 `@theme` 값만 고치면 앱 전체에 반영됩니다.
 
 ## 모양

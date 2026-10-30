@@ -83,7 +83,7 @@ function offsetLabel(a, b, dist = 14) {
 function MeasurementShape({ m, zoom, mmPerPt, unit, selected, showHandles, showResize, draft, closeHint, endHint, cropping, exporting }) {
   if (m.type === 'image') return <ImageShape m={m} zoom={zoom} selected={selected} showHandles={showHandles} cropping={cropping} exporting={exporting} />
   if (isMarkup(m.type)) return <MarkupShape m={m} zoom={zoom} selected={selected} showHandles={showHandles} showResize={showResize} draft={draft} />
-  const color = TYPE_INFO[m.type].color
+  const color = m.color ?? TYPE_INFO[m.type].color // 분류가 있으면 분류 색
   const pts = m.points.map((p) => ({ x: p.x * zoom, y: p.y * zoom }))
   const strokeWidth = selected ? 3 : 2
   const dash = draft ? '6 4' : undefined

@@ -118,7 +118,7 @@ export function summarize(state) {
   return {
     count: state?.measurements?.length ?? 0,
     calibration: state?.calibration ?? null,
-    notes: noteItems(state?.measurements),
+    notes: noteItems(state?.measurements, state?.categories),
   }
 }
 
