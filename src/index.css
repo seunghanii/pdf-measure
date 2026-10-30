@@ -175,6 +175,14 @@
   opacity: 1;
 }
 
+/* 선택 상자의 × 삭제 단추 (components/SelectionBox.jsx) */
+.selection-delete {
+  transition: fill 0.12s;
+}
+[data-delete]:hover .selection-delete {
+  fill: var(--color-danger-700);
+}
+
 /* 메모장 글: 쓰는 자리에서 바로 꾸며지는 마크다운 (components/MemoEditor.jsx) */
 .memo-doc {
   font-size: 14px;
