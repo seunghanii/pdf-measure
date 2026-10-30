@@ -194,12 +194,26 @@ export function createCloudStore(supabase, user) {
           .order('last_opened', { ascending: false })
           .limit(MAX_RECENT),
       )
-      // 요약을 넣기 전에 저장된 도면만 측정값 전체를 받아 요약 (다음 저장부터는 요약이 생김)
-      const old = rows.filter((r) => !r.summary).map((r) => r.file_key)
+      // 요약이 없거나 예전 모양(검색용 글 notes 없음)인 도면만 측정값 전체를 받아 요약하고,
+      // 요약을 서버에 한 번 고쳐 써 둠 (다음부터는 요약만 받음). 그사이 다른 저장이 있었으면 쓰지 않음
+      const isOld = (r) => !Array.isArray(r.summary?.notes)
+      const old = rows.filter(isOld).map((r) => r.file_key)
       if (old.length) {
-        const full = check(await table().select('file_key, state').eq('user_id', uid).in('file_key', old))
-        const byKey = new Map(full.map((r) => [r.file_key, summarize(r.state)]))
-        for (const r of rows) if (!r.summary) r.summary = byKey.get(r.file_key)
+        const full = check(await table().select('file_key, state, updated_at').eq('user_id', uid).in('file_key', old))
+        const byKey = new Map(full.map((r) => [r.file_key, r]))
+        for (const r of rows) {
+          if (!isOld(r) || !byKey.has(r.file_key)) continue
+          const { state, updated_at } = byKey.get(r.file_key)
+          r.summary = summarize(state)
+          if (state)
+            table()
+              .update({ state: { ...state, summary: r.summary } })
+              .eq('user_id', uid)
+              .eq('file_key', r.file_key)
+              .eq('updated_at', updated_at)
+              .then(check)
+              .catch((e) => console.warn(e))
+        }
       }
       const list = rows.map(toRecord)
       cachePrune(new Set(list.map((r) => r.path))).catch(() => {})

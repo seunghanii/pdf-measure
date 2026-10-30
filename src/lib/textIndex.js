@@ -137,6 +137,19 @@ export function searchIndex(index, query, limit = 200) {
   return hits
 }
 
+// 직접 넣은 글(notes.js noteItems) 에서 찾기 → [{ page, text, rect, note: 'text'|'memo' }]  rect 는 상자 전체
+export function searchNotes(notes, query, limit = 200) {
+  const q = norm(query)
+  if (!q || !notes) return []
+  const hits = []
+  for (const [s, x, y, w, h, page, kind] of notes) {
+    if (!norm(s).includes(q)) continue
+    hits.push({ page, text: s, rect: { x, y, w, h }, note: kind })
+    if (hits.length >= limit) break
+  }
+  return hits
+}
+
 // 검색어 부분을 강조하려고 나눔 → [앞, 찾은 부분, 뒤] (띄어쓰기·기호 무시하고 찾은 것도 처리)
 export function splitMatch(text, query) {
   const q = norm(query)

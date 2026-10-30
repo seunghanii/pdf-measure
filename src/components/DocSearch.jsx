@@ -1,18 +1,25 @@
 import { forwardRef, useEffect, useMemo, useRef, useState } from 'react'
 import { useDocIndex } from '../lib/indexer'
-import { searchIndex } from '../lib/textIndex'
-import { Highlighted, IndexerStatusLine, SearchIcon } from './SearchPanel'
+import { noteItems } from '../lib/notes'
+import { searchIndex, searchNotes } from '../lib/textIndex'
+import { Highlighted, HitBadge, IndexerStatusLine, SearchIcon } from './SearchPanel'
 
 const MAX_SHOWN = 40
 const PREVIEW_W = 256
 const PREVIEW_H = 96
 
 // 도면 안 검색 창 (오른쪽 목록 맨 위). 찾은 곳마다 작은 미리보기, 누르면 그 위치로 이동
-const DocSearch = forwardRef(function DocSearch({ doc, onGo }, inputRef) {
+// 직접 넣은 글(텍스트 상자, 메모)은 도면 글자보다 먼저, 미리보기 없이 한 줄로 나옴
+const DocSearch = forwardRef(function DocSearch({ doc, measurements, onGo }, inputRef) {
   const index = useDocIndex(doc.store, doc.id)
   const [query, setQuery] = useState('')
   const [current, setCurrent] = useState(-1)
-  const hits = useMemo(() => searchIndex(index, query, 1000), [index, query])
+  const searching = !!query.trim()
+  const notes = useMemo(() => (searching ? noteItems(measurements) : null), [searching, measurements])
+  const hits = useMemo(
+    () => [...searchNotes(notes, query, 1000), ...searchIndex(index, query, 1000)],
+    [notes, index, query],
+  )
   const shown = hits.slice(0, MAX_SHOWN)
 
   const go = (i) => {
@@ -55,10 +62,12 @@ const DocSearch = forwardRef(function DocSearch({ doc, onGo }, inputRef) {
 
       <div className="mt-1.5">
         <IndexerStatusLine onlyId={doc.id} />
-        {!index && !query && <p className="text-xs text-slate-400">이 도면의 글자를 다 읽으면 검색할 수 있어요.</p>}
+        {!index && !query && (
+          <p className="text-xs text-slate-400">직접 넣은 글은 바로, 도면 글자는 다 읽은 뒤에 찾을 수 있어요.</p>
+        )}
       </div>
 
-      {query.trim() && index && (
+      {query.trim() && (index || hits.length > 0) && (
         <div className="mt-2 max-h-80 space-y-1.5 overflow-auto">
           {!hits.length && <p className="py-2 text-center text-xs text-slate-400">찾는 글자가 없어요.</p>}
           {shown.map((hit, i) => (
@@ -69,13 +78,13 @@ const DocSearch = forwardRef(function DocSearch({ doc, onGo }, inputRef) {
                 i === current ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-200 hover:border-blue-300'
               }`}
             >
-              <HitPreview pdfDoc={doc.pdfDoc} hit={hit} />
+              {!hit.note && <HitPreview pdfDoc={doc.pdfDoc} hit={hit} />}
               <div className="flex items-center gap-2 px-2 py-1 text-xs">
                 <span className="shrink-0 text-slate-400">{hit.page}쪽</span>
                 <span className="min-w-0 flex-1 truncate">
                   <Highlighted text={hit.text} query={query} />
                 </span>
-                {hit.ocr && <span className="shrink-0 text-[10px] text-slate-400">OCR</span>}
+                <HitBadge hit={hit} />
               </div>
             </button>
           ))}

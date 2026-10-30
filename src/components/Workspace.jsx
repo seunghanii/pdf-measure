@@ -724,7 +724,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
           onApplyRatio={applyRatio}
           onResetCalibration={() => setCalibration(null)}
           fileName={fileName}
-          top={<DocSearch ref={searchRef} doc={doc} onGo={jumpToHit} />}
+          top={<DocSearch ref={searchRef} doc={doc} measurements={measurements} onGo={jumpToHit} />}
         />
       </div>
 
