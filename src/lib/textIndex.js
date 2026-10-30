@@ -1,8 +1,11 @@
 // 도면 글자 색인: 페이지마다 글자 덩어리와 그 위치를 한 번만 뽑아 저장해 두고 검색에 씁니다.
 // { v, pages: [{ items: [[글자, x, y, w, h], ...], ocr?: true }] }  (좌표는 배율 1 페이지 좌표, 뷰어와 같음)
 // PDF 에 글자 정보가 있으면 그대로 쓰고, 글자가 그림으로 들어 있을 만한 페이지는 나머지 부분을 OCR 합니다.
-import { OPS, Util } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import { mergeLine } from './textMerge'
+import { getPdfjs } from './pdf'
+
+let OPS = null // pdf.js 는 색인을 만들 때 불러옴 (검색만 할 때는 필요 없음)
+let Util = null
 
 export const INDEX_VERSION = 1
 const MIN_TEXT_CHARS = 6 // 글자가 이보다 적으면 스캔본이거나 글자를 선으로 바꾼 도면
@@ -78,6 +81,7 @@ const charCount = (items) => items.reduce((n, i) => n + i.s.replace(/\s/g, '').l
 
 // 문서 전체 색인 만들기. onProgress({ page, pages, ocr, done(0~1) })
 export async function buildIndex(pdfDoc, { onProgress, signal } = {}) {
+  ;({ OPS, Util } = await getPdfjs())
   const pages = []
   let renderer = null // OCR 조각을 그려 줄 웹 워커 (OCR 할 페이지가 처음 나올 때 띄움)
   try {

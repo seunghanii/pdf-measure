@@ -1,27 +1,20 @@
 // 자석(스냅): 도면의 벡터 선(끝점·교차점·선 위)과 이미 찍은 측정 점에 커서를 붙입니다.
 // 스캔한 이미지 PDF 에는 벡터 선이 없어서 측정 점에만 붙습니다.
-import { OPS } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import { distance } from './geometry'
-
-const DRAW_MOVE = 0
-const DRAW_LINE = 1
-const DRAW_CURVE = 2
-const DRAW_QUAD = 3
-const DRAW_CLOSE = 4
-const CURVE_STEPS = 8 // 곡선은 짧은 직선 여러 개로 나눠서 다룸
-const MAX_SEGMENTS = 500_000 // 아주 복잡한 도면에서 메모리가 넘치지 않게
+import { getPdfjs } from './pdf'
 
 // 그리는 동작(선 긋기·채우기)만. endPath 는 보이지 않는 잘라내기 경로라 뺌
-const PAINT_OPS = new Set([
-  OPS.stroke,
-  OPS.closeStroke,
-  OPS.fill,
-  OPS.eoFill,
-  OPS.fillStroke,
-  OPS.eoFillStroke,
-  OPS.closeFillStroke,
-  OPS.closeEOFillStroke,
-])
+const paintOps = (OPS) =>
+  new Set([
+    OPS.stroke,
+    OPS.closeStroke,
+    OPS.fill,
+    OPS.eoFill,
+    OPS.fillStroke,
+    OPS.eoFillStroke,
+    OPS.closeFillStroke,
+    OPS.closeEOFillStroke,
+  ])
 
 // 스냅 종류: 우선순위가 낮을수록 먼저 (같은 반경 안이면 끝점 > 교차점 > 선 위)
 export const SNAP_KINDS = {
@@ -31,134 +24,74 @@ export const SNAP_KINDS = {
   line: { label: '선 위', rank: 2 },
 }
 
-// m(n(p)) : n 을 먼저, 그다음 m 을 적용
-function compose(m, n) {
-  return [
-    m[0] * n[0] + m[2] * n[1],
-    m[1] * n[0] + m[3] * n[1],
-    m[0] * n[2] + m[2] * n[3],
-    m[1] * n[2] + m[3] * n[3],
-    m[0] * n[4] + m[2] * n[5] + m[4],
-    m[1] * n[4] + m[3] * n[5] + m[5],
-  ]
+// 페이지의 그리기 명령을 받아, 선분 뽑기와 격자 만들기는 웹 워커(snap.worker.js)에서 합니다.
+// 복잡한 도면은 선이 수십만 개라 화면 스레드에서 하면 처음 자석을 쓸 때 화면이 멈칫합니다.
+let worker = null
+let seq = 0
+const waiting = new Map()
+
+function buildInWorker(msg) {
+  if (!worker) {
+    worker = new Worker(new URL('./snap.worker.js', import.meta.url), { type: 'module' })
+    worker.onmessage = ({ data }) => {
+      const w = waiting.get(data.id)
+      waiting.delete(data.id)
+      if (data.error) w?.reject(new Error(data.error))
+      else w?.resolve(data.index)
+    }
+    worker.onerror = (e) => {
+      for (const w of waiting.values()) w.reject(e)
+      waiting.clear()
+      worker?.terminate()
+      worker = null
+    }
+  }
+  const id = ++seq
+  return new Promise((resolve, reject) => {
+    waiting.set(id, { resolve, reject })
+    worker.postMessage({ id, ...msg })
+  })
 }
 
-function apply(m, x, y) {
-  return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]]
-}
-
-// 페이지의 그리기 명령에서 선분을 뽑아 페이지 좌표(배율 1, pt)로 변환
-async function extractSegments(page) {
+async function buildIndex(page) {
+  const { OPS } = await getPdfjs()
+  const PAINT_OPS = paintOps(OPS)
   const viewport = page.getViewport({ scale: 1 })
-  const ops = await page.getOperatorList()
-  const segs = [] // [x1, y1, x2, y2, ...] 평평한 배열
-  let ctm = viewport.transform.slice()
-  const stack = []
-
-  const addPath = (data) => {
-    let sx = 0
-    let sy = 0 // 하위 경로 시작점 (closePath 용)
-    let cx = 0
-    let cy = 0
-    const line = (x, y) => {
-      const [ax, ay] = apply(ctm, cx, cy)
-      const [bx, by] = apply(ctm, x, y)
-      if (ax !== bx || ay !== by) segs.push(ax, ay, bx, by)
-      cx = x
-      cy = y
-    }
-    for (let i = 0; i < data.length && segs.length < MAX_SEGMENTS * 4; ) {
-      switch (data[i++]) {
-        case DRAW_MOVE:
-          cx = sx = data[i++]
-          cy = sy = data[i++]
-          break
-        case DRAW_LINE:
-          line(data[i++], data[i++])
-          break
-        case DRAW_CURVE: {
-          const [x0, y0, x1, y1, x2, y2, x3, y3] = [cx, cy, data[i++], data[i++], data[i++], data[i++], data[i++], data[i++]]
-          for (let k = 1; k <= CURVE_STEPS; k++) {
-            const t = k / CURVE_STEPS
-            const u = 1 - t
-            line(
-              u * u * u * x0 + 3 * u * u * t * x1 + 3 * u * t * t * x2 + t * t * t * x3,
-              u * u * u * y0 + 3 * u * u * t * y1 + 3 * u * t * t * y2 + t * t * t * y3,
-            )
-          }
-          break
-        }
-        case DRAW_QUAD: {
-          const [x0, y0, x1, y1, x2, y2] = [cx, cy, data[i++], data[i++], data[i++], data[i++]]
-          for (let k = 1; k <= CURVE_STEPS; k++) {
-            const t = k / CURVE_STEPS
-            const u = 1 - t
-            line(u * u * x0 + 2 * u * t * x1 + t * t * x2, u * u * y0 + 2 * u * t * y1 + t * t * y2)
-          }
-          break
-        }
-        case DRAW_CLOSE:
-          line(sx, sy)
-          break
-        default:
-          return // 모르는 명령이면 이 경로는 건너뜀
-      }
-    }
+  const list = await page.getOperatorList()
+  // 워커에는 자석에 필요한 명령만 보냄 (복사할 양을 줄이고, 복사할 수 없는 값이 섞이지 않게)
+  const keep = new Set([OPS.save, OPS.restore, OPS.transform, OPS.paintFormXObjectBegin, OPS.paintFormXObjectEnd, OPS.beginGroup, OPS.endGroup, OPS.constructPath])
+  const fnArray = []
+  const argsArray = []
+  for (let i = 0; i < list.fnArray.length; i++) {
+    const fn = list.fnArray[i]
+    if (!keep.has(fn)) continue
+    const args = list.argsArray[i]
+    fnArray.push(fn)
+    if (fn === OPS.transform) argsArray.push(args)
+    else if (fn === OPS.paintFormXObjectBegin) argsArray.push([args?.[0] ?? null])
+    else if (fn === OPS.beginGroup) argsArray.push([{ matrix: args?.[0]?.matrix ?? null }])
+    else if (fn === OPS.constructPath) argsArray.push(PAINT_OPS.has(args?.[0]) ? [args[0], [args[1]?.[0]]] : [null, null])
+    else argsArray.push(null)
   }
-
-  const { fnArray, argsArray } = ops
-  for (let i = 0; i < fnArray.length; i++) {
-    const fn = fnArray[i]
-    const args = argsArray[i]
-    if (fn === OPS.save) stack.push(ctm)
-    else if (fn === OPS.restore) ctm = stack.pop() ?? ctm
-    else if (fn === OPS.transform) ctm = compose(ctm, args)
-    else if (fn === OPS.paintFormXObjectBegin || fn === OPS.beginGroup) {
-      stack.push(ctm)
-      const matrix = fn === OPS.beginGroup ? args[0]?.matrix : args[0]
-      if (matrix) ctm = compose(ctm, matrix)
-    } else if (fn === OPS.paintFormXObjectEnd || fn === OPS.endGroup) ctm = stack.pop() ?? ctm
-    else if (fn === OPS.constructPath) {
-      const [paint, data] = args
-      if (PAINT_OPS.has(paint) && data?.[0]) addPath(data[0])
-    }
+  const ops = {
+    save: OPS.save,
+    restore: OPS.restore,
+    transform: OPS.transform,
+    paintFormXObjectBegin: OPS.paintFormXObjectBegin,
+    paintFormXObjectEnd: OPS.paintFormXObjectEnd,
+    beginGroup: OPS.beginGroup,
+    endGroup: OPS.endGroup,
+    constructPath: OPS.constructPath,
+    paint: [...PAINT_OPS],
   }
-  return { segs: new Float64Array(segs), width: viewport.width, height: viewport.height }
+  const data = await buildInWorker({ fnArray, argsArray, ops, transform: viewport.transform, width: viewport.width, height: viewport.height })
+  return new SnapIndex(data)
 }
 
-// 격자 칸마다 그 칸을 지나는 선분 번호를 담아 두고, 커서 근처 칸만 찾아봄
+// 격자 칸마다 그 칸을 지나는 선분 번호 (워커가 만든 것: cellStart[칸]~cellStart[칸+1] 이 cellItems 의 범위)
 class SnapIndex {
-  constructor({ segs, width, height }) {
-    this.segs = segs
-    this.count = segs.length / 4
-    this.cell = Math.max(width, height, 1) / 256
-    this.cols = Math.ceil(width / this.cell) + 1
-    this.rows = Math.ceil(height / this.cell) + 1
-    this.grid = new Map()
-    for (let s = 0; s < this.count; s++) {
-      const x1 = segs[s * 4]
-      const y1 = segs[s * 4 + 1]
-      const x2 = segs[s * 4 + 2]
-      const y2 = segs[s * 4 + 3]
-      const steps = Math.ceil(Math.hypot(x2 - x1, y2 - y1) / (this.cell / 2)) + 1
-      let last = -1
-      for (let k = 0; k <= steps; k++) {
-        const t = k / steps
-        const key = this.key(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t)
-        if (key === last || key < 0) continue
-        last = key
-        let list = this.grid.get(key)
-        if (!list) this.grid.set(key, (list = []))
-        if (list[list.length - 1] !== s) list.push(s)
-      }
-    }
-  }
-
-  key(x, y) {
-    const c = Math.floor(x / this.cell)
-    const r = Math.floor(y / this.cell)
-    if (c < 0 || r < 0 || c >= this.cols || r >= this.rows) return -1
-    return r * this.cols + c
+  constructor({ segs, cell, cols, rows, cellStart, cellItems }) {
+    Object.assign(this, { segs, cell, cols, rows, cellStart, cellItems })
   }
 
   // p 에서 r 안에 있는 선분 [{ s, d, foot }] (가까운 순)
@@ -171,9 +104,9 @@ class SnapIndex {
     const out = []
     for (let row = Math.max(0, r0); row <= Math.min(this.rows - 1, r1); row++) {
       for (let col = Math.max(0, c0); col <= Math.min(this.cols - 1, c1); col++) {
-        const list = this.grid.get(row * this.cols + col)
-        if (!list) continue
-        for (const s of list) {
+        const key = row * this.cols + col
+        for (let k = this.cellStart[key]; k < this.cellStart[key + 1]; k++) {
+          const s = this.cellItems[k]
           if (seen.has(s)) continue
           seen.add(s)
           const foot = closestOnSegment(p, this.seg(s))
@@ -225,8 +158,7 @@ export function loadSnapIndex(pdfDoc, pageNum) {
   if (!task) {
     task = pdfDoc
       .getPage(pageNum)
-      .then(extractSegments)
-      .then((data) => new SnapIndex(data))
+      .then(buildIndex)
       .catch((e) => {
         console.warn('자석: 도면 선을 읽지 못했어요', e)
         return null

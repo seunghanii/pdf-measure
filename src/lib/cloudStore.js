@@ -195,11 +195,19 @@ export function createCloudStore(supabase, user) {
       )
     },
 
-    async listTextIndexes() {
-      const rows = check(
-        await table().select('file_key, state').eq('user_id', uid).eq('size', 0).like('file_key', `${TEXT_PREFIX}%`),
-      )
-      return rows.map((r) => ({ id: r.file_key.slice(TEXT_PREFIX.length), index: r.state }))
+    // skip: 이미 받아 둔 색인의 도면 id (그 색인은 다시 받지 않고 index 를 비워서 돌려줌)
+    async listTextIndexes(skip = new Set()) {
+      const keys = check(
+        await table().select('file_key').eq('user_id', uid).eq('size', 0).like('file_key', `${TEXT_PREFIX}%`),
+      ).map((r) => r.file_key)
+      const ids = keys.map((k) => k.slice(TEXT_PREFIX.length))
+      const missing = keys.filter((k, i) => !skip.has(ids[i]))
+      const fetched = new Map()
+      for (let i = 0; i < missing.length; i += 50) {
+        const rows = check(await table().select('file_key, state').eq('user_id', uid).in('file_key', missing.slice(i, i + 50)))
+        for (const r of rows) fetched.set(r.file_key, r.state)
+      }
+      return keys.map((k, i) => ({ id: ids[i], index: skip.has(ids[i]) ? undefined : fetched.get(k) }))
     },
 
     saveImage(docId, imageId, blob) {
