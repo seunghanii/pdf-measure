@@ -375,6 +375,16 @@ export default function PdfViewer({
     setDraft(null)
   }, [tool, pdfDoc])
 
+  // 도구·자석을 바꾸거나 창을 떠나면 남아 있던 자석 표시(선 위·교차점 글씨)와 커서 점 지우기
+  useEffect(() => {
+    setCursor(null)
+  }, [tool, snapOn, pdfDoc])
+  useEffect(() => {
+    const clear = () => setCursor(null)
+    window.addEventListener('blur', clear)
+    return () => window.removeEventListener('blur', clear)
+  }, [])
+
   useEffect(() => {
     snapIndexes.current = new Map()
   }, [pdfDoc])
@@ -1026,7 +1036,7 @@ export default function PdfViewer({
                   {drawing && cursor && cursor.page === page && !(draft && draft.page === page) && (
                     <circle cx={cursor.p.x * zoom} cy={cursor.p.y * zoom} r={3} fill={TYPE_INFO[tool].color} />
                   )}
-                  {cursor?.snap && cursor.page === page && <SnapMarker snap={cursor.snap} zoom={zoom} />}
+                  {snapOn && cursor?.snap && cursor.page === page && <SnapMarker snap={cursor.snap} zoom={zoom} />}
                   {flash && flash.page === page && (
                     <rect
                       key={flash.nonce}
