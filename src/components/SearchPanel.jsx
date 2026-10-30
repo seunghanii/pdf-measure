@@ -19,7 +19,7 @@ export function Highlighted({ text, query }) {
   return (
     <>
       {a}
-      {b && <mark className="rounded-sm bg-yellow-200 px-0.5 text-slate-900">{b}</mark>}
+      {b && <mark className="rounded-sm bg-warn-200 px-0.5 text-ink-900">{b}</mark>}
       {c}
     </>
   )
@@ -29,7 +29,7 @@ export function Highlighted({ text, query }) {
 export function HitBadge({ hit }) {
   const label = hit.note === 'text' ? '글 상자' : hit.note === 'memo' ? '메모' : hit.ocr ? 'OCR' : null
   if (!label) return null
-  return <span className={`shrink-0 text-[10px] ${hit.note ? 'text-amber-600' : 'text-slate-400'}`}>{label}</span>
+  return <span className={`shrink-0 text-[10px] ${hit.note ? 'text-warn-600' : 'text-ink-400'}`}>{label}</span>
 }
 
 // 검색 색인을 만드는 중이면 한 줄로 알려 줌
@@ -43,8 +43,8 @@ export function IndexerStatusLine({ onlyId }) {
       ? `${p.pages > 1 ? `${p.page}/${p.pages}쪽 ` : ''}글자 그림 읽는 중(OCR) ${Math.round(100 * (p.done ?? 0))}%`
       : `${p.page}/${p.pages}쪽 글자 읽는 중`
   return (
-    <div className="flex items-center gap-2 text-xs text-slate-500">
-      <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-slate-300 border-t-blue-600" />
+    <div className="flex items-center gap-2 text-xs text-ink-500">
+      <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-ink-300 border-t-brand-600" />
       <span className="truncate">
         {onlyId ? '' : `"${running.name}" `}
         {detail}
@@ -108,40 +108,40 @@ export default function SearchPanel({ store, recent, library, onOpenHit, onClose
   const folderOf = (id) => library.folders.find((f) => f.id === library.assign[id])
 
   return (
-    <div className="fixed inset-0 z-40 flex items-start justify-center bg-slate-900/30 p-4 pt-[8vh]" onPointerDown={onClose}>
+    <div className="fixed inset-0 z-40 flex items-start justify-center bg-ink-900/30 p-4 pt-[8vh]" onPointerDown={onClose}>
       <div
         className="flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
         onPointerDown={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3">
-          <SearchIcon className="h-5 w-5 text-slate-400" />
+        <div className="flex items-center gap-2 border-b border-ink-200 px-4 py-3">
+          <SearchIcon className="h-5 w-5 text-ink-400" />
           <input
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="도면 속 글자 찾기 (예: P-101, 거실, 도면번호)"
-            className="min-w-0 flex-1 text-base outline-none placeholder:text-slate-400"
+            className="min-w-0 flex-1 text-base outline-none placeholder:text-ink-400"
           />
-          <button onClick={onClose} className="rounded-md px-2 py-1 text-sm text-slate-500 hover:bg-slate-100">
+          <button onClick={onClose} className="rounded-md px-2 py-1 text-sm text-ink-500 hover:bg-ink-100">
             닫기
           </button>
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto">
-          {failed && <p className="px-4 py-6 text-center text-sm text-red-600">검색 색인을 불러오지 못했어요.</p>}
-          {!failed && !indexes && <p className="px-4 py-6 text-center text-sm text-slate-400">색인 불러오는 중…</p>}
+          {failed && <p className="px-4 py-6 text-center text-sm text-danger-600">검색 색인을 불러오지 못했어요.</p>}
+          {!failed && !indexes && <p className="px-4 py-6 text-center text-sm text-ink-400">색인 불러오는 중…</p>}
           {indexes && query.trim() && results.length === 0 && (
-            <p className="px-4 py-6 text-center text-sm text-slate-400">"{query}" 이(가) 들어 있는 도면이 없어요.</p>
+            <p className="px-4 py-6 text-center text-sm text-ink-400">"{query}" 이(가) 들어 있는 도면이 없어요.</p>
           )}
           {indexes && !query.trim() && (
-            <p className="px-4 py-6 text-center text-sm text-slate-400">
+            <p className="px-4 py-6 text-center text-sm text-ink-400">
               도면 {docs.length - missing}개에서 찾을 수 있어요. 태그·실 이름·도면번호처럼 도면에 적힌 글자를 입력하세요.
             </p>
           )}
           {results.map(({ doc, hits }) => {
             const folder = folderOf(doc.id)
             return (
-              <section key={doc.id} className="border-b border-slate-100 px-2 py-2">
+              <section key={doc.id} className="border-b border-ink-100 px-2 py-2">
                 <div className="flex items-center gap-2 px-2 py-1">
                   <span className="truncate text-sm font-semibold">{doc.name.replace(/\.pdf$/i, '')}</span>
                   {folder && (
@@ -152,16 +152,16 @@ export default function SearchPanel({ store, recent, library, onOpenHit, onClose
                       {folder.name}
                     </span>
                   )}
-                  <span className="ml-auto shrink-0 text-xs text-slate-400">{hits.length}곳</span>
+                  <span className="ml-auto shrink-0 text-xs text-ink-400">{hits.length}곳</span>
                 </div>
                 <ul>
                   {hits.slice(0, MAX_HITS_PER_DOC).map((hit, i) => (
                     <li key={i}>
                       <button
                         onClick={() => onOpenHit(doc, hit)}
-                        className="flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-blue-50"
+                        className="flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-brand-50"
                       >
-                        <span className="w-12 shrink-0 text-xs text-slate-400">{hit.page}쪽</span>
+                        <span className="w-12 shrink-0 text-xs text-ink-400">{hit.page}쪽</span>
                         <span className="min-w-0 flex-1 truncate">
                           <Highlighted text={hit.text} query={query} />
                         </span>
@@ -170,7 +170,7 @@ export default function SearchPanel({ store, recent, library, onOpenHit, onClose
                     </li>
                   ))}
                   {hits.length > MAX_HITS_PER_DOC && (
-                    <li className="px-2 py-1 text-xs text-slate-400">
+                    <li className="px-2 py-1 text-xs text-ink-400">
                       외 {hits.length - MAX_HITS_PER_DOC}곳 · 도면을 열고 오른쪽 검색 창에서 모두 볼 수 있어요
                     </li>
                   )}
@@ -180,10 +180,10 @@ export default function SearchPanel({ store, recent, library, onOpenHit, onClose
           })}
         </div>
 
-        <div className="space-y-1 border-t border-slate-200 bg-slate-50 px-4 py-2">
+        <div className="space-y-1 border-t border-ink-200 bg-ink-50 px-4 py-2">
           <IndexerStatusLine />
           {indexes && missing > 0 && (
-            <p className="text-xs text-slate-400">아직 글자를 읽지 않은 도면 {missing}개는 다 읽으면 결과에 나와요.</p>
+            <p className="text-xs text-ink-400">아직 글자를 읽지 않은 도면 {missing}개는 다 읽으면 결과에 나와요.</p>
           )}
         </div>
       </div>

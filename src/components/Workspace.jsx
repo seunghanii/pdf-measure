@@ -631,7 +631,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
       />
 
       {notice && (
-        <div className="flex items-center justify-between border-b border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
+        <div className="flex items-center justify-between border-b border-ok-200 bg-ok-50 px-4 py-2 text-sm text-ok-800">
           <span>{notice}</span>
           <button className="ml-4 opacity-60 hover:opacity-100" onClick={() => setNotice('')}>
             닫기

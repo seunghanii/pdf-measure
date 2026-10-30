@@ -30,9 +30,9 @@ const DocSearch = forwardRef(function DocSearch({ doc, measurements, onGo }, inp
   }
 
   return (
-    <section className="border-b border-slate-200 p-4">
-      <div className="flex items-center gap-2 rounded-lg border border-slate-300 px-2.5 py-1.5 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100">
-        <SearchIcon className="h-4 w-4 shrink-0 text-slate-400" />
+    <section className="border-b border-ink-200 p-4">
+      <div className="flex items-center gap-2 rounded-lg border border-ink-300 px-2.5 py-1.5 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
+        <SearchIcon className="h-4 w-4 shrink-0 text-ink-400" />
         <input
           ref={inputRef}
           value={query}
@@ -51,10 +51,10 @@ const DocSearch = forwardRef(function DocSearch({ doc, measurements, onGo }, inp
             }
           }}
           placeholder="도면에서 찾기 (태그, 실 이름…)"
-          className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400"
+          className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-ink-400"
         />
         {query && (
-          <span className="shrink-0 text-xs text-slate-400">
+          <span className="shrink-0 text-xs text-ink-400">
             {current >= 0 ? `${current + 1}/${hits.length}` : `${hits.length}곳`}
           </span>
         )}
@@ -63,24 +63,24 @@ const DocSearch = forwardRef(function DocSearch({ doc, measurements, onGo }, inp
       <div className="mt-1.5">
         <IndexerStatusLine onlyId={doc.id} />
         {!index && !query && (
-          <p className="text-xs text-slate-400">직접 넣은 글은 바로, 도면 글자는 다 읽은 뒤에 찾을 수 있어요.</p>
+          <p className="text-xs text-ink-400">직접 넣은 글은 바로, 도면 글자는 다 읽은 뒤에 찾을 수 있어요.</p>
         )}
       </div>
 
       {query.trim() && (index || hits.length > 0) && (
         <div className="mt-2 max-h-80 space-y-1.5 overflow-auto">
-          {!hits.length && <p className="py-2 text-center text-xs text-slate-400">찾는 글자가 없어요.</p>}
+          {!hits.length && <p className="py-2 text-center text-xs text-ink-400">찾는 글자가 없어요.</p>}
           {shown.map((hit, i) => (
             <button
               key={i}
               onClick={() => go(i)}
               className={`block w-full overflow-hidden rounded-lg border text-left transition ${
-                i === current ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-200 hover:border-blue-300'
+                i === current ? 'border-brand-500 ring-2 ring-brand-100' : 'border-ink-200 hover:border-brand-300'
               }`}
             >
               {!hit.note && <HitPreview pdfDoc={doc.pdfDoc} hit={hit} />}
               <div className="flex items-center gap-2 px-2 py-1 text-xs">
-                <span className="shrink-0 text-slate-400">{hit.page}쪽</span>
+                <span className="shrink-0 text-ink-400">{hit.page}쪽</span>
                 <span className="min-w-0 flex-1 truncate">
                   <Highlighted text={hit.text} query={query} />
                 </span>
@@ -89,7 +89,7 @@ const DocSearch = forwardRef(function DocSearch({ doc, measurements, onGo }, inp
             </button>
           ))}
           {hits.length > MAX_SHOWN && (
-            <p className="py-1 text-center text-xs text-slate-400">
+            <p className="py-1 text-center text-xs text-ink-400">
               외 {hits.length - MAX_SHOWN}곳 · Enter 로 차례로 이동할 수 있어요
             </p>
           )}
@@ -153,11 +153,11 @@ function HitPreview({ pdfDoc, hit }) {
   }, [visible, pdfDoc, hit])
 
   return (
-    <div ref={boxRef} className="relative bg-slate-50" style={{ height: PREVIEW_H }}>
+    <div ref={boxRef} className="relative bg-ink-50" style={{ height: PREVIEW_H }}>
       <canvas ref={canvasRef} className="absolute top-0 left-1/2 -translate-x-1/2" style={{ width: PREVIEW_W, height: PREVIEW_H }} />
       {frame && (
         <div
-          className="pointer-events-none absolute left-1/2 rounded-sm border-2 border-amber-500 bg-amber-300/25"
+          className="pointer-events-none absolute left-1/2 rounded-sm border-2 border-warn-500 bg-warn-300/25"
           style={{
             top: frame.y - 3,
             height: frame.h + 6,

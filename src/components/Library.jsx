@@ -105,7 +105,7 @@ export default function Library({ list, library, openIds, cloud, onOpen, onRemov
                 key={folder.id}
                 {...dropProps(folder.id, folder.id)}
                 className={`group relative rounded-lg bg-white shadow-sm ring-2 transition ${
-                  dropTarget === folder.id ? 'ring-blue-400' : isOpen ? '' : 'ring-transparent hover:ring-slate-200'
+                  dropTarget === folder.id ? 'ring-brand-400' : isOpen ? '' : 'ring-transparent hover:ring-ink-200'
                 }`}
                 style={isOpen && dropTarget !== folder.id ? { '--tw-ring-color': hex } : undefined}
               >
@@ -117,14 +117,14 @@ export default function Library({ list, library, openIds, cloud, onOpen, onRemov
                   <span style={{ color: hex }}>
                     <FolderIcon className="h-5 w-5 shrink-0" color="currentColor" open={isOpen} fill={hex} />
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">{folder.name}</span>
-                  <span className="shrink-0 text-xs text-slate-400 group-hover:hidden">{items.length}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink-800">{folder.name}</span>
+                  <span className="shrink-0 text-xs text-ink-400 group-hover:hidden">{items.length}</span>
                 </button>
                 <div className="absolute top-1/2 right-1 hidden -translate-y-1/2 items-center rounded bg-white group-hover:flex">
                   <button
                     onClick={() => onEditFolder(folder)}
                     title="폴더 이름·색상 바꾸기"
-                    className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                    className="rounded p-1 text-ink-400 hover:bg-ink-100 hover:text-ink-700"
                   >
                     <PencilIcon />
                   </button>
@@ -138,7 +138,7 @@ export default function Library({ list, library, openIds, cloud, onOpen, onRemov
                       onUpdateLibrary((lib) => deleteFolder(lib, folder.id))
                     }}
                     title="폴더 지우기"
-                    className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500"
+                    className="rounded p-1 text-ink-400 hover:bg-danger-50 hover:text-danger-500"
                   >
                     <TrashIcon />
                   </button>
@@ -151,18 +151,18 @@ export default function Library({ list, library, openIds, cloud, onOpen, onRemov
 
       {openFolder ? (
         <div>
-          <div className="mb-1 flex items-center gap-1 px-1 text-xs font-medium text-slate-500">
-            <button onClick={() => setOpenFolderId(null)} className="hover:text-blue-600 hover:underline">
+          <div className="mb-1 flex items-center gap-1 px-1 text-xs font-medium text-ink-500">
+            <button onClick={() => setOpenFolderId(null)} className="hover:text-brand-600 hover:underline">
               전체
             </button>
             <span>›</span>
             <span style={{ color: colorHex(openFolder.color) }}>{openFolder.name}</span>
           </div>
-          <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl bg-white shadow-sm">
+          <ul className="divide-y divide-ink-100 overflow-hidden rounded-xl bg-white shadow-sm">
             {shown.length ? (
               shown.map(row)
             ) : (
-              <li className="px-4 py-4 text-center text-sm text-slate-400">
+              <li className="px-4 py-4 text-center text-sm text-ink-400">
                 비어 있어요. 지금 PDF 를 열면 이 폴더에 들어가요. 다른 도면은 폴더 칸에 끌어다 놓거나 도면의 폴더 버튼으로 넣어 보세요.
               </li>
             )}
@@ -172,10 +172,10 @@ export default function Library({ list, library, openIds, cloud, onOpen, onRemov
         (shown.length > 0 || folders.length === 0) && (
           <div
             {...dropProps('none', null)}
-            className={`rounded-xl ring-2 transition ${dropTarget === 'none' ? 'ring-blue-400' : 'ring-transparent'}`}
+            className={`rounded-xl ring-2 transition ${dropTarget === 'none' ? 'ring-brand-400' : 'ring-transparent'}`}
           >
-            {folders.length > 0 && <div className="mb-1 px-1 text-xs font-medium text-slate-400">폴더 밖</div>}
-            <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl bg-white shadow-sm">{shown.map(row)}</ul>
+            {folders.length > 0 && <div className="mb-1 px-1 text-xs font-medium text-ink-400">폴더 밖</div>}
+            <ul className="divide-y divide-ink-100 overflow-hidden rounded-xl bg-white shadow-sm">{shown.map(row)}</ul>
           </div>
         )
       )}
@@ -183,7 +183,7 @@ export default function Library({ list, library, openIds, cloud, onOpen, onRemov
         <div
           {...dropProps('none', null)}
           className={`rounded-xl border-2 border-dashed px-4 py-3 text-center text-sm ${
-            dropTarget === 'none' ? 'border-blue-400 text-blue-600' : 'border-slate-300 text-slate-400'
+            dropTarget === 'none' ? 'border-brand-400 text-brand-600' : 'border-ink-300 text-ink-400'
           }`}
         >
           여기에 놓으면 폴더에서 빼요
@@ -230,7 +230,7 @@ function FileRow({ item, isOpen, cloud, folders, folderId, onOpen, onRemove, onR
 
   return (
     <li
-      className="group relative flex items-center gap-3 px-4 py-3 hover:bg-blue-50/50"
+      className="group relative flex items-center gap-3 px-4 py-3 hover:bg-brand-50/50"
       draggable={!editing}
       onDragStart={(e) => {
         e.dataTransfer.setData(DRAG_TYPE, item.id)
@@ -246,7 +246,7 @@ function FileRow({ item, isOpen, cloud, folders, folderId, onOpen, onRemove, onR
         onClick={() => !editing && onOpen(item)}
         onKeyDown={(e) => !editing && e.key === 'Enter' && onOpen(item)}
       >
-        <svg viewBox="0 0 24 24" className="h-8 w-8 shrink-0 text-red-500" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round">
+        <svg viewBox="0 0 24 24" className="h-8 w-8 shrink-0 text-danger-500" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round">
           <path d="M6 2h9l5 5v15H6z" />
           <path d="M15 2v5h5" />
         </svg>
@@ -263,21 +263,21 @@ function FileRow({ item, isOpen, cloud, folders, folderId, onOpen, onRemove, onR
                   if (e.key === 'Escape') setEditing(false)
                 }}
                 onBlur={(e) => finishRename(e.currentTarget.value)}
-                className="w-full min-w-0 rounded border border-blue-400 px-1.5 py-0.5 font-medium text-slate-800 outline-none ring-2 ring-blue-100"
+                className="w-full min-w-0 rounded border border-brand-400 px-1.5 py-0.5 font-medium text-ink-800 outline-none ring-2 ring-brand-100"
               />
             ) : (
-              <span className="truncate font-medium text-slate-800">{item.name}</span>
+              <span className="truncate font-medium text-ink-800">{item.name}</span>
             )}
             {isOpen && !editing && (
-              <span className="shrink-0 rounded bg-blue-100 px-1.5 py-0.5 text-xs text-blue-700">열려 있음</span>
+              <span className="shrink-0 rounded bg-brand-100 px-1.5 py-0.5 text-xs text-brand-700">열려 있음</span>
             )}
           </div>
-          <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-slate-500">
+          <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-ink-500">
             <span>{timeAgo(item.lastOpened)}</span>
             <span>· {formatSize(item.size)}</span>
             <span>· 측정 {count}개</span>
-            {scale && <span className="text-orange-600">· {scale}</span>}
-            {cloud && item.hasFile === false && <span className="text-amber-600">· PDF 파일 없음</span>}
+            {scale && <span className="text-ref-600">· {scale}</span>}
+            {cloud && item.hasFile === false && <span className="text-warn-600">· PDF 파일 없음</span>}
           </div>
         </div>
       </div>
@@ -285,7 +285,7 @@ function FileRow({ item, isOpen, cloud, folders, folderId, onOpen, onRemove, onR
         <button
           onClick={() => setEditing(true)}
           title="이름 바꾸기"
-          className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          className="rounded p-1.5 text-ink-400 hover:bg-ink-100 hover:text-ink-700"
         >
           <PencilIcon />
         </button>
@@ -293,7 +293,7 @@ function FileRow({ item, isOpen, cloud, folders, folderId, onOpen, onRemove, onR
           <button
             onClick={() => setMenu((m) => !m)}
             title="폴더로 옮기기"
-            className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            className="rounded p-1.5 text-ink-400 hover:bg-ink-100 hover:text-ink-700"
           >
             <FolderIcon className="h-4 w-4" color="currentColor" />
           </button>
@@ -307,7 +307,7 @@ function FileRow({ item, isOpen, cloud, folders, folderId, onOpen, onRemove, onR
           }}
           disabled={isOpen}
           title={isOpen ? '열려 있는 탭을 먼저 닫아 주세요' : '목록에서 지우기'}
-          className="rounded p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-500 disabled:hidden"
+          className="rounded p-1.5 text-ink-300 hover:bg-danger-50 hover:text-danger-500 disabled:hidden"
         >
           <TrashIcon />
         </button>
@@ -315,8 +315,8 @@ function FileRow({ item, isOpen, cloud, folders, folderId, onOpen, onRemove, onR
       {menu && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setMenu(false)} />
-          <div className="absolute top-full right-4 z-20 -mt-2 w-52 overflow-hidden rounded-lg bg-white py-1 text-sm shadow-lg ring-1 ring-slate-200">
-            <div className="px-3 py-1.5 text-xs font-medium text-slate-400">폴더로 옮기기</div>
+          <div className="absolute top-full right-4 z-20 -mt-2 w-52 overflow-hidden rounded-lg bg-white py-1 text-sm shadow-lg ring-1 ring-ink-200">
+            <div className="px-3 py-1.5 text-xs font-medium text-ink-400">폴더로 옮기기</div>
             {folders.map((f) => (
               <button
                 key={f.id}
@@ -324,13 +324,13 @@ function FileRow({ item, isOpen, cloud, folders, folderId, onOpen, onRemove, onR
                   onMove(item.id, f.id)
                   setMenu(false)
                 }}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-slate-50"
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-ink-50"
               >
                 <span style={{ color: colorHex(f.color) }}>
                   <FolderIcon className="h-4 w-4" color="currentColor" />
                 </span>
                 <span className="flex-1 truncate">{f.name}</span>
-                {folderId === f.id && <span className="text-blue-600">✓</span>}
+                {folderId === f.id && <span className="text-brand-600">✓</span>}
               </button>
             ))}
             {folderId && (
@@ -339,7 +339,7 @@ function FileRow({ item, isOpen, cloud, folders, folderId, onOpen, onRemove, onR
                   onMove(item.id, null)
                   setMenu(false)
                 }}
-                className="w-full border-t border-slate-100 px-3 py-1.5 text-left text-slate-600 hover:bg-slate-50"
+                className="w-full border-t border-ink-100 px-3 py-1.5 text-left text-ink-600 hover:bg-ink-50"
               >
                 폴더에서 빼기
               </button>
@@ -360,14 +360,14 @@ export function FolderDialog({ folder, onClose, onSave }) {
     if (name.trim()) onSave(name.trim(), color)
   }
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onMouseDown={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" onMouseDown={onClose}>
       <form
         onSubmit={submit}
         onMouseDown={(e) => e.stopPropagation()}
         className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl"
       >
         <h3 className="text-lg font-semibold">{editing ? '폴더 고치기' : '새 폴더'}</h3>
-        <label className="mt-4 block text-sm font-medium text-slate-600">
+        <label className="mt-4 block text-sm font-medium text-ink-600">
           폴더 이름
           <input
             autoFocus
@@ -376,10 +376,10 @@ export function FolderDialog({ folder, onClose, onSave }) {
             onKeyDown={(e) => e.key === 'Escape' && onClose()}
             placeholder="예: 1층 평면도"
             maxLength={40}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            className="mt-1 w-full rounded-lg border border-ink-300 px-3 py-2 text-ink-800 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
           />
         </label>
-        <div className="mt-4 text-sm font-medium text-slate-600">색상</div>
+        <div className="mt-4 text-sm font-medium text-ink-600">색상</div>
         <div className="mt-2 flex flex-wrap gap-2">
           {FOLDER_COLORS.map((c) => (
             <button
@@ -387,25 +387,25 @@ export function FolderDialog({ folder, onClose, onSave }) {
               type="button"
               title={c.label}
               onClick={() => setColor(c.id)}
-              className={`h-8 w-8 rounded-full ring-offset-2 transition ${color === c.id ? 'ring-2 ring-slate-700' : 'hover:scale-110'}`}
+              className={`h-8 w-8 rounded-full ring-offset-2 transition ${color === c.id ? 'ring-2 ring-ink-700' : 'hover:scale-110'}`}
               style={{ backgroundColor: c.hex }}
             />
           ))}
         </div>
-        <div className="mt-4 flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2">
+        <div className="mt-4 flex items-center gap-2 rounded-lg bg-ink-50 px-3 py-2">
           <span style={{ color: colorHex(color) }}>
             <FolderIcon className="h-6 w-6" color="currentColor" />
           </span>
-          <span className="truncate font-semibold text-slate-700">{name.trim() || '폴더 이름'}</span>
+          <span className="truncate font-semibold text-ink-700">{name.trim() || '폴더 이름'}</span>
         </div>
         <div className="mt-5 flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="rounded-lg px-4 py-2 text-sm text-slate-600 hover:bg-slate-100">
+          <button type="button" onClick={onClose} className="rounded-lg px-4 py-2 text-sm text-ink-600 hover:bg-ink-100">
             취소
           </button>
           <button
             type="submit"
             disabled={!name.trim()}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
           >
             {editing ? '저장' : '만들기'}
           </button>

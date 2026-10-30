@@ -149,7 +149,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
     <div
       ref={panelRef}
       style={size ? { width: size.w, height: size.h } : undefined}
-      className={`absolute top-14 right-3 z-20 flex max-h-[calc(100%-4.25rem)] max-w-[calc(100%-1.5rem)] min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl ${size ? '' : 'w-[400px]'}`}
+      className={`absolute top-14 right-3 z-20 flex max-h-[calc(100%-4.25rem)] max-w-[calc(100%-1.5rem)] min-w-0 flex-col overflow-hidden rounded-xl border border-ink-200 bg-white shadow-2xl ${size ? '' : 'w-[400px]'}`}
       onKeyDown={(e) => {
         if (e.key === 'Escape') {
           e.stopPropagation()
@@ -169,14 +169,14 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
       }}
     >
       {/* 머리: 이름, 닫기 */}
-      <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-2" style={{ borderTop: `3px solid ${color}` }}>
+      <div className="flex items-center gap-2 border-b border-ink-100 px-3 py-2" style={{ borderTop: `3px solid ${color}` }}>
         <input
           value={memo.name}
           onChange={(e) => onChange({ name: e.target.value })}
-          className="min-w-0 flex-1 rounded px-1 py-0.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 focus:bg-white focus:outline focus:outline-blue-300"
+          className="min-w-0 flex-1 rounded px-1 py-0.5 text-sm font-semibold text-ink-800 hover:bg-ink-50 focus:bg-white focus:outline focus:outline-brand-300"
           aria-label="메모 이름"
         />
-        <button onClick={onClose} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="닫기 (Esc)">
+        <button onClick={onClose} className="rounded p-1 text-ink-400 hover:bg-ink-100 hover:text-ink-700" title="닫기 (Esc)">
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <path d="M6 6l12 12M18 6L6 18" />
           </svg>
@@ -185,7 +185,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
 
       {/* 같은 자리에 겹친 메모 */}
       {others.length > 1 && (
-        <div className="flex flex-wrap items-center gap-1 border-b border-slate-100 bg-slate-50 px-3 py-1.5 text-xs text-slate-500">
+        <div className="flex flex-wrap items-center gap-1 border-b border-ink-100 bg-ink-50 px-3 py-1.5 text-xs text-ink-500">
           <span className="mr-0.5">겹친 메모</span>
           {others.map((o) => (
             <button
@@ -195,7 +195,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
                 onSwitch(o.id)
               }}
               title={memoSummary(o)}
-              className={`max-w-32 truncate rounded-full px-2 py-0.5 ${o.id === memo.id ? 'bg-slate-800 text-white' : 'bg-white ring-1 ring-slate-200 hover:bg-slate-100'}`}
+              className={`max-w-32 truncate rounded-full px-2 py-0.5 ${o.id === memo.id ? 'bg-ink-800 text-white' : 'bg-white ring-1 ring-ink-200 hover:bg-ink-100'}`}
             >
               {o.name}
             </button>
@@ -204,26 +204,26 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
       )}
 
       {/* 연결된 도면 */}
-      <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-1.5 text-xs">
+      <div className="flex items-center gap-2 border-b border-ink-100 px-3 py-1.5 text-xs">
         {link ? (
           <>
             <button
               onClick={() => onOpenLink(link)}
-              className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md bg-blue-50 px-2 py-1 text-left text-blue-700 hover:bg-blue-100"
+              className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md bg-brand-50 px-2 py-1 text-left text-brand-700 hover:bg-brand-100"
               title="연결된 도면을 새 탭으로 열기"
             >
               <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <path d="M14 4h6v6M20 4l-9 9M18 14v5H5V6h5" />
               </svg>
               <span className="truncate font-medium">{link.name}</span>
-              {link.page > 1 && <span className="shrink-0 text-blue-500">{link.page}쪽</span>}
+              {link.page > 1 && <span className="shrink-0 text-brand-500">{link.page}쪽</span>}
             </button>
-            <button onClick={onPickLink} className="shrink-0 text-slate-500 hover:underline">
+            <button onClick={onPickLink} className="shrink-0 text-ink-500 hover:underline">
               바꾸기
             </button>
           </>
         ) : (
-          <button onClick={onPickLink} className="flex items-center gap-1 text-slate-500 hover:text-slate-800" title="이 메모에서 열 수 있는 도면 연결">
+          <button onClick={onPickLink} className="flex items-center gap-1 text-ink-500 hover:text-ink-800" title="이 메모에서 열 수 있는 도면 연결">
             <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1" />
             </svg>
@@ -252,16 +252,16 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
           placeholder="메모를 적어 주세요. 사진은 Ctrl+V 로 붙여넣거나 끌어다 놓아도 돼요."
           spellCheck={false}
           rows={4}
-          className="block w-full resize-none overflow-hidden px-4 py-3 text-sm leading-relaxed text-slate-800 outline-none placeholder:text-slate-400"
+          className="block w-full resize-none overflow-hidden px-4 py-3 text-sm leading-relaxed text-ink-800 outline-none placeholder:text-ink-400"
         />
         {(photos.length > 0 || busy > 0) && (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-2 px-3 pb-3">
             {photos.map((id, i) => (
-              <div key={id} className="group relative aspect-[4/3] overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+              <div key={id} className="group relative aspect-[4/3] overflow-hidden rounded-lg border border-ink-200 bg-ink-100">
                 {urls[i] ? (
                   <img src={urls[i]} alt={`사진 ${i + 1}`} onClick={() => setViewing(i)} className="h-full w-full cursor-zoom-in object-cover transition hover:opacity-90" />
                 ) : (
-                  <div className="flex h-full items-center justify-center text-xs text-slate-400">불러오는 중…</div>
+                  <div className="flex h-full items-center justify-center text-xs text-ink-400">불러오는 중…</div>
                 )}
                 <button
                   title="이 사진 빼기"
@@ -272,16 +272,16 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
                 </button>
               </div>
             ))}
-            {busy > 0 && <div className="flex aspect-[4/3] items-center justify-center rounded-lg border border-dashed border-slate-300 text-xs text-slate-400">사진 넣는 중…</div>}
+            {busy > 0 && <div className="flex aspect-[4/3] items-center justify-center rounded-lg border border-dashed border-ink-300 text-xs text-ink-400">사진 넣는 중…</div>}
           </div>
         )}
       </div>
 
       {/* 아래: 사진 넣기, 지우기 */}
-      <div className="flex items-center gap-2 border-t border-slate-100 px-3 py-1.5">
+      <div className="flex items-center gap-2 border-t border-ink-100 px-3 py-1.5">
         <button
           onClick={() => fileRef.current?.click()}
-          className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-slate-600 ring-1 ring-slate-300 hover:bg-slate-100"
+          className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-ink-600 ring-1 ring-ink-300 hover:bg-ink-100"
           title="사진 넣기 (복사한 사진은 Ctrl+V, 끌어다 놓기도 돼요)"
         >
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -300,7 +300,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
             e.target.value = ''
           }}
         />
-        <button onClick={onDelete} className="ml-auto rounded px-2 py-0.5 text-xs text-red-500 hover:bg-red-50">
+        <button onClick={onDelete} className="ml-auto rounded px-2 py-0.5 text-xs text-danger-500 hover:bg-danger-50">
           메모 지우기
         </button>
       </div>
@@ -309,7 +309,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
       <div onPointerDown={(e) => startResize(e, 'w')} className="absolute top-0 bottom-3 left-0 w-1.5 cursor-ew-resize" title="끌어서 너비 조절" />
       <div onPointerDown={(e) => startResize(e, 's')} className="absolute right-0 bottom-0 left-3 h-1.5 cursor-ns-resize" title="끌어서 높이 조절" />
       <div onPointerDown={(e) => startResize(e, 'sw')} className="absolute bottom-0 left-0 h-4 w-4 cursor-nesw-resize" title="끌어서 크기 조절">
-        <svg viewBox="0 0 16 16" className="h-4 w-4 text-slate-300" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+        <svg viewBox="0 0 16 16" className="h-4 w-4 text-ink-300" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
           <path d="M3 7l6 6M3 11l2 2" />
         </svg>
       </div>

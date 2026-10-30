@@ -3,12 +3,12 @@ export default function TabBar({ docs, activeId, onSelect, onClose, onHome }) {
   if (docs.length === 0) return null
 
   return (
-    <nav className="flex items-end gap-1 overflow-x-auto border-b border-slate-200 bg-slate-200/70 px-2 pt-1.5" aria-label="열린 도면">
+    <nav className="flex items-end gap-0.5 overflow-x-auto border-b border-ink-200 bg-ink-100 px-2 pt-1.5" aria-label="열린 도면">
       <button
         onClick={onHome}
         title="홈 (최근 파일)"
         className={`mb-1 flex h-8 shrink-0 items-center gap-1 rounded-md px-2.5 text-sm ${
-          activeId === null ? 'bg-white font-semibold text-blue-700 shadow-sm' : 'text-slate-600 hover:bg-white/70'
+          activeId === null ? 'bg-white font-semibold text-brand-700 shadow-xs ring-1 ring-ink-200' : 'text-ink-500 transition-colors hover:bg-white/70 hover:text-ink-800'
         }`}
       >
         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round">
@@ -27,13 +27,13 @@ export default function TabBar({ docs, activeId, onSelect, onClose, onHome }) {
             onClick={() => onSelect(d.id)}
             onAuxClick={(e) => e.button === 1 && onClose(d.id)}
             title={d.name}
-            className={`group flex h-9 max-w-56 shrink-0 cursor-pointer items-center gap-2 rounded-t-lg border border-b-0 pr-1.5 pl-3 text-sm ${
+            className={`group relative -mb-px flex h-9 max-w-56 shrink-0 cursor-pointer items-center gap-2 rounded-t-lg border border-b-0 pr-1.5 pl-3 text-sm ${
               active
-                ? 'border-slate-200 bg-white font-medium text-slate-900'
-                : 'border-transparent text-slate-600 hover:bg-white/60'
+                ? 'border-ink-200 bg-white font-medium text-ink-900 before:absolute before:inset-x-3 before:top-0 before:h-0.5 before:rounded-b before:bg-brand-600'
+                : 'border-transparent text-ink-500 transition-colors hover:bg-white/60 hover:text-ink-800'
             }`}
           >
-            <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-red-500" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round">
+            <svg viewBox="0 0 24 24" className={`h-4 w-4 shrink-0 ${active ? 'text-brand-600' : 'text-ink-400'}`} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round">
               <path d="M6 2h9l5 5v15H6z" />
               <path d="M15 2v5h5" />
             </svg>
@@ -44,7 +44,8 @@ export default function TabBar({ docs, activeId, onSelect, onClose, onHome }) {
                 onClose(d.id)
               }}
               title="탭 닫기 (측정값은 저장되어 있어요)"
-              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-200 hover:text-slate-700 ${
+              aria-label="탭 닫기"
+              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded text-ink-400 hover:bg-ink-200 hover:text-ink-700 ${
                 active ? '' : 'opacity-0 group-hover:opacity-100'
               }`}
             >
@@ -59,7 +60,8 @@ export default function TabBar({ docs, activeId, onSelect, onClose, onHome }) {
       <button
         onClick={onHome}
         title="다른 도면 열기"
-        className="mb-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-lg text-slate-500 hover:bg-white/70 hover:text-slate-800"
+        aria-label="다른 도면 열기"
+        className="mb-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-lg text-ink-500 hover:bg-white/70 hover:text-ink-800"
       >
         +
       </button>
