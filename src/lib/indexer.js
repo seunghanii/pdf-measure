@@ -43,14 +43,18 @@ export async function getIndex(store, id) {
   return isValidIndex(index) ? index : null
 }
 
-// 저장소에 있는 모든 색인 (홈 검색). 받은 것은 기억해 둠
+// 저장소에 있는 모든 색인 (홈 검색). 받은 것은 기억해 두고, 다음에는 아직 없는 것만 받음
 export async function listIndexes(store) {
-  const list = await store.listTextIndexes()
+  const prefix = `${scopeOf(store)}|`
+  const known = new Map()
+  for (const [key, index] of cache) if (key.startsWith(prefix)) known.set(key.slice(prefix.length), index)
+  const list = await store.listTextIndexes(new Set(known.keys()))
   const out = new Map()
   for (const { id, index } of list) {
-    if (!isValidIndex(index)) continue
-    cache.set(keyOf(store, id), index)
-    out.set(id, index)
+    const ix = index === undefined ? known.get(id) : index // undefined: 이미 받아 둔 것
+    if (!isValidIndex(ix)) continue
+    cache.set(keyOf(store, id), ix)
+    out.set(id, ix)
   }
   return out
 }

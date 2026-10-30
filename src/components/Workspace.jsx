@@ -6,6 +6,8 @@ import { DEFAULT_BOX_OPACITY, FULL_CROP, MARKUP_STROKE, STROKE_TYPES, isCropped,
 import { ImageSource, freshImageIds, getImageBlob, isImageFile, newImageId, prepareImage, rememberImage } from '../lib/images'
 import { TOOLS, toolForDigit } from '../lib/tools'
 import { toggleSnap } from '../lib/snapSetting'
+import { useAutosave } from '../lib/autosave'
+import { isTypingTarget } from '../lib/dom'
 import PdfViewer from './PdfViewer'
 import Toolbar from './Toolbar'
 import Sidebar from './Sidebar'
@@ -73,72 +75,10 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
   const viewerJump = pickedJump && pickedJump.page > pdfDoc.numPages ? { ...pickedJump, page: pdfDoc.numPages } : pickedJump
   const searchRef = useRef(null)
 
-  // 측정값이 바뀌면 잠시 뒤 자동 저장 (로그인했으면 서버, 아니면 이 브라우저).
-  // 서버 저장은 한 번에 하나씩, 밀린 것은 가장 최근 상태만 보냄.
+  // 측정값이 바뀌면 잠시 뒤 자동 저장 (로그인했으면 서버, 아니면 이 브라우저)
   const store = doc.store
   const cloud = store.kind === 'cloud'
-  const [syncStatus, setSyncStatus] = useState('saved')
-  const queue = useRef({ busy: false, next: null })
-  const persist = useCallback(
-    (state) => {
-      const q = queue.current
-      q.next = state
-      if (q.busy) return
-      q.busy = true
-      ;(async () => {
-        while (q.next) {
-          const st = q.next
-          q.next = null
-          setSyncStatus('saving')
-          try {
-            await store.saveState(doc.id, st)
-            setSyncStatus(q.next ? 'saving' : 'saved')
-          } catch (e) {
-            console.warn('저장 실패', e)
-            setSyncStatus('error')
-          }
-        }
-        q.busy = false
-      })()
-    },
-    [doc.id, store],
-  )
-
-  const latest = useRef(null)
-  const firstRun = useRef(true)
-  useEffect(() => {
-    // 처음 열었을 때는 불러온 그대로라 저장할 필요 없음
-    if (firstRun.current) {
-      firstRun.current = false
-      return
-    }
-    const state = { measurements, calibration, unit, pageNum, markupStyle, counters: counters.current }
-    latest.current = state
-    const t = setTimeout(() => {
-      latest.current = null
-      persist(state)
-    }, store.saveDelay)
-    return () => clearTimeout(t)
-  }, [measurements, calibration, unit, pageNum, markupStyle, persist, store.saveDelay])
-
-  // 탭을 닫거나 창을 닫을 때 아직 저장 안 된 변경이 있으면 바로 저장
-  useEffect(() => {
-    const flush = () => {
-      if (!latest.current) return false
-      persist(latest.current)
-      latest.current = null
-      return true
-    }
-    const onBeforeUnload = (e) => {
-      const pending = flush() || queue.current.busy
-      if (pending && cloud) e.preventDefault() // 서버 저장이 끝나기 전에 닫으면 물어봄
-    }
-    window.addEventListener('beforeunload', onBeforeUnload)
-    return () => {
-      window.removeEventListener('beforeunload', onBeforeUnload)
-      flush()
-    }
-  }, [cloud, persist])
+  const syncStatus = useAutosave({ store, docId: doc.id, measurements, calibration, unit, markupStyle, counters, pageNum })
 
   // 축척: PDF 1pt 가 실제 몇 mm 인지
   const mmPerPt = useMemo(() => {
@@ -377,7 +317,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
   useEffect(() => {
     if (!active) return
     const onPaste = (e) => {
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || e.target.isContentEditable) return
+      if (isTypingTarget(e.target)) return
       const files = [...(e.clipboardData?.files ?? [])].filter(isImageFile)
       if (!files.length) return
       e.preventDefault()
@@ -539,7 +479,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
         else setZoom((z) => (e.key === '-' ? Math.max(MIN_ZOOM, z / 1.25) : Math.min(MAX_ZOOM, z * 1.25)))
         return
       }
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || pendingCalibration) return
+      if (isTypingTarget(e.target) || pendingCalibration) return
       if (ctrl && e.key.toLowerCase() === 'z') {
         e.preventDefault()
         undo()
@@ -603,7 +543,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
     return () => window.removeEventListener('keydown', onKey)
   }, [active, cropping, deleteItems, jumpTo, memoOpen, pageNum, pdfDoc, pendingCalibration, savePdf, selectedIds, tool, undo])
 
-  const visibleMeasurements = measurements.filter((m) => !m.hidden)
+  const visibleMeasurements = useMemo(() => measurements.filter((m) => !m.hidden), [measurements])
 
   // 눈 아이콘: 화면에서 숨기기/보이기 (값은 그대로 남음)
   // 숨긴 항목은 선택에서도 빠짐 (보이지 않는 것이 함께 지워지거나 옮겨지지 않도록)

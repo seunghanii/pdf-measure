@@ -109,7 +109,12 @@ export function saveState(id, state) {
 
 export async function listRecent() {
   const all = await run('docs', 'readonly', (docs) => req2promise(docs.getAll()))
-  return all.sort((a, b) => b.lastOpened - a.lastOpened)
+  return all.map((d) => ({ ...d, summary: summarize(d.state) })).sort((a, b) => b.lastOpened - a.lastOpened)
+}
+
+// 홈 목록에 보여 줄 요약: 측정·마크업 개수와 축척
+export function summarize(state) {
+  return { count: state?.measurements?.length ?? 0, calibration: state?.calibration ?? null }
 }
 
 // 화면에 보이는 이름만 바꿈 (id 는 그대로라 측정값이 이어짐)
