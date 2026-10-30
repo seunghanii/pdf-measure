@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ensureIndexed, listIndexes, onIndexed, scopeOf, useIndexerStatus } from '../lib/indexer'
-import { searchIndex, splitMatch } from '../lib/textIndex'
+import { searchIndex, searchNotes, splitMatch } from '../lib/textIndex'
 import { colorHex } from '../lib/library'
 
 const MAX_HITS_PER_DOC = 8
@@ -23,6 +23,13 @@ export function Highlighted({ text, query }) {
       {c}
     </>
   )
+}
+
+// 찾은 곳 옆 작은 표시: 직접 넣은 글이면 종류, OCR 로 읽은 글자면 OCR
+export function HitBadge({ hit }) {
+  const label = hit.note === 'text' ? '글 상자' : hit.note === 'memo' ? '메모' : hit.ocr ? 'OCR' : null
+  if (!label) return null
+  return <span className={`shrink-0 text-[10px] ${hit.note ? 'text-amber-600' : 'text-slate-400'}`}>{label}</span>
 }
 
 // 검색 색인을 만드는 중이면 한 줄로 알려 줌
@@ -91,7 +98,7 @@ export default function SearchPanel({ store, recent, library, onOpenHit, onClose
     if (!indexes || !query.trim()) return []
     const out = []
     for (const doc of docs) {
-      const hits = searchIndex(indexes.get(doc.id), query, 500)
+      const hits = [...searchNotes(doc.summary?.notes, query, 500), ...searchIndex(indexes.get(doc.id), query, 500)]
       if (hits.length) out.push({ doc, hits })
     }
     return out
@@ -158,7 +165,7 @@ export default function SearchPanel({ store, recent, library, onOpenHit, onClose
                         <span className="min-w-0 flex-1 truncate">
                           <Highlighted text={hit.text} query={query} />
                         </span>
-                        {hit.ocr && <span className="shrink-0 text-[10px] text-slate-400">OCR</span>}
+                        <HitBadge hit={hit} />
                       </button>
                     </li>
                   ))}

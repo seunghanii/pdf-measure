@@ -5,6 +5,7 @@
 // 여기의 'cache' 저장소는 서버에서 받은 PDF 를 다시 받지 않도록 임시 보관하는 데만 씁니다.
 
 import { EMPTY_LIBRARY, normalizeLibrary } from './library'
+import { noteItems } from './notes'
 
 const DB_NAME = 'pdf-measure'
 const DB_VERSION = 4
@@ -112,9 +113,13 @@ export async function listRecent() {
   return all.map((d) => ({ ...d, summary: summarize(d.state) })).sort((a, b) => b.lastOpened - a.lastOpened)
 }
 
-// 홈 목록에 보여 줄 요약: 측정·마크업 개수와 축척
+// 홈 목록에 보여 줄 요약: 측정·마크업 개수와 축척, 홈 검색용 직접 넣은 글(notes)
 export function summarize(state) {
-  return { count: state?.measurements?.length ?? 0, calibration: state?.calibration ?? null }
+  return {
+    count: state?.measurements?.length ?? 0,
+    calibration: state?.calibration ?? null,
+    notes: noteItems(state?.measurements),
+  }
 }
 
 // 화면에 보이는 이름만 바꿈 (id 는 그대로라 측정값이 이어짐)
