@@ -61,6 +61,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
   const [docs, setDocs] = useState([]) // 열린 탭: { id, name, pdfDoc, savedState, store }
   const [activeId, setActiveId] = useState(null) // null = 홈(최근 파일)
   const [openFolderId, setOpenFolderId] = useState(loadOpenFolder) // 홈 화면에서 펼쳐 본 폴더
+  const [sidebarOpen, setSidebarOpen] = useState(true) // 도면 오른쪽 목록 (모든 탭 공통, 새로 열면 늘 펼침)
   useEffect(() => saveOpenFolder(openFolderId), [openFolderId])
   const [recent, setRecent] = useState(store.kind === 'cloud' ? null : []) // null = 서버에서 불러오는 중
   const [library, setLibrary] = useState(EMPTY_LIBRARY) // 홈 화면 폴더
@@ -437,6 +438,8 @@ function Session({ store, user, onLogout, onChangePassword }) {
           onOpenFile={openFiles}
           searchJump={searchJump?.id === doc.id ? searchJump : null}
           onOpenLink={openLinked}
+          sidebarOpen={sidebarOpen}
+          setSidebarOpen={setSidebarOpen}
         />
       ))}
 
