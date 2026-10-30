@@ -4,8 +4,10 @@
 // storage.js 의 localStore 와 같은 모양의 함수를 돌려줍니다.
 // 폴더 정보는 documents 표의 특별한 한 줄(file_key = LIBRARY_KEY)의 state 에 보관 (표를 새로 만들지 않으려고)
 // 검색용 글자 색인도 도면마다 특별한 한 줄(file_key = "@text|" + 도면 id, size 0)에 보관.
-// 도면에 넣은 사진도 사진마다 특별한 한 줄(file_key = "@img|" + 사진 id, name = 도면 id)의 state 에 base64 로 보관
-// (pdfs 보관함은 PDF 만 받도록 되어 있어서, 설정 SQL 을 다시 실행하지 않아도 되게).
+// 도면에 넣은 사진은 pdfs 보관함의 "사용자id/img/사진 id" 에 파일로 두고, 사진마다 특별한 한 줄
+// (file_key = "@img|" + 사진 id, name = 도면 id, state = { type, path })로 어느 도면 사진인지 기록.
+// 보관함이 아직 사진을 받지 않게 설정돼 있으면(설정 SQL 을 다시 실행하기 전) 예전처럼 state 에 base64 로 넣고,
+// 예전에 base64 로 넣은 사진은 열 때 보관함으로 옮겨 DB 공간을 비웁니다.
 // 특별한 줄은 모두 size 가 0 이라 실제 도면(size > 0)과 구분됩니다.
 import { cacheDelete, cacheGet, cachePrune, cachePut } from './storage'
 import { normalizeLibrary } from './library'
@@ -70,23 +72,53 @@ export function createCloudStore(supabase, user) {
     check(await table().update({ has_file: true }).eq('user_id', uid).eq('file_key', id))
   }
 
-  async function putImage(docId, imageId, blob) {
-    const data = await blobToBase64(blob)
-    check(
-      await table().upsert(
+  // 특별한 줄(사진·검색 색인·폴더 정보) 저장
+  const upsertSpecial = (fileKey, name, state) =>
+    table()
+      .upsert(
         {
           user_id: uid,
-          file_key: IMAGE_PREFIX + imageId,
-          name: docId,
+          file_key: fileKey,
+          name,
           size: 0,
           storage_path: '',
-          state: { type: blob.type, data },
+          state,
           last_opened: new Date(0).toISOString(),
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'user_id,file_key' },
-      ),
-    )
+      )
+      .then(check)
+
+  const imagePath = (imageId) => `${uid}/img/${imageId}`
+
+  // 사진 파일을 보관함에 올림. 보관함이 사진을 받지 않으면 false (이번 창에서는 다시 시도하지 않음)
+  let bucketTakesImages = true
+  async function uploadImage(imageId, blob) {
+    if (!bucketTakesImages) return false
+    const { error } = await bucket().upload(imagePath(imageId), blob, { contentType: blob.type || 'image/jpeg', upsert: true })
+    if (!error) return true
+    bucketTakesImages = false
+    console.warn('사진을 보관함에 올리지 못해 DB 에 저장합니다', error)
+    return false
+  }
+
+  async function putImage(docId, imageId, blob) {
+    const state = (await uploadImage(imageId, blob))
+      ? { type: blob.type, path: imagePath(imageId) }
+      : { type: blob.type, data: await blobToBase64(blob) }
+    await upsertSpecial(IMAGE_PREFIX + imageId, docId, state)
+  }
+
+  // 예전에 DB 에 base64 로 넣은 사진을 보관함으로 옮김 (실패해도 그대로 둠)
+  async function moveImageToBucket(docId, imageId, blob) {
+    if (!(await uploadImage(imageId, blob))) return
+    await upsertSpecial(IMAGE_PREFIX + imageId, docId, { type: blob.type, path: imagePath(imageId) })
+  }
+
+  async function removeImageFiles(fileKeys) {
+    const paths = fileKeys.map((k) => imagePath(k.slice(IMAGE_PREFIX.length)))
+    if (paths.length) await bucket().remove(paths) // 보관함에 없는 사진(예전 방식)은 그냥 넘어감
   }
 
   async function insertRow(fields) {
@@ -176,23 +208,7 @@ export function createCloudStore(supabase, user) {
     },
 
     saveTextIndex(id, index) {
-      return track(
-        table()
-          .upsert(
-            {
-              user_id: uid,
-              file_key: TEXT_PREFIX + id,
-              name: '검색 색인',
-              size: 0,
-              storage_path: '',
-              state: index,
-              last_opened: new Date(0).toISOString(),
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: 'user_id,file_key' },
-          )
-          .then(check),
-      )
+      return track(upsertSpecial(TEXT_PREFIX + id, '검색 색인', index))
     },
 
     async listTextIndexes() {
@@ -208,9 +224,14 @@ export function createCloudStore(supabase, user) {
 
     async getImage(docId, imageId) {
       const row = check(
-        await table().select('state').eq('user_id', uid).eq('file_key', IMAGE_PREFIX + imageId).maybeSingle(),
+        await table().select('name, state').eq('user_id', uid).eq('file_key', IMAGE_PREFIX + imageId).maybeSingle(),
       )
-      return row?.state?.data ? base64ToBlob(row.state.data, row.state.type || 'image/jpeg') : null
+      const st = row?.state
+      if (st?.path) return check(await bucket().download(st.path))
+      if (!st?.data) return null
+      const blob = base64ToBlob(st.data, st.type || 'image/jpeg')
+      track(moveImageToBucket(row.name, imageId, blob).catch((e) => console.warn('사진 옮기기 실패', e)))
+      return blob
     },
 
     async listImageIds(docId) {
@@ -222,15 +243,12 @@ export function createCloudStore(supabase, user) {
 
     removeImages(docId, ids) {
       if (!ids.length) return Promise.resolve()
+      const keys = ids.map((id) => IMAGE_PREFIX + id)
       return track(
-        table()
-          .delete()
-          .eq('user_id', uid)
-          .in(
-            'file_key',
-            ids.map((id) => IMAGE_PREFIX + id),
-          )
-          .then(check),
+        (async () => {
+          check(await table().delete().eq('user_id', uid).in('file_key', keys))
+          await removeImageFiles(keys)
+        })(),
       )
     },
 
@@ -240,23 +258,7 @@ export function createCloudStore(supabase, user) {
     },
 
     saveLibrary(lib) {
-      return track(
-        table()
-          .upsert(
-            {
-              user_id: uid,
-              file_key: LIBRARY_KEY,
-              name: '폴더 정보',
-              size: 0,
-              storage_path: '',
-              state: lib,
-              last_opened: new Date(0).toISOString(),
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: 'user_id,file_key' },
-          )
-          .then(check),
-      )
+      return track(upsertSpecial(LIBRARY_KEY, '폴더 정보', lib))
     },
 
     async removeFile(id) {
@@ -264,7 +266,8 @@ export function createCloudStore(supabase, user) {
       if (!rec) return
       check(await bucket().remove([rec.path]))
       check(await table().delete().eq('user_id', uid).in('file_key', [id, TEXT_PREFIX + id]))
-      check(await table().delete().eq('user_id', uid).eq('size', 0).eq('name', id).like('file_key', `${IMAGE_PREFIX}%`))
+      const images = check(await table().delete().eq('user_id', uid).eq('size', 0).eq('name', id).like('file_key', `${IMAGE_PREFIX}%`).select('file_key'))
+      await removeImageFiles(images.map((r) => r.file_key))
       cacheDelete(rec.path).catch(() => {})
     },
 
