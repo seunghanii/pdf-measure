@@ -10,12 +10,12 @@ const PREVIEW_H = 96
 
 // 도면 안 검색 창 (오른쪽 목록 맨 위). 찾은 곳마다 작은 미리보기, 누르면 그 위치로 이동
 // 직접 넣은 글(텍스트 상자, 메모)은 도면 글자보다 먼저, 미리보기 없이 한 줄로 나옴
-const DocSearch = forwardRef(function DocSearch({ doc, measurements, onGo, action }, inputRef) {
+const DocSearch = forwardRef(function DocSearch({ doc, measurements, categories, onGo, action }, inputRef) {
   const index = useDocIndex(doc.store, doc.id)
   const [query, setQuery] = useState('')
   const [current, setCurrent] = useState(-1)
   const searching = !!query.trim()
-  const notes = useMemo(() => (searching ? noteItems(measurements) : null), [searching, measurements])
+  const notes = useMemo(() => (searching ? noteItems(measurements, categories) : null), [searching, measurements, categories])
   const hits = useMemo(
     () => [...searchNotes(notes, query, 1000), ...searchIndex(index, query, 1000)],
     [notes, index, query],

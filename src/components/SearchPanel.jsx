@@ -27,7 +27,7 @@ export function Highlighted({ text, query }) {
 
 // 찾은 곳 옆 작은 표시: 직접 넣은 글이면 종류, OCR 로 읽은 글자면 OCR
 export function HitBadge({ hit }) {
-  const label = hit.note === 'text' ? '글 상자' : hit.note === 'memo' ? '메모' : hit.ocr ? 'OCR' : null
+  const label = hit.note === 'text' ? '글 상자' : hit.note === 'memo' ? '메모' : hit.note === 'measure' ? '측정' : hit.ocr ? 'OCR' : null
   if (!label) return null
   return <span className={`shrink-0 text-[10px] ${hit.note ? 'text-warn-600' : 'text-ink-400'}`}>{label}</span>
 }

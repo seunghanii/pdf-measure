@@ -1,7 +1,8 @@
 import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { TYPE_INFO, describe } from '../lib/measure'
-import { UNITS, calibrationInput, parseNumber } from '../lib/units'
+import { UNITS, calibrationInput, formatArea, formatLength, parseNumber } from '../lib/units'
 import { isMarkup } from '../lib/markup'
+import { CATEGORY_COLORS, CATEGORY_PRESETS, categoryTotals } from '../lib/categories'
 
 export default function Sidebar({
   calibration,
@@ -16,6 +17,13 @@ export default function Sidebar({
   onToggleHidden,
   onSetAllHidden,
   onRename,
+  categories,
+  activeCategory,
+  onSetActiveCategory,
+  onAddCategory,
+  onUpdateCategory,
+  onDeleteCategory,
+  onAssignCategory,
   onClear,
   onStartCalibrate,
   onEditCalibration,
@@ -33,12 +41,37 @@ export default function Sidebar({
 
   const measures = useMemo(() => measurements.filter((m) => !isMarkup(m.type)), [measurements])
   const markups = useMemo(() => measurements.filter((m) => isMarkup(m.type)), [measurements])
+  const totals = useMemo(() => categoryTotals(measures, categories), [measures, categories])
+  // 분류 줄을 누르면 그 분류 항목만 목록에 보여 줌 (null: 전체, '': 분류 없음)
+  const [catFilter, setCatFilter] = useState(null)
+  const filterOn = catFilter !== null && (catFilter === '' || categories.some((c) => c.id === catFilter))
+  const catOf = (m) => (m.cat && categories.some((c) => c.id === m.cat) ? m.cat : '')
+  const shownMeasures = useMemo(
+    () => (filterOn ? measures.filter((m) => (m.cat && categories.some((c) => c.id === m.cat) ? m.cat : '') === catFilter) : measures),
+    [filterOn, measures, catFilter, categories],
+  )
+  const selectedMeasureIds = measures.filter((m) => selectedIds.includes(m.id)).map((m) => m.id)
 
   const exportCsv = () => {
-    const rows = [['이름', '종류', '페이지', '값', '둘레']]
+    const catName = new Map(categories.map((c) => [c.id, c.name]))
+    const rows = [['이름', '분류', '종류', '페이지', '값', '둘레']]
     for (const m of measures) {
       const d = describe(m, mmPerPt, unit)
-      rows.push([m.name, TYPE_INFO[m.type].name, m.page, d.main, d.sub?.replace('둘레 ', '') ?? ''])
+      rows.push([m.name, catName.get(m.cat) ?? '', TYPE_INFO[m.type].name, m.page, d.main, d.sub?.replace('둘레 ', '') ?? ''])
+    }
+    if (categories.length) {
+      rows.push([], ['분류별 합계', '개수', '길이 합계', '면적 합계', '둘레 합계'])
+      for (const c of [...categories, { id: '', name: '분류 없음' }]) {
+        const t = totals.get(c.id)
+        if (!t) continue
+        rows.push([
+          c.name,
+          t.count,
+          t.lengthCount ? formatLength(t.length, mmPerPt, unit) : '',
+          t.areaCount ? formatArea(t.area, mmPerPt, unit) : '',
+          t.areaCount ? formatLength(t.perimeter, mmPerPt, unit) : '',
+        ])
+      }
     }
     const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\r\n')
     // 엑셀에서 한글이 깨지지 않도록 BOM 추가
@@ -53,7 +86,7 @@ export default function Sidebar({
   // 목록 줄마다 넘기는 함수는 늘 같은 것으로 (부모가 다시 그려져도 바뀌지 않은 줄은 다시 그리지 않게)
   const handlers = useRef(null)
   useLayoutEffect(() => {
-    handlers.current = { onSelect, onDelete, onToggleHidden, onRename }
+    handlers.current = { onSelect, onDelete, onToggleHidden, onRename, onAssignCategory }
   })
   const rowActions = useMemo(
     () => ({
@@ -61,10 +94,11 @@ export default function Sidebar({
       onDelete: (id) => handlers.current.onDelete(id),
       onToggleHidden: (id) => handlers.current.onToggleHidden(id),
       onRename: (id, name) => handlers.current.onRename(id, name),
+      onAssign: (id, catId) => handlers.current.onAssignCategory([id], catId),
     }),
     [],
   )
-  const rowProps = { mmPerPt, unit, pageNum, selectedIds, onSetAllHidden, rowActions }
+  const rowProps = { mmPerPt, unit, pageNum, selectedIds, onSetAllHidden, rowActions, categories }
 
   return (
     <aside className={`${collapsed ? 'hidden' : 'flex'} max-h-[35vh] w-full shrink-0 flex-col border-t border-ink-200 bg-white md:max-h-none md:w-80 md:border-t-0 md:border-l`}>
@@ -196,8 +230,27 @@ export default function Sidebar({
       <div className="min-h-0 flex-1 overflow-auto">
         <ItemSection
           title="측정 목록"
-          items={measures}
-          empty="아직 측정한 항목이 없습니다."
+          items={shownMeasures}
+          total={measures.length}
+          empty={filterOn ? '이 분류에 든 항목이 없어요.' : '아직 측정한 항목이 없습니다.'}
+          head={
+            <CategoryPanel
+              categories={categories}
+              totals={totals}
+              mmPerPt={mmPerPt}
+              unit={unit}
+              filter={filterOn ? catFilter : null}
+              setFilter={setCatFilter}
+              active={activeCategory}
+              setActive={onSetActiveCategory}
+              onAdd={onAddCategory}
+              onUpdate={onUpdateCategory}
+              onDelete={onDeleteCategory}
+              selectedIds={selectedMeasureIds}
+              selectedCat={selectedMeasureIds.length ? sameOrNull(measures.filter((m) => selectedIds.includes(m.id)).map(catOf)) : null}
+              onAssign={onAssignCategory}
+            />
+          }
           actions={
             <>
               <button className="text-brand-600 hover:underline" onClick={exportCsv}>
@@ -342,15 +395,15 @@ function EyeButton({ hidden, onClick, label }) {
   )
 }
 
-function ItemSection({ title, items, empty, actions, group, mmPerPt, unit, pageNum, selectedIds, onSetAllHidden, rowActions }) {
+function ItemSection({ title, items, total = items.length, head, empty, actions, group, mmPerPt, unit, pageNum, selectedIds, onSetAllHidden, rowActions, categories }) {
   const allHidden = items.length > 0 && items.every((m) => m.hidden)
   return (
     <section className="border-b border-ink-100 last:border-b-0">
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
         <h3 className="text-xs font-semibold tracking-wide text-ink-500">
-          {title} ({items.length})
+          {title} ({total === items.length ? total : `${items.length}/${total}`})
         </h3>
-        {items.length > 0 && (
+        {total > 0 && (
           <div className="flex items-center gap-3 text-xs">
             <button
               className="text-ink-500 hover:underline"
@@ -363,10 +416,20 @@ function ItemSection({ title, items, empty, actions, group, mmPerPt, unit, pageN
           </div>
         )}
       </div>
+      {head}
       <ul className="px-2 pb-3">
         {items.length === 0 && <li className="px-2 py-3 text-center text-sm text-ink-400">{empty}</li>}
         {items.map((m) => (
-          <ItemRow key={m.id} m={m} mmPerPt={mmPerPt} unit={unit} otherPage={m.page !== pageNum} selected={selectedIds.includes(m.id)} actions={rowActions} />
+          <ItemRow
+            key={m.id}
+            m={m}
+            mmPerPt={mmPerPt}
+            unit={unit}
+            otherPage={m.page !== pageNum}
+            selected={selectedIds.includes(m.id)}
+            actions={rowActions}
+            categories={isMarkup(m.type) ? null : categories}
+          />
         ))}
       </ul>
     </section>
@@ -374,8 +437,8 @@ function ItemSection({ title, items, empty, actions, group, mmPerPt, unit, pageN
 }
 
 // 측정·마크업 목록 한 줄. 값이 그대로면 다시 그리지 않음 (끌어서 옮기는 동안 목록 전체가 다시 그려지지 않게)
-const ItemRow = memo(function ItemRow({ m, mmPerPt, unit, otherPage, selected, actions }) {
-  const { onSelect, onDelete, onToggleHidden, onRename } = actions
+const ItemRow = memo(function ItemRow({ m, mmPerPt, unit, otherPage, selected, actions, categories }) {
+  const { onSelect, onDelete, onToggleHidden, onRename, onAssign } = actions
   const d = describe(m, mmPerPt, unit)
   const color = m.color ?? TYPE_INFO[m.type].color
   const markup = isMarkup(m.type)
@@ -400,8 +463,11 @@ const ItemRow = memo(function ItemRow({ m, mmPerPt, unit, otherPage, selected, a
         {markup ? (
           d.main && <div className="truncate px-1 text-sm text-ink-700">{d.main}</div>
         ) : (
-          <div className="px-1 font-semibold tabular-nums" style={{ color: mmPerPt || m.type === 'angle' ? color : '#94a3b8' }}>
-            {d.main}
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1 truncate px-1 font-semibold tabular-nums" style={{ color: mmPerPt || m.type === 'angle' ? color : '#94a3b8' }}>
+              {d.main}
+            </div>
+            {categories?.length > 0 && <CategorySelect m={m} categories={categories} onAssign={onAssign} />}
           </div>
         )}
         {d.sub && <div className="px-1 text-xs text-ink-500 tabular-nums">{d.sub}</div>}
@@ -422,3 +488,307 @@ const ItemRow = memo(function ItemRow({ m, mmPerPt, unit, otherPage, selected, a
     </li>
   )
 })
+
+// 고른 항목들의 분류가 모두 같으면 그 분류, 다르면 null
+function sameOrNull(list) {
+  return list.every((x) => x === list[0]) ? list[0] : null
+}
+
+// 측정 줄 오른쪽 작은 분류 고르기
+function CategorySelect({ m, categories, onAssign }) {
+  const cat = categories.find((c) => c.id === m.cat)
+  return (
+    <select
+      value={cat ? cat.id : ''}
+      onChange={(e) => onAssign(m.id, e.target.value || null)}
+      onClick={(e) => e.stopPropagation()}
+      aria-label={`${m.name} 분류`}
+      title="분류"
+      className={`max-w-24 shrink-0 cursor-pointer truncate rounded-md border px-1 py-0.5 text-xs ${
+        cat ? 'font-medium' : 'border-ink-200 text-ink-400'
+      }`}
+      style={cat ? { color: cat.color, borderColor: cat.color, background: `${cat.color}10` } : undefined}
+    >
+      <option value="">분류 없음</option>
+      {categories.map((c) => (
+        <option key={c.id} value={c.id}>
+          {c.name}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+// 분류(벽, 창호 …) 목록과 분류별 합계. 줄을 누르면 그 분류만 보기, 연필로 이름·색 바꾸기
+function CategoryPanel({ categories, totals, mmPerPt, unit, filter, setFilter, active, setActive, onAdd, onUpdate, onDelete, selectedIds, selectedCat, onAssign }) {
+  const [adding, setAdding] = useState(false)
+  const [editing, setEditing] = useState(null) // 고치는 분류 id
+  const activeOk = active && categories.some((c) => c.id === active)
+  const add = (name) => {
+    name = name.trim()
+    if (!name) return
+    const exists = categories.find((c) => c.name === name)
+    const cat = exists ?? onAdd(name)
+    if (!exists && selectedIds.length) onAssign(selectedIds, cat.id) // 고른 항목이 있으면 바로 그 분류로
+    setAdding(false)
+  }
+  const unused = CATEGORY_PRESETS.filter((n) => !categories.some((c) => c.name === n))
+  const uncategorized = totals.get('')
+  return (
+    <div className="mx-2 mb-2 rounded-lg bg-ink-50 p-2 ring-1 ring-ink-100">
+      <div className="flex items-center justify-between px-1">
+        <h4 className="text-xs font-semibold text-ink-500">분류별 합계</h4>
+        {!adding && (
+          <button className="text-xs font-medium text-brand-600 hover:underline" onClick={() => setAdding(true)}>
+            + 분류 추가
+          </button>
+        )}
+      </div>
+
+      {!categories.length && !adding && (
+        <p className="px-1 pt-1 text-xs text-ink-500">벽, 창호처럼 분류를 만들어 항목에 붙이면 분류별 길이·면적 합계를 보여 드려요.</p>
+      )}
+
+      {adding && (
+        <CategoryNameForm
+          placeholder="분류 이름 (예: 벽)"
+          submitLabel="추가"
+          onSubmit={add}
+          onCancel={() => setAdding(false)}
+          presets={unused}
+        />
+      )}
+
+      {categories.length > 0 && (
+        <ul className="mt-1 space-y-0.5">
+          {categories.map((c) =>
+            editing === c.id ? (
+              <li key={c.id}>
+                <CategoryEditor
+                  cat={c}
+                  onSave={(patch) => {
+                    onUpdate(c.id, patch)
+                    setEditing(null)
+                  }}
+                  onCancel={() => setEditing(null)}
+                  onDelete={() => {
+                    if (!window.confirm(`"${c.name}" 분류를 지울까요? 항목은 남고 분류만 빠져요.`)) return
+                    if (filter === c.id) setFilter(null)
+                    onDelete(c.id)
+                    setEditing(null)
+                  }}
+                />
+              </li>
+            ) : (
+              <CategoryRow
+                key={c.id}
+                color={c.color}
+                name={c.name}
+                total={totals.get(c.id)}
+                mmPerPt={mmPerPt}
+                unit={unit}
+                on={filter === c.id}
+                onClick={() => setFilter(filter === c.id ? null : c.id)}
+                onEdit={() => setEditing(c.id)}
+              />
+            ),
+          )}
+          {uncategorized && (
+            <CategoryRow
+              name="분류 없음"
+              total={uncategorized}
+              mmPerPt={mmPerPt}
+              unit={unit}
+              on={filter === ''}
+              onClick={() => setFilter(filter === '' ? null : '')}
+            />
+          )}
+        </ul>
+      )}
+
+      {categories.length > 0 && (
+        <div className="mt-2 space-y-1.5 border-t border-ink-200 px-1 pt-2 text-xs">
+          <label className="flex items-center justify-between gap-2">
+            <span className="text-ink-600">새로 재는 항목</span>
+            <CategoryPicker categories={categories} value={activeOk ? active : ''} onChange={(id) => setActive(id || null)} />
+          </label>
+          {selectedIds.length > 0 && (
+            <label className="flex items-center justify-between gap-2">
+              <span className="text-ink-600">고른 {selectedIds.length}개를</span>
+              <CategoryPicker
+                categories={categories}
+                value={selectedCat ?? (selectedIds.length > 1 ? 'mixed' : '')}
+                mixed={selectedCat === null}
+                onChange={(id) => onAssign(selectedIds, id || null)}
+              />
+            </label>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CategoryPicker({ categories, value, onChange, mixed }) {
+  const cat = categories.find((c) => c.id === value)
+  return (
+    <select
+      value={value}
+      onChange={(e) => e.target.value !== 'mixed' && onChange(e.target.value)}
+      className="min-w-0 max-w-36 rounded-md border border-ink-300 bg-white px-1.5 py-0.5 text-xs font-medium"
+      style={cat ? { color: cat.color } : undefined}
+    >
+      {mixed && (
+        <option value="mixed" disabled>
+          여러 분류
+        </option>
+      )}
+      <option value="">분류 없음</option>
+      {categories.map((c) => (
+        <option key={c.id} value={c.id}>
+          {c.name}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+function CategoryRow({ color, name, total, mmPerPt, unit, on, onClick, onEdit }) {
+  const parts = []
+  if (total?.lengthCount) parts.push(`길이 ${formatLength(total.length, mmPerPt, unit)}`)
+  if (total?.areaCount) parts.push(`면적 ${formatArea(total.area, mmPerPt, unit)}`)
+  return (
+    <li
+      onClick={onClick}
+      aria-pressed={on}
+      title={on ? '전체 항목 보기' : `${name} 항목만 보기`}
+      className={`group flex cursor-pointer items-start gap-2 rounded-md px-1.5 py-1 transition-colors ${on ? 'bg-white ring-1 ring-brand-300' : 'hover:bg-white'}`}
+    >
+      <span
+        className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${color ? '' : 'ring-1 ring-ink-300 ring-inset'}`}
+        style={color ? { background: color } : undefined}
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-1.5 text-sm">
+          <span className={`truncate font-medium ${color ? 'text-ink-800' : 'text-ink-500'}`}>{name}</span>
+          <span className="shrink-0 text-xs text-ink-400 tabular-nums">{total?.count ?? 0}개</span>
+        </div>
+        {parts.length > 0 && <div className="text-xs font-semibold text-ink-700 tabular-nums" style={color && mmPerPt ? { color } : undefined}>{parts.join(' · ')}</div>}
+      </div>
+      {onEdit && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onEdit()
+          }}
+          aria-label={`${name} 분류 고치기`}
+          title="이름·색 고치기"
+          className="shrink-0 rounded p-0.5 text-ink-400 opacity-0 transition-colors group-hover:opacity-100 hover:bg-ink-100 hover:text-ink-700 focus-visible:opacity-100"
+        >
+          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M4 20h4L19 9l-4-4L4 16z" />
+          </svg>
+        </button>
+      )}
+    </li>
+  )
+}
+
+// 새 분류 이름 입력 (자주 쓰는 이름은 눌러서 바로 추가)
+function CategoryNameForm({ placeholder, submitLabel, onSubmit, onCancel, presets }) {
+  const [text, setText] = useState('')
+  return (
+    <div className="mt-1.5 px-1">
+      <form
+        className="flex items-center gap-1"
+        onSubmit={(e) => {
+          e.preventDefault()
+          onSubmit(text)
+        }}
+      >
+        <input
+          autoFocus
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => e.key === 'Escape' && onCancel()}
+          placeholder={placeholder}
+          maxLength={30}
+          className="min-w-0 flex-1 rounded-md border border-ink-300 bg-white px-2 py-1 text-sm outline-none focus:border-brand-500"
+        />
+        <button className="rounded-md bg-brand-600 px-2 py-1 text-xs font-semibold text-white hover:bg-brand-700">{submitLabel}</button>
+        <button type="button" className="px-1 text-xs text-ink-500 hover:underline" onClick={onCancel}>
+          취소
+        </button>
+      </form>
+      {presets.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {presets.map((n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => onSubmit(n)}
+              className="rounded-full bg-white px-2 py-0.5 text-xs text-ink-600 ring-1 ring-ink-200 transition-colors hover:text-brand-700 hover:ring-brand-300"
+            >
+              + {n}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// 분류 이름·색 고치기, 지우기
+function CategoryEditor({ cat, onSave, onCancel, onDelete }) {
+  const [name, setName] = useState(cat.name)
+  const [color, setColor] = useState(cat.color)
+  const save = () => {
+    const patch = {}
+    if (name.trim() && name.trim() !== cat.name) patch.name = name.trim()
+    if (color !== cat.color) patch.color = color
+    if (Object.keys(patch).length) onSave(patch)
+    else onCancel()
+  }
+  return (
+    <form
+      className="rounded-md bg-white p-1.5 ring-1 ring-brand-300"
+      onSubmit={(e) => {
+        e.preventDefault()
+        save()
+      }}
+    >
+      <input
+        autoFocus
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => e.key === 'Escape' && onCancel()}
+        maxLength={30}
+        aria-label="분류 이름"
+        className="w-full rounded-md border border-ink-300 px-2 py-1 text-sm outline-none focus:border-brand-500"
+      />
+      <div className="mt-1.5 flex flex-wrap gap-1" role="radiogroup" aria-label="분류 색">
+        {CATEGORY_COLORS.map((c) => (
+          <button
+            key={c}
+            type="button"
+            role="radio"
+            aria-checked={color === c}
+            aria-label={c}
+            onClick={() => setColor(c)}
+            className={`h-5 w-5 rounded-full ${color === c ? 'ring-2 ring-ink-800 ring-offset-1' : ''}`}
+            style={{ background: c }}
+          />
+        ))}
+      </div>
+      <div className="mt-1.5 flex items-center gap-2 text-xs">
+        <button className="rounded-md bg-brand-600 px-2 py-1 font-semibold text-white hover:bg-brand-700">저장</button>
+        <button type="button" className="text-ink-500 hover:underline" onClick={onCancel}>
+          취소
+        </button>
+        <button type="button" className="ml-auto text-danger-500 hover:underline" onClick={onDelete}>
+          분류 지우기
+        </button>
+      </div>
+    </form>
+  )
+}
