@@ -15,7 +15,36 @@ import { MAX_ZOOM, MIN_ZOOM } from '../lib/zoom'
 const CLOSE_RADIUS_PX = 10 // 면적: 첫 점 / 길이: 마지막 점 근처 클릭 시 완료
 const SNAP_RADIUS_PX = 12 // 자석: 화면에서 이 거리 안이면 붙음
 const PAGE_GAP = 16
+const TOUCH_DELAY = 100 // ms: 한 손가락 동작을 이만큼 미뤄서 두 손가락 핀치와 구분
+const TOUCH_SLOP = 6 // px: 미뤄 둔 손가락이 이만큼 움직이면 바로 시작
 const PAD = 24
+
+// 미뤄 둔 손가락 누름/뗌을 나중에 다시 처리할 때 쓰는 이벤트 대신 객체
+function replayEvent(e, svg) {
+  return {
+    replay: true,
+    pointerId: e.pointerId,
+    pointerType: e.pointerType,
+    button: 0,
+    clientX: e.clientX,
+    clientY: e.clientY,
+    shiftKey: false,
+    ctrlKey: false,
+    metaKey: false,
+    target: e.target,
+    currentTarget: {
+      getBoundingClientRect: () => svg.getBoundingClientRect(),
+      setPointerCapture: (id) => {
+        try {
+          svg.setPointerCapture(id)
+        } catch {
+          // 이미 뗀 손가락
+        }
+      },
+    },
+    preventDefault() {},
+  }
+}
 
 // 모든 페이지를 위아래로 이어 붙여 보여 주는 뷰어. 화면에 보이는 페이지만 캔버스에 그립니다.
 export default function PdfViewer({
@@ -201,28 +230,54 @@ export default function PdfViewer({
   // Ctrl(⌘) + 휠 / 트랙패드 핀치 = PDF 만 확대/축소.
   // 창 전체에서 가로채서 툴바·목록 위에서 휠을 굴려도 브라우저 화면 확대가 되지 않게 합니다.
   const wheelRef = useRef(null)
+  const touchesRef = useRef(new Map()) // 화면에 닿은 손가락 pointerId → { x, y }
   useLayoutEffect(() => {
     wheelRef.current = { zoom, zoomAt }
   })
   useEffect(() => {
+    const clamp = (z) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z))
+    const inside = (e) => {
+      const el = containerRef.current
+      return el && el.contains(e.target) && e.clientX != null
+    }
+    let gesture = null // 사파리 트랙패드 핀치 중 { base }
     const onWheel = (e) => {
       if (!e.ctrlKey && !e.metaKey) return
       e.preventDefault()
+      if (gesture) return // 사파리는 핀치를 gesture 이벤트로 따로 줌
       const { zoom: z, zoomAt: at } = wheelRef.current
-      const el = containerRef.current
-      const inside = el && el.contains(e.target)
-      const factor = Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0025))
-      at(Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z * factor)), inside ? e.clientX : undefined, inside ? e.clientY : undefined)
+      // 트랙패드 핀치(크롬·엣지·파이어폭스)는 작은 값이 자주 옴 → 더 민감하게
+      const pinch = e.deltaMode === 0 && Math.abs(e.deltaY) < 50
+      const factor = Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : pinch ? 0.01 : 0.0025))
+      const inn = inside(e)
+      at(clamp(z * factor), inn ? e.clientX : undefined, inn ? e.clientY : undefined)
     }
-    // 사파리 트랙패드 핀치
-    const onGesture = (e) => e.preventDefault()
+    // 사파리(맥) 트랙패드 핀치. 아이패드 손가락 핀치는 아래 손가락 처리가 맡음
+    const onGestureStart = (e) => {
+      e.preventDefault()
+      gesture = touchesRef.current.size ? null : { base: wheelRef.current.zoom }
+    }
+    const onGestureChange = (e) => {
+      e.preventDefault()
+      if (!gesture || touchesRef.current.size) return
+      const { zoom: z, zoomAt: at } = wheelRef.current
+      const next = clamp(gesture.base * e.scale)
+      const inn = inside(e)
+      if (Math.abs(next - z) > 1e-6) at(next, inn ? e.clientX : undefined, inn ? e.clientY : undefined)
+    }
+    const onGestureEnd = (e) => {
+      e.preventDefault()
+      gesture = null
+    }
     window.addEventListener('wheel', onWheel, { passive: false })
-    window.addEventListener('gesturestart', onGesture)
-    window.addEventListener('gesturechange', onGesture)
+    window.addEventListener('gesturestart', onGestureStart)
+    window.addEventListener('gesturechange', onGestureChange)
+    window.addEventListener('gestureend', onGestureEnd)
     return () => {
       window.removeEventListener('wheel', onWheel)
-      window.removeEventListener('gesturestart', onGesture)
-      window.removeEventListener('gesturechange', onGesture)
+      window.removeEventListener('gesturestart', onGestureStart)
+      window.removeEventListener('gesturechange', onGestureChange)
+      window.removeEventListener('gestureend', onGestureEnd)
     }
   }, [])
 
@@ -460,6 +515,17 @@ export default function PdfViewer({
   }
 
   const onPointerDown = (e, page) => {
+    // 손가락은 잠깐 미뤄 둠: 곧 두 번째 손가락이 닿으면 핀치라서 점을 찍거나 그리지 않음
+    if (e.pointerType === 'touch' && !e.replay && !panning) {
+      const svg = e.currentTarget
+      clearPendingTouch()
+      pendingTouchRef.current = {
+        e: replayEvent(e, svg),
+        page,
+        timer: setTimeout(() => touchHandlersRef.current.flush(), TOUCH_DELAY),
+      }
+      return
+    }
     if (e.button === 1 || (e.button === 0 && panning)) {
       e.preventDefault()
       const el = containerRef.current
@@ -575,6 +641,11 @@ export default function PdfViewer({
   }
 
   const onPointerMove = (e, page) => {
+    const pending = pendingTouchRef.current
+    if (pending && pending.e.pointerId === e.pointerId) {
+      if (Math.hypot(e.clientX - pending.e.clientX, e.clientY - pending.e.clientY) > TOUCH_SLOP) flushPendingTouch()
+      return
+    }
     if (panRef.current) {
       const el = containerRef.current
       el.scrollLeft = panRef.current.left - (e.clientX - panRef.current.x)
@@ -646,6 +717,14 @@ export default function PdfViewer({
   const memoAtPointer = (e) => document.elementFromPoint(e.clientX, e.clientY)?.closest?.('[data-type="memo"]')?.dataset.shape
 
   const onPointerUp = (e, page) => {
+    const pending = pendingTouchRef.current
+    if (pending && pending.e.pointerId === e.pointerId) {
+      // 짧게 톡 누름: 누름을 먼저 처리하고, 화면에 반영된 뒤 뗌을 처리
+      flushPendingTouch()
+      const up = replayEvent(e, e.currentTarget)
+      setTimeout(() => touchHandlersRef.current.up(up, page))
+      return
+    }
     if (panRef.current) {
       // 이동 도구로 끌지 않고 누르기만 하면 메모 열기
       const pr = panRef.current
@@ -683,6 +762,120 @@ export default function PdfViewer({
       }
       setDraft(null)
     }
+  }
+
+  // ---------- 손가락(아이패드·터치 화면) ----------
+  // 한 손가락: 지금 도구 그대로. 두 손가락: 벌리고 오므려 확대/축소 + 함께 끌어서 화면 이동.
+  // 도면 바깥 빈 곳은 한 손가락으로 끌어도 화면 이동.
+  const pendingTouchRef = useRef(null) // 미뤄 둔 한 손가락 누름 { e, page, timer }
+  const pinchRef = useRef(null) // { dist, zoom, anchor, raf }
+  const touchPanRef = useRef(null) // { id, x, y, left, top }
+  const ignoredTouches = useRef(new Set()) // 핀치에 쓴 손가락: 뗄 때까지 도구 동작 안 함
+  const touchHandlersRef = useRef(null)
+
+  const clearPendingTouch = () => {
+    if (pendingTouchRef.current) clearTimeout(pendingTouchRef.current.timer)
+    pendingTouchRef.current = null
+  }
+  const flushPendingTouch = () => {
+    const pending = pendingTouchRef.current
+    if (!pending) return
+    clearPendingTouch()
+    onPointerDown(pending.e, pending.page)
+  }
+  useLayoutEffect(() => {
+    touchHandlersRef.current = { flush: flushPendingTouch, up: onPointerUp }
+  })
+  useEffect(() => () => clearPendingTouch(), [])
+
+  const startPinch = () => {
+    // 첫 손가락이 시작한 일은 취소
+    clearPendingTouch()
+    panRef.current = null
+    dragRef.current = null
+    touchPanRef.current = null
+    setMarquee(null)
+    setDraft((d) => (d?.dragging ? null : d))
+    setCursor(null)
+    const [a, b] = [...touchesRef.current.values()]
+    for (const id of touchesRef.current.keys()) ignoredTouches.current.add(id)
+    const anchor = anchorAt((a.x + b.x) / 2, (a.y + b.y) / 2)
+    pinchRef.current = anchor && { dist: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), zoom, anchor, raf: 0 }
+  }
+
+  // 화면을 한 프레임에 한 번만 갱신
+  const updatePinch = () => {
+    const pinch = pinchRef.current
+    if (!pinch || pinch.raf) return
+    pinch.raf = requestAnimationFrame(() => {
+      pinch.raf = 0
+      const el = containerRef.current
+      if (pinchRef.current !== pinch || !el || touchesRef.current.size < 2) return
+      const [a, b] = [...touchesRef.current.values()]
+      const rect = el.getBoundingClientRect()
+      const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, (pinch.zoom * Math.hypot(a.x - b.x, a.y - b.y)) / pinch.dist))
+      // 처음 두 손가락 가운데 있던 도면 지점이 지금 두 손가락 가운데 오게
+      const anchor = { ...pinch.anchor, offsetX: (a.x + b.x) / 2 - rect.left, offsetY: (a.y + b.y) / 2 - rect.top }
+      if (Math.abs(next - wheelRef.current.zoom) > 1e-6) {
+        zoomAnchorRef.current = anchor
+        onZoom(next)
+      } else restoreAnchor(anchor, next)
+    })
+  }
+
+  const endPinch = () => {
+    if (pinchRef.current?.raf) cancelAnimationFrame(pinchRef.current.raf)
+    pinchRef.current = null
+  }
+
+  const onTouchDown = (e) => {
+    if (e.pointerType !== 'touch') return
+    const touches = touchesRef.current
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (touches.size === 2 && !pinchRef.current) {
+      e.stopPropagation()
+      startPinch()
+      return
+    }
+    if (touches.size > 1) {
+      ignoredTouches.current.add(e.pointerId)
+      e.stopPropagation()
+      return
+    }
+    if (!e.target.closest?.('[data-page]')) {
+      const el = containerRef.current
+      touchPanRef.current = { id: e.pointerId, x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop }
+    }
+  }
+
+  const onTouchMove = (e) => {
+    if (e.pointerType !== 'touch') return
+    const touches = touchesRef.current
+    if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    const tp = touchPanRef.current
+    if (tp && tp.id === e.pointerId) {
+      const el = containerRef.current
+      el.scrollLeft = tp.left - (e.clientX - tp.x)
+      el.scrollTop = tp.top - (e.clientY - tp.y)
+      e.stopPropagation()
+      return
+    }
+    if (ignoredTouches.current.has(e.pointerId)) {
+      e.stopPropagation()
+      updatePinch()
+    }
+  }
+
+  const onTouchUp = (e) => {
+    if (e.pointerType !== 'touch') return
+    touchesRef.current.delete(e.pointerId)
+    if (touchesRef.current.size < 2) endPinch()
+    if (pendingTouchRef.current?.e.pointerId === e.pointerId && e.type === 'pointercancel') clearPendingTouch()
+    if (touchPanRef.current?.id === e.pointerId) {
+      touchPanRef.current = null
+      e.stopPropagation()
+    }
+    if (ignoredTouches.current.delete(e.pointerId)) e.stopPropagation()
   }
 
   if (!sizes) {
@@ -728,8 +921,12 @@ export default function PdfViewer({
     <div className="relative min-h-0 min-w-0 flex-1">
       <div
         ref={containerRef}
-        className="absolute inset-0 overflow-auto bg-desk"
+        className="absolute inset-0 touch-none overflow-auto bg-desk"
         onScroll={onScroll}
+        onPointerDownCapture={onTouchDown}
+        onPointerMoveCapture={onTouchMove}
+        onPointerUpCapture={onTouchUp}
+        onPointerCancelCapture={onTouchUp}
         onPointerLeave={() => {
           setCursor(null)
           pointerRef.current = null
