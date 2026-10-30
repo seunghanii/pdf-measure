@@ -1,7 +1,7 @@
 // 메모 글 ↔ 메모장 화면(HTML). 라이브러리 없이 메모에 쓰는 만큼만 다룹니다.
 // 저장은 예전처럼 글자(마크다운)로 하고, 한 줄이 한 덩어리입니다. 그래서 예전 일반 글 메모는 그대로 열리고 그대로 저장됩니다.
 //   # 제목, ## 소제목, ### 작은 제목, - 목록, 1. 번호 목록, - [ ] 할 일, > 인용, --- 구분선
-//   **굵게**, *기울임*, ~~취소선~~, | 표 | (첫 줄은 머리줄, 둘째 줄은 |---|)
+//   **굵게**, *기울임*, ~~취소선~~, | 표 | (첫 줄은 머리줄, 둘째 줄은 |---|), 사진은 한 줄에 ![사진](img:사진id)
 // 화면 HTML 은 여기서 글자를 이스케이프해 직접 만들기 때문에 붙여넣은 HTML 의 스크립트·스타일은 들어오지 않습니다.
 
 import { cellsOf, RULE, TABLE_ROW, TABLE_SEP } from './memoPlain'
@@ -13,6 +13,7 @@ const TASK = /^[-*+] \[([ xX])\] ?(.*)$/
 const BULLET = /^[-*+] (.*)$/
 const ORDERED = /^\d+[.)] (.*)$/
 const QUOTE = /^> ?(.*)$/
+const PHOTO_LINE = /^\s*!\[[^\]]*\]\(img:([a-z0-9]+)\)\s*$/
 const ESCAPED_START = /^\\([#>\-*+|\d])/
 
 // ---------- 글 → HTML ----------
@@ -63,6 +64,10 @@ export function tableHtml(rows) {
     .join('')}</tbody></table>`
 }
 
+// 글 사이 사진 한 장 (편집 안 되는 덩어리. 주소는 메모장이 불러와서 채움)
+export const photoHtml = (id) =>
+  `<div class="memo-photo" data-img="${esc(id)}" contenteditable="false"><img alt="사진"><button type="button" data-del title="이 사진 빼기" aria-label="이 사진 빼기">×</button></div>`
+
 // 메모 글 전체 → 메모장 HTML
 export function markdownToHtml(md) {
   const lines = String(md ?? '')
@@ -84,7 +89,10 @@ export function markdownToHtml(md) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
     let m
-    if (TABLE_ROW.test(line) && TABLE_SEP.test(lines[i + 1] ?? '')) {
+    if ((m = PHOTO_LINE.exec(line))) {
+      closeList()
+      out.push(photoHtml(m[1]))
+    } else if (TABLE_ROW.test(line) && TABLE_SEP.test(lines[i + 1] ?? '')) {
       closeList()
       const rows = [cellsOf(line)]
       i += 2
@@ -106,8 +114,8 @@ export function markdownToHtml(md) {
     }
   }
   closeList()
-  // 마지막이 표나 구분선이면 그 뒤에 글을 쓸 수 있게 빈 줄 하나
-  if (!out.length || /^<(table|hr)/.test(out[out.length - 1])) out.push('<p><br></p>')
+  // 마지막이 표·구분선·사진이면 그 뒤에 글을 쓸 수 있게 빈 줄 하나
+  if (!out.length || /^<(table|hr|div class="memo-photo")/.test(out[out.length - 1])) out.push('<p><br></p>')
   return out.join('')
 }
 
@@ -214,7 +222,8 @@ function blockLines(el, out) {
     }
     flushInline()
     const t = ch.tagName
-    if (t === 'TABLE') out.push(...rowsToMarkdown(tableRows(ch)))
+    if (ch.dataset?.img) out.push(`![사진](img:${ch.dataset.img})`)
+    else if (t === 'TABLE') out.push(...rowsToMarkdown(tableRows(ch)))
     else if (t === 'HR') out.push('---')
     else if (t === 'UL' || t === 'OL') {
       let n = 1

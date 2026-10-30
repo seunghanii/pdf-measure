@@ -27,7 +27,7 @@ export const cellsOf = (line) => {
 export function markdownPlainLines(md) {
   const out = []
   for (const line of String(md ?? '').split('\n')) {
-    if (TABLE_SEP.test(line) || RULE.test(line)) continue
+    if (TABLE_SEP.test(line) || RULE.test(line) || /^\s*!\[[^\]]*\]\(img:[^)]*\)\s*$/.test(line)) continue
     let s = line
     if (TABLE_ROW.test(s))
       s = cellsOf(s)

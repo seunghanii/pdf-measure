@@ -1,11 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { htmlToMarkdown, inlineHtml, markdownToHtml, rowsToMarkdown, tableRows, tsvRows } from '../lib/memoMarkdown'
+import { htmlToMarkdown, inlineHtml, markdownToHtml, photoHtml, rowsToMarkdown, tableRows, tsvRows } from '../lib/memoMarkdown'
 
 // 메모 글 상자. 쓰는 그 자리에서 마크다운이 바로 적용됩니다 (예: "# " 를 치면 그 줄이 제목으로).
 // 라이브러리 없이 브라우저 편집(contentEditable)에 줄 모양 바꾸기만 직접 얹었습니다.
 // 크롬의 목록·표 명령은 <p> 안에 목록을 넣거나 표를 깨뜨려서 줄 모양은 직접 바꾸고, 그래서 되돌리기(Ctrl+Z)도 직접 관리합니다.
 // 저장은 글(마크다운)로: 부모가 editorRef 로 htmlToMarkdown 해서 가져갑니다.
-// 맨 바깥 덩어리는 p, h1~h3, blockquote, ul/ol(li), table, hr 만 씁니다.
+// 맨 바깥 덩어리는 p, h1~h3, blockquote, ul/ol(li), table, hr, 사진(div.memo-photo) 만 씁니다.
 
 const MEMO_HELP = [
   ['# 제목', '## 소제목', '### 작은 제목'],
@@ -149,7 +149,12 @@ function setGrid(table, grid, focus) {
   }
 }
 
-export default function MemoEditor({ initial, editorRef, onEdit, onPasteFiles, autoFocus }) {
+// 맨 끝이 표·구분선·사진이면 그 뒤에 글을 쓸 수 없어서 빈 줄이 필요
+const needsLineAfter = (n) => !!n && (n.tagName === 'TABLE' || n.tagName === 'HR' || !!n.dataset?.img)
+
+// apiRef.current.insertPhotos(ids): 커서 자리(없으면 맨 끝)에 사진 넣기
+// loadPhoto(id) → Promise<주소>, onOpenPhoto(ids, i): 사진 크게 보기
+export default function MemoEditor({ initial, editorRef, apiRef, onEdit, onPasteFiles, loadPhoto, onOpenPhoto, autoFocus }) {
   const [empty, setEmpty] = useState(!String(initial ?? '').trim())
   const [inTable, setInTable] = useState(false)
   const history = useRef({ undo: [], redo: [], typingAt: 0 })
@@ -173,9 +178,21 @@ export default function MemoEditor({ initial, editorRef, onEdit, onPasteFiles, a
     if (h.undo.length > HISTORY_MAX) h.undo.shift()
     h.redo.length = 0
   }
+  // 사진 주소 채우기 (아직 못 불러온 사진은 불러온 뒤에)
+  const hydrate = () => {
+    for (const box of editorRef.current.querySelectorAll('[data-img]')) {
+      const img = box.querySelector('img')
+      if (!img || img.getAttribute('src')) continue
+      loadPhoto(box.dataset.img).then((url) => {
+        if (url) img.src = url
+        else img.alt = '사진을 불러오지 못했어요'
+      })
+    }
+  }
   const restore = (s) => {
     const el = editorRef.current
     el.innerHTML = s.html
+    hydrate()
     const n = s.caret && nodeAtPath(el, s.caret.path)
     if (n) {
       const r = document.createRange()
@@ -201,6 +218,16 @@ export default function MemoEditor({ initial, editorRef, onEdit, onPasteFiles, a
   useLayoutEffect(() => {
     const el = editorRef.current
     el.innerHTML = markdownToHtml(initial)
+    hydrate()
+    apiRef.current = {
+      insertPhotos: (ids) => {
+        const sel = window.getSelection()
+        if (!sel.focusNode || !el.contains(sel.focusNode)) caretInto(el, true)
+        record()
+        insertBlocks(ids.map(photoHtml).join(''))
+        changed()
+      },
+    }
     try {
       exec('defaultParagraphSeparator', 'p')
       exec('styleWithCSS', false)
@@ -246,7 +273,7 @@ export default function MemoEditor({ initial, editorRef, onEdit, onPasteFiles, a
     const el = editorRef.current
     // 글 상자가 비거나 맨 끝이 표·구분선이면 글을 이어 쓸 빈 줄을 둠
     if (!el.firstChild) el.innerHTML = '<p><br></p>'
-    else if (/^(TABLE|HR)$/.test(el.lastElementChild?.tagName)) el.append(Object.assign(document.createElement('p'), { innerHTML: '<br>' }))
+    else if (needsLineAfter(el.lastElementChild)) el.append(Object.assign(document.createElement('p'), { innerHTML: '<br>' }))
     setEmpty(!el.textContent.trim() && !el.querySelector('table,hr,li'))
     onEdit()
   }
@@ -408,8 +435,23 @@ export default function MemoEditor({ initial, editorRef, onEdit, onPasteFiles, a
     }
   }
 
-  // 할 일 네모 누르기
+  // 할 일 네모 누르기, 사진 누르기(크게 보기)·빼기
   const onClick = (e) => {
+    const photo = e.target.closest?.('[data-img]')
+    if (photo) {
+      e.preventDefault()
+      if (e.target.closest('[data-del]')) {
+        record()
+        const next = photo.nextElementSibling
+        photo.remove()
+        if (next) caretInto(next)
+        changed()
+      } else {
+        const ids = [...editorRef.current.querySelectorAll('[data-img]')].map((b) => b.dataset.img)
+        onOpenPhoto(ids, ids.indexOf(photo.dataset.img))
+      }
+      return
+    }
     const li = e.target.closest?.('li[data-task]')
     if (!li) return
     const r = li.getBoundingClientRect()
@@ -435,6 +477,7 @@ export default function MemoEditor({ initial, editorRef, onEdit, onPasteFiles, a
     const sel = window.getSelection()
     if (!sel.isCollapsed) sel.deleteFromDocument()
     const top = sel.focusNode && el.contains(sel.focusNode) ? topAt(el, sel.focusNode) : null
+    let rest = null // 줄 가운데에 넣어 둘로 나뉜 뒷부분
     if (!top || top === el) el.append(frag)
     else if (/^(P|H[1-6]|BLOCKQUOTE|DIV)$/.test(top.tagName)) {
       const r = document.createRange()
@@ -442,17 +485,19 @@ export default function MemoEditor({ initial, editorRef, onEdit, onPasteFiles, a
       r.setEnd(top, top.childNodes.length)
       const tail = r.extractContents()
       if (tail.textContent) {
-        const rest = top.cloneNode(false)
+        rest = top.cloneNode(false)
         rest.append(tail)
         top.after(rest)
       }
       if (!top.textContent && !top.querySelector('img')) top.replaceWith(frag)
       else top.after(frag)
     } else top.after(frag)
+    hydrate()
     const last = nodes[nodes.length - 1]
-    if (/^(TABLE|HR)$/.test(last.tagName)) {
+    if (needsLineAfter(last)) {
+      // 그 아래에 이어 쓸 줄: 나뉜 뒷부분이나 빈 줄이 있으면 거기, 없으면 새 빈 줄
       let next = last.nextElementSibling
-      if (next?.tagName !== 'P') {
+      if (!(next && (next === rest || (next.tagName === 'P' && !next.textContent)))) {
         next = document.createElement('p')
         next.innerHTML = '<br>'
         last.after(next)
