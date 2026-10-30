@@ -44,17 +44,14 @@ export default function Toolbar({
   const numPages = pdfDoc?.numPages ?? 0
 
   return (
-    <header className="relative z-20 flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-slate-200 bg-white px-3 py-2 shadow-sm">
+    <header className="relative z-20 flex flex-wrap items-center gap-x-2.5 gap-y-2 border-b border-ink-200 bg-white px-3 py-2">
       <div className="flex items-center gap-2">
-        <svg viewBox="0 0 32 32" className="h-6 w-6">
-          <rect x="2" y="10" width="28" height="12" rx="2" fill="#2563eb" />
-          <path d="M7 10v5M12 10v7M17 10v5M22 10v7M27 10v5" stroke="#fff" strokeWidth="1.6" />
-        </svg>
-        <span className="hidden font-bold xl:inline">PDF 도면 측정기</span>
+        <Logo />
+        <span className="hidden text-[15px] font-semibold tracking-tight text-ink-900 xl:inline">PDF 도면 측정기</span>
       </div>
 
       <button
-        className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+        className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white shadow-xs transition-colors hover:bg-brand-700 active:bg-brand-800"
         onClick={() => inputRef.current?.click()}
       >
         PDF 열기
@@ -74,28 +71,29 @@ export default function Toolbar({
       {pdfDoc && (
         <>
           <Divider />
-          <div className="flex items-center gap-1" role="group" aria-label="측정 도구">
+          <div className="flex items-center gap-0.5 rounded-xl bg-ink-100 p-0.5" role="group" aria-label="측정 도구">
             {TOOLS.filter((t) => t.group !== 'markup').map((t) => (
               <ToolButton key={t.id} t={t} active={tool === t.id} needCal={!calibrated && t.id === 'calibrate'} onClick={() => setTool(t.id)} showLabel />
             ))}
             <SnapButton />
           </div>
           <Divider />
-          <div className="flex items-center gap-1" role="group" aria-label="마크업 도구">
+          <div className="flex items-center gap-0.5 rounded-xl bg-ink-100 p-0.5" role="group" aria-label="마크업 도구">
             {TOOLS.filter((t) => t.group === 'markup').map((t) => (
               <ToolButton key={t.id} t={t} active={tool === t.id} onClick={() => setTool(t.id)} />
             ))}
             <button
               title="사진 넣기 (I) · 복사한 사진은 Ctrl+V 로 바로 붙여넣기, 사진 파일을 도면에 끌어다 놓아도 돼요"
+              aria-label="사진 넣기"
               onClick={onInsertImage}
-              className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium whitespace-nowrap text-slate-700 transition hover:bg-slate-100"
+              className="flex items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-sm font-medium whitespace-nowrap text-ink-600 transition-colors hover:bg-white hover:text-ink-900"
             >
               <Icon d="M4 5h16v14H4zM4 16l5-5 4 4 2-2 5 5M15.5 9.5h.01" />
               <span className="hidden min-[1800px]:inline">사진</span>
             </button>
           </div>
           <button
-            className="rounded-md px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 disabled:opacity-40"
+            className="rounded-lg px-2 py-1.5 text-sm text-ink-600 transition-colors hover:bg-ink-100 disabled:opacity-40 disabled:hover:bg-transparent"
             onClick={onUndo}
             disabled={!canUndo}
             title="되돌리기 (Ctrl+Z)"
@@ -106,7 +104,7 @@ export default function Toolbar({
           <div className="ml-auto flex items-center gap-3">
             {syncStatus && <SyncBadge status={syncStatus} />}
             <button
-              className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-2.5 py-1.5 text-sm font-medium text-ink-700 shadow-xs transition-colors hover:border-ink-300 hover:bg-ink-50 disabled:opacity-50"
               onClick={onSave}
               disabled={saving}
               title="마크업과 측정을 그려 넣은 PDF로 저장 (Ctrl+S)"
@@ -120,28 +118,30 @@ export default function Toolbar({
                   ‹
                 </SmallButton>
                 <input
-                  className="w-10 rounded border border-slate-300 px-1 py-0.5 text-center"
+                  aria-label="쪽 번호"
+                  inputMode="numeric"
+                  className="w-10 rounded-md border border-ink-200 px-1 py-0.5 text-center tabular-nums"
                   value={pageNum}
                   onChange={(e) => {
                     const n = Number(e.target.value)
                     if (n >= 1 && n <= numPages) setPageNum(n)
                   }}
                 />
-                <span className="text-slate-500">/ {numPages}</span>
+                <span className="text-ink-500">/ {numPages}</span>
                 <SmallButton onClick={() => setPageNum(Math.min(numPages, pageNum + 1))} disabled={pageNum >= numPages}>
                   ›
                 </SmallButton>
               </div>
             )}
-            <div className="flex items-center gap-1 text-sm">
+            <div className="flex items-center gap-0.5 rounded-xl bg-ink-100 p-0.5 text-sm">
               <SmallButton onClick={() => setZoom(Math.max(MIN_ZOOM, zoom / 1.25))} title="축소 (-)">
                 −
               </SmallButton>
-              <span className="w-12 text-center tabular-nums">{Math.round(zoom * 100)}%</span>
+              <span className="w-12 text-center font-medium text-ink-700 tabular-nums">{Math.round(zoom * 100)}%</span>
               <SmallButton onClick={() => setZoom(Math.min(MAX_ZOOM, zoom * 1.25))} title="확대 (+)">
                 +
               </SmallButton>
-              <button className="ml-1 rounded-md px-2 py-1 text-slate-600 hover:bg-slate-100" onClick={onFit}>
+              <button className="rounded-[10px] px-2 py-1 text-ink-600 transition-colors hover:bg-white hover:text-ink-900" onClick={onFit} title="화면에 맞춤">
                 맞춤
               </button>
             </div>
@@ -167,11 +167,22 @@ export default function Toolbar({
   )
 }
 
+// 앱 표시: 청사진 파랑 바탕에 흰 자 눈금
+function Logo() {
+  return (
+    <svg viewBox="0 0 32 32" className="h-7 w-7" aria-hidden="true">
+      <rect width="32" height="32" rx="8" fill="var(--color-brand-600)" />
+      <path d="M7 22.5L22.5 7l2.5 2.5L9.5 25z" fill="#fff" />
+      <path d="M11.2 18.3l1.6 1.6M13.8 15.7l2.4 2.4M16.4 13.1l1.6 1.6M19 10.5l2.4 2.4" stroke="var(--color-brand-600)" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 function SyncBadge({ status }) {
   const look = {
-    saved: ['text-slate-400', '서버에 저장됨', 'M7 18a4 4 0 01-.5-8 6 6 0 0111.5 1.5A3.5 3.5 0 0117.5 18zM9.5 13.5l2 2 3.5-3.5'],
-    saving: ['text-blue-600', '저장 중…', 'M7 18a4 4 0 01-.5-8 6 6 0 0111.5 1.5A3.5 3.5 0 0117.5 18z'],
-    error: ['text-red-600', '서버 저장 실패', 'M7 18a4 4 0 01-.5-8 6 6 0 0111.5 1.5A3.5 3.5 0 0117.5 18zM12 11v3M12 16.5v.01'],
+    saved: ['text-ink-400', '서버에 저장됨', 'M7 18a4 4 0 01-.5-8 6 6 0 0111.5 1.5A3.5 3.5 0 0117.5 18zM9.5 13.5l2 2 3.5-3.5'],
+    saving: ['text-brand-600', '저장 중…', 'M7 18a4 4 0 01-.5-8 6 6 0 0111.5 1.5A3.5 3.5 0 0117.5 18z'],
+    error: ['text-danger-600', '서버 저장 실패', 'M7 18a4 4 0 01-.5-8 6 6 0 0111.5 1.5A3.5 3.5 0 0117.5 18zM12 11v3M12 16.5v.01'],
   }[status]
   return (
     <span
@@ -185,13 +196,13 @@ function SyncBadge({ status }) {
 }
 
 function Divider() {
-  return <div className="hidden h-6 w-px bg-slate-200 md:block" />
+  return <div className="hidden h-6 w-px bg-ink-200 md:block" />
 }
 
 function SmallButton({ children, ...props }) {
   return (
     <button
-      className="flex h-7 w-7 items-center justify-center rounded-md text-base text-slate-700 hover:bg-slate-100 disabled:opacity-30"
+      className="flex h-7 w-7 items-center justify-center rounded-[10px] text-base text-ink-600 transition-colors hover:bg-white hover:text-ink-900 disabled:opacity-30 disabled:hover:bg-transparent"
       {...props}
     >
       {children}
@@ -206,10 +217,11 @@ function SnapButton() {
     <button
       onClick={toggleSnap}
       aria-pressed={on}
+      aria-label="자석"
       title={on ? '자석 켜짐: 선 끝점·교차점·선 위에 붙어요. 누르면 꺼짐 (S)' : '자석 꺼짐: 누르면 선에 붙게 켜요 (S)'}
       className={[
-        'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium whitespace-nowrap transition',
-        on ? 'bg-pink-50 text-pink-700 ring-1 ring-pink-300 hover:bg-pink-100' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600',
+        'flex items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-sm font-medium whitespace-nowrap transition-colors',
+        on ? 'bg-white text-snap-600 shadow-xs ring-1 ring-snap-200 hover:bg-snap-50' : 'text-ink-400 hover:bg-white hover:text-ink-600',
       ].join(' ')}
     >
       <Icon d={on ? 'M6 4v8a6 6 0 0012 0V4h-4v8a2 2 0 01-4 0V4zM6 8h4M14 8h4' : 'M6 4v8a6 6 0 0012 0V4h-4v8a2 2 0 01-4 0V4zM3 3l18 18'} />
@@ -223,16 +235,18 @@ function ToolButton({ t, active, needCal, onClick, showLabel }) {
   return (
     <button
       title={`${t.label} (${digit ? `${digit} 또는 ` : ''}${t.key})`}
+      aria-label={t.label}
+      aria-pressed={active}
       onClick={onClick}
       className={[
-        'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium whitespace-nowrap transition',
+        'flex items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-sm font-medium whitespace-nowrap transition-colors',
         active
           ? t.accent === 'orange'
-            ? 'bg-orange-500 text-white'
-            : 'bg-slate-800 text-white'
+            ? 'bg-ref-500 text-white shadow-xs'
+            : 'bg-brand-600 text-white shadow-xs'
           : needCal
-            ? 'bg-orange-50 text-orange-700 ring-1 ring-orange-300 hover:bg-orange-100'
-            : 'text-slate-700 hover:bg-slate-100',
+            ? 'bg-ref-50 text-ref-700 ring-1 ring-ref-300 hover:bg-ref-100'
+            : 'text-ink-600 hover:bg-white hover:text-ink-900',
       ].join(' ')}
     >
       <Icon d={t.icon} />
@@ -260,24 +274,24 @@ function MarkupStyle({ kind, title, style, onChange, showStroke, imageActions, m
   const widths = STROKE_WIDTHS.includes(style.strokeWidth) ? STROKE_WIDTHS : [...STROKE_WIDTHS, style.strokeWidth].sort((a, b) => a - b)
   const transparency = Math.round((1 - (style.boxOpacity ?? DEFAULT_BOX_OPACITY)) * 100)
   return (
-    <div className="flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-white/95 px-2.5 py-1.5 shadow-md backdrop-blur">
-      {title && <span className="mr-1.5 text-xs font-semibold whitespace-nowrap text-slate-700">{title}</span>}
+    <div className="flex flex-wrap items-center gap-1 rounded-lg border border-ink-200 bg-white/95 px-2.5 py-1.5 shadow-md backdrop-blur">
+      {title && <span className="mr-1.5 text-xs font-semibold whitespace-nowrap text-ink-700">{title}</span>}
       {colors.map((c) => (
         <button
           key={c}
           title="색상"
           onClick={() => onChange(isHighlight ? { highlightColor: c } : { color: c })}
-          className={`h-5 w-5 rounded-full border border-black/10 ${current === c ? 'ring-2 ring-slate-700 ring-offset-1' : ''}`}
+          className={`h-5 w-5 rounded-full border border-black/10 ${current === c ? 'ring-2 ring-ink-700 ring-offset-1' : ''}`}
           style={{ background: c }}
         />
       ))}
       {(STROKE_TYPES.includes(kind) || showStroke) && (
-        <label className="ml-2 flex items-center gap-1 text-xs text-slate-600" title="선 굵기 (pt). 화살촉은 굵기에 맞춰 커져요">
+        <label className="ml-2 flex items-center gap-1 text-xs text-ink-600" title="선 굵기 (pt). 화살촉은 굵기에 맞춰 커져요">
           굵기
           <select
             value={style.strokeWidth}
             onChange={(e) => onChange({ strokeWidth: Number(e.target.value) })}
-            className="rounded border border-slate-300 bg-white px-1 py-0.5 text-xs tabular-nums"
+            className="rounded border border-ink-300 bg-white px-1 py-0.5 text-xs tabular-nums"
           >
             {widths.map((n) => (
               <option key={n} value={n}>
@@ -292,12 +306,12 @@ function MarkupStyle({ kind, title, style, onChange, showStroke, imageActions, m
       )}
       {kind === 'text' && (
         <>
-          <label className="ml-2 flex items-center gap-1 text-xs text-slate-600" title="글자 크기 (pt)">
+          <label className="ml-2 flex items-center gap-1 text-xs text-ink-600" title="글자 크기 (pt)">
             크기
             <select
               value={style.fontSize}
               onChange={(e) => onChange({ fontSize: Number(e.target.value) })}
-              className="rounded border border-slate-300 bg-white px-1 py-0.5 text-xs tabular-nums"
+              className="rounded border border-ink-300 bg-white px-1 py-0.5 text-xs tabular-nums"
             >
               {sizes.map((n) => (
                 <option key={n} value={n}>
@@ -306,7 +320,7 @@ function MarkupStyle({ kind, title, style, onChange, showStroke, imageActions, m
               ))}
             </select>
           </label>
-          <div className="ml-2 flex items-center rounded border border-slate-300 bg-white" role="group" aria-label="정렬">
+          <div className="ml-2 flex items-center rounded border border-ink-300 bg-white" role="group" aria-label="정렬">
             {ALIGN_BUTTONS.map(([value, label, d]) => (
               <button
                 key={value}
@@ -314,14 +328,14 @@ function MarkupStyle({ kind, title, style, onChange, showStroke, imageActions, m
                 aria-pressed={(style.textAlign ?? 'left') === value}
                 onClick={() => onChange({ textAlign: value })}
                 className={`flex h-6 w-6 items-center justify-center first:rounded-l last:rounded-r ${
-                  (style.textAlign ?? 'left') === value ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100'
+                  (style.textAlign ?? 'left') === value ? 'bg-ink-800 text-white' : 'text-ink-600 hover:bg-ink-100'
                 }`}
               >
                 <Icon d={d} />
               </button>
             ))}
           </div>
-          <label className="ml-2 flex items-center gap-1 text-xs whitespace-nowrap text-slate-600" title="텍스트 상자 배경 투명도 (100% = 배경 없음)">
+          <label className="ml-2 flex items-center gap-1 text-xs whitespace-nowrap text-ink-600" title="텍스트 상자 배경 투명도 (100% = 배경 없음)">
             배경 투명도
             <input
               type="range"
@@ -330,7 +344,7 @@ function MarkupStyle({ kind, title, style, onChange, showStroke, imageActions, m
               step="5"
               value={transparency}
               onChange={(e) => onChange({ boxOpacity: 1 - Number(e.target.value) / 100 }, { live: true })}
-              className="w-20 accent-slate-700"
+              className="w-20 accent-ink-700"
             />
             <span className="w-8 text-right tabular-nums">{transparency}%</span>
           </label>
@@ -348,11 +362,11 @@ function ImageStyle({ title, style, onChange, actions }) {
     : [...IMAGE_BORDER_WIDTHS, style.imageBorderWidth].sort((a, b) => a - b)
   const btn = (active) =>
     `flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium whitespace-nowrap ${
-      active ? 'bg-slate-800 text-white' : 'text-slate-700 ring-1 ring-slate-300 hover:bg-slate-100'
+      active ? 'bg-ink-800 text-white' : 'text-ink-700 ring-1 ring-ink-300 hover:bg-ink-100'
     }`
   return (
-    <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-white/95 px-2.5 py-1.5 shadow-md backdrop-blur">
-      <span className="mr-1 text-xs font-semibold whitespace-nowrap text-slate-700">{title}</span>
+    <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-ink-200 bg-white/95 px-2.5 py-1.5 shadow-md backdrop-blur">
+      <span className="mr-1 text-xs font-semibold whitespace-nowrap text-ink-700">{title}</span>
       {actions && (
         <>
           <button
@@ -371,7 +385,7 @@ function ImageStyle({ title, style, onChange, actions }) {
           )}
         </>
       )}
-      <span className="mx-1 h-4 w-px bg-slate-200" />
+      <span className="mx-1 h-4 w-px bg-ink-200" />
       <button className={btn(on)} onClick={() => onChange({ imageBorder: !on })} aria-pressed={on} title="사진 테두리 켜고 끄기">
         <Icon d="M4 4h16v16H4z" />
         테두리 {on ? '켬' : '끔'}
@@ -383,16 +397,16 @@ function ImageStyle({ title, style, onChange, actions }) {
               key={c}
               title="테두리 색"
               onClick={() => onChange({ imageBorderColor: c })}
-              className={`h-5 w-5 rounded-full border border-black/15 ${style.imageBorderColor === c ? 'ring-2 ring-slate-700 ring-offset-1' : ''}`}
+              className={`h-5 w-5 rounded-full border border-black/15 ${style.imageBorderColor === c ? 'ring-2 ring-ink-700 ring-offset-1' : ''}`}
               style={{ background: c }}
             />
           ))}
-          <label className="ml-1 flex items-center gap-1 text-xs text-slate-600" title="테두리 굵기 (pt)">
+          <label className="ml-1 flex items-center gap-1 text-xs text-ink-600" title="테두리 굵기 (pt)">
             굵기
             <select
               value={style.imageBorderWidth}
               onChange={(e) => onChange({ imageBorderWidth: Number(e.target.value) })}
-              className="rounded border border-slate-300 bg-white px-1 py-0.5 text-xs tabular-nums"
+              className="rounded border border-ink-300 bg-white px-1 py-0.5 text-xs tabular-nums"
             >
               {widths.map((n) => (
                 <option key={n} value={n}>
@@ -405,7 +419,7 @@ function ImageStyle({ title, style, onChange, actions }) {
       )}
       {actions && (
         <>
-          <span className="mx-1 h-4 w-px bg-slate-200" />
+          <span className="mx-1 h-4 w-px bg-ink-200" />
           <button className={btn(false)} onClick={actions.onHide} title="화면과 저장한 PDF에서 숨기기 (오른쪽 목록의 눈 아이콘으로 다시 보여요)">
             <Icon d="M3 3l18 18M10.6 10.6a2 2 0 002.8 2.8M9.9 5.1A9.8 9.8 0 0112 5c5 0 9 4.5 10 7a13 13 0 01-3.2 4.3M6.2 6.2A13 13 0 002 12c1 2.5 5 7 10 7a9.6 9.6 0 004.1-.9" />
             숨기기
@@ -420,12 +434,12 @@ function ImageStyle({ title, style, onChange, actions }) {
 function MemoStyle({ title, style, onChange, actions }) {
   const btn = (active) =>
     `flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium whitespace-nowrap ${
-      active ? 'bg-slate-800 text-white' : 'text-slate-700 ring-1 ring-slate-300 hover:bg-slate-100'
+      active ? 'bg-ink-800 text-white' : 'text-ink-700 ring-1 ring-ink-300 hover:bg-ink-100'
     }`
   const kind = style.memoKind ?? 'note'
   return (
-    <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-white/95 px-2.5 py-1.5 shadow-md backdrop-blur">
-      <span className="mr-1 text-xs font-semibold whitespace-nowrap text-slate-700">{title}</span>
+    <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-ink-200 bg-white/95 px-2.5 py-1.5 shadow-md backdrop-blur">
+      <span className="mr-1 text-xs font-semibold whitespace-nowrap text-ink-700">{title}</span>
       {actions ? (
         <>
           <button className={btn(false)} onClick={actions.onOpen} title="메모장 열기 (범위를 더블클릭해도 돼요)">
@@ -438,7 +452,7 @@ function MemoStyle({ title, style, onChange, actions }) {
           </button>
         </>
       ) : (
-        <div className="flex items-center rounded ring-1 ring-slate-300" role="group" aria-label="메모 범위 종류">
+        <div className="flex items-center rounded ring-1 ring-ink-300" role="group" aria-label="메모 범위 종류">
           {[
             ['note', '메모장', '범위를 누르면 메모장이 열려요 (마크다운, 사진)'],
             ['link', '도면 열기', '범위를 누르면 고른 도면이 열려요'],
@@ -449,7 +463,7 @@ function MemoStyle({ title, style, onChange, actions }) {
               aria-pressed={kind === value}
               onClick={() => onChange({ memoKind: value })}
               className={`px-2 py-0.5 text-xs font-medium whitespace-nowrap first:rounded-l last:rounded-r ${
-                kind === value ? 'bg-slate-800 text-white' : 'text-slate-700 hover:bg-slate-100'
+                kind === value ? 'bg-ink-800 text-white' : 'text-ink-700 hover:bg-ink-100'
               }`}
             >
               {label}
@@ -457,17 +471,17 @@ function MemoStyle({ title, style, onChange, actions }) {
           ))}
         </div>
       )}
-      <span className="mx-1 h-4 w-px bg-slate-200" />
+      <span className="mx-1 h-4 w-px bg-ink-200" />
       {MEMO_COLORS.map((c) => (
         <button
           key={c}
           title="범위 색"
           onClick={() => onChange({ memoColor: c })}
-          className={`h-5 w-5 rounded-full border border-black/10 ${style.memoColor === c ? 'ring-2 ring-slate-700 ring-offset-1' : ''}`}
+          className={`h-5 w-5 rounded-full border border-black/10 ${style.memoColor === c ? 'ring-2 ring-ink-700 ring-offset-1' : ''}`}
           style={{ background: c }}
         />
       ))}
-      {!actions && <span className="ml-1 hidden text-xs whitespace-nowrap text-slate-400 lg:inline">도면에서 끌어 범위를 정하세요</span>}
+      {!actions && <span className="ml-1 hidden text-xs whitespace-nowrap text-ink-400 lg:inline">도면에서 끌어 범위를 정하세요</span>}
     </div>
   )
 }

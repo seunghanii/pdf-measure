@@ -36,7 +36,7 @@ export default function App() {
 
   if (user === undefined)
     return (
-      <div className="flex h-full items-center justify-center bg-slate-100 text-sm text-slate-500">서버에 연결하는 중…</div>
+      <div className="flex h-full items-center justify-center bg-ink-100 text-sm text-ink-500">서버에 연결하는 중…</div>
     )
 
   return (
@@ -371,7 +371,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
 
   return (
     <div
-      className="flex h-full flex-col bg-slate-100 text-slate-800"
+      className="flex h-full flex-col bg-ink-100 text-ink-800"
       onDragOver={(e) => {
         if (!e.dataTransfer.types.includes('Files')) return // 홈 화면에서 도면을 폴더로 끌 때
         e.preventDefault()
@@ -392,7 +392,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
               <button
                 onClick={() => setSearchOpen(true)}
                 title="도면 속 글자 검색 (Ctrl+F)"
-                className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+                className="flex items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-2.5 py-1.5 text-sm text-ink-600 shadow-xs transition-colors hover:border-ink-300 hover:bg-ink-50 hover:text-ink-900"
               >
                 <SearchIcon />
                 <span className="hidden sm:inline">검색</span>
@@ -406,7 +406,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
       {(error || warning) && (
         <div
           className={`flex items-center justify-between border-b px-4 py-2 text-sm ${
-            error ? 'border-red-200 bg-red-50 text-red-700' : 'border-amber-200 bg-amber-50 text-amber-800'
+            error ? 'border-danger-200 bg-danger-50 text-danger-700' : 'border-warn-200 bg-warn-50 text-warn-800'
           }`}
         >
           <span>{error || warning}</span>
@@ -423,8 +423,8 @@ function Session({ store, user, onLogout, onChangePassword }) {
       )}
 
       {uploading.length > 0 && (
-        <div className="flex items-center gap-2 border-b border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-800">
-          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-blue-300 border-t-blue-700" />
+        <div className="flex items-center gap-2 border-b border-brand-200 bg-brand-50 px-4 py-2 text-sm text-brand-800">
+          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand-300 border-t-brand-700" />
           서버에 PDF 올리는 중: {uploading.join(', ')} (끝날 때까지 창을 닫지 마세요)
         </div>
       )}
@@ -485,8 +485,8 @@ function Session({ store, user, onLogout, onChangePassword }) {
       )}
 
       {dragOver && (
-        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-blue-600/20">
-          <div className="rounded-xl border-2 border-dashed border-blue-600 bg-white px-8 py-6 text-lg font-semibold text-blue-700">
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-brand-600/20">
+          <div className="rounded-xl border-2 border-dashed border-brand-600 bg-white px-8 py-6 text-lg font-semibold text-brand-700">
             여기에 PDF를 놓으세요
           </div>
         </div>

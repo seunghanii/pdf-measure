@@ -45,17 +45,17 @@ export default function LinkPicker({ store, currentId, currentName, initial, onC
         className="flex max-h-[80vh] w-full max-w-md flex-col rounded-xl bg-white p-5 shadow-2xl"
       >
         <h2 className="text-lg font-bold">열릴 도면 고르기</h2>
-        <p className="mt-1 text-sm text-slate-500">이 범위를 누르면 고른 도면이 새 탭으로 열려요. 앱에 한 번 열었던 도면 중에서 고를 수 있어요.</p>
+        <p className="mt-1 text-sm text-ink-500">이 범위를 누르면 고른 도면이 새 탭으로 열려요. 앱에 한 번 열었던 도면 중에서 고를 수 있어요.</p>
         <input
           autoFocus
           placeholder="도면 이름 검색"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          className="mt-3 rounded-md border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+          className="mt-3 rounded-md border border-ink-300 px-3 py-1.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
         />
-        <ul className="mt-2 min-h-24 flex-1 overflow-y-auto rounded-md border border-slate-200" role="listbox" aria-label="도면 목록">
-          {list === null && <li className="px-3 py-4 text-center text-sm text-slate-400">도면 목록 불러오는 중…</li>}
-          {list !== null && items.length === 0 && <li className="px-3 py-4 text-center text-sm text-slate-400">찾는 도면이 없어요</li>}
+        <ul className="mt-2 min-h-24 flex-1 overflow-y-auto rounded-md border border-ink-200" role="listbox" aria-label="도면 목록">
+          {list === null && <li className="px-3 py-4 text-center text-sm text-ink-400">도면 목록 불러오는 중…</li>}
+          {list !== null && items.length === 0 && <li className="px-3 py-4 text-center text-sm text-ink-400">찾는 도면이 없어요</li>}
           {items.map((r) => (
             <li key={r.id}>
               <button
@@ -64,38 +64,38 @@ export default function LinkPicker({ store, currentId, currentName, initial, onC
                 aria-selected={picked === r.id}
                 onClick={() => setPicked(r.id)}
                 onDoubleClick={() => onConfirm({ id: r.id, name: r.name, page: pageNo })}
-                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm ${picked === r.id ? 'bg-blue-50 text-blue-800' : 'hover:bg-slate-50'}`}
+                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm ${picked === r.id ? 'bg-brand-50 text-brand-800' : 'hover:bg-ink-50'}`}
               >
-                <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-slate-400" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-ink-400" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M6 3h8l4 4v14H6zM14 3v4h4" strokeLinejoin="round" />
                 </svg>
                 <span className="min-w-0 flex-1 truncate">{r.name}</span>
-                {r.id === currentId && <span className="shrink-0 text-xs text-slate-400">지금 도면</span>}
+                {r.id === currentId && <span className="shrink-0 text-xs text-ink-400">지금 도면</span>}
               </button>
             </li>
           ))}
         </ul>
-        <label className="mt-3 flex items-center gap-2 text-sm text-slate-600">
+        <label className="mt-3 flex items-center gap-2 text-sm text-ink-600">
           열 페이지
           <input
             inputMode="numeric"
             value={page}
             onChange={(e) => setPage(e.target.value.replace(/[^0-9]/g, ''))}
             onFocus={(e) => e.target.select()}
-            className="w-16 rounded-md border border-slate-300 px-2 py-1 text-center"
+            className="w-16 rounded-md border border-ink-300 px-2 py-1 text-center"
           />
-          <span className="text-xs text-slate-400">쪽 (없는 페이지면 마지막 쪽)</span>
+          <span className="text-xs text-ink-400">쪽 (없는 페이지면 마지막 쪽)</span>
         </label>
         <div className="mt-4 flex items-center gap-2">
           {onUnlink && (
-            <button type="button" onClick={onUnlink} className="rounded-md px-3 py-2 text-sm text-red-600 hover:bg-red-50">
+            <button type="button" onClick={onUnlink} className="rounded-md px-3 py-2 text-sm text-danger-600 hover:bg-danger-50">
               연결 끊기
             </button>
           )}
-          <button type="button" onClick={onCancel} className="ml-auto rounded-md px-4 py-2 text-sm text-slate-600 hover:bg-slate-100">
+          <button type="button" onClick={onCancel} className="ml-auto rounded-md px-4 py-2 text-sm text-ink-600 hover:bg-ink-100">
             취소
           </button>
-          <button disabled={!chosen} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-40">
+          <button disabled={!chosen} className="rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-40">
             연결
           </button>
         </div>

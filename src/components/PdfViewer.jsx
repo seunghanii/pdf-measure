@@ -686,7 +686,7 @@ export default function PdfViewer({
   }
 
   if (!sizes) {
-    return <div className="flex flex-1 items-center justify-center bg-slate-200 text-slate-500">페이지 불러오는 중…</div>
+    return <div className="flex flex-1 items-center justify-center bg-ink-200 text-ink-500">페이지 불러오는 중…</div>
   }
 
   const cursorStyle = panRef.current
@@ -728,7 +728,7 @@ export default function PdfViewer({
     <div className="relative min-h-0 min-w-0 flex-1">
       <div
         ref={containerRef}
-        className="absolute inset-0 overflow-auto bg-slate-200"
+        className="absolute inset-0 overflow-auto bg-desk"
         onScroll={onScroll}
         onPointerLeave={() => {
           setCursor(null)
@@ -848,7 +848,7 @@ export default function PdfViewer({
                   )}
                 </svg>
                 {sizes.length > 1 && (
-                  <div className="pointer-events-none absolute -bottom-px left-1/2 translate-y-full -translate-x-1/2 pt-0.5 text-[11px] text-slate-500">
+                  <div className="pointer-events-none absolute -bottom-px left-1/2 translate-y-full -translate-x-1/2 pt-0.5 text-[11px] text-ink-500">
                     {page} / {sizes.length}
                   </div>
                 )}
@@ -858,7 +858,7 @@ export default function PdfViewer({
         </div>
       </div>
       {sizes.length > 1 && (
-        <div className="pointer-events-none absolute top-3 right-4 rounded-full bg-slate-900/70 px-3 py-1 text-sm text-white shadow">
+        <div className="pointer-events-none absolute top-3 right-4 rounded-full bg-ink-900/70 px-3 py-1 text-sm text-white shadow">
           {pageNum} / {sizes.length} 페이지
         </div>
       )}
@@ -939,8 +939,8 @@ function DrawHint({ tool, count }) {
         : '계속 클릭하거나, 첫 점 클릭 / 더블클릭 / Enter 로 완료 (Backspace: 한 점 취소)'
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-4">
-      <div className="rounded-full bg-slate-900/80 px-4 py-1.5 text-center text-sm text-white shadow">
-        {text} <span className="text-slate-400">· Esc 취소</span>
+      <div className="rounded-full bg-ink-900/80 px-4 py-1.5 text-center text-sm text-white shadow">
+        {text} <span className="text-ink-400">· Esc 취소</span>
       </div>
     </div>
   )

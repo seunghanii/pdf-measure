@@ -4,7 +4,7 @@ import { localStore } from '../lib/storage'
 import { mergeLibrary, moveDoc } from '../lib/library'
 
 const inputCls =
-  'w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
+  'w-full rounded-md border border-ink-300 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200'
 
 // 홈 화면의 로그인 상자 (새 회원가입은 막아 둠, 계정은 Supabase 대시보드에서만 만듦)
 export function AuthPanel() {
@@ -32,12 +32,12 @@ export function AuthPanel() {
   }
 
   return (
-    <section className="mb-6 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+    <section className="mb-6 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-ink-200">
       <div className="flex items-start gap-3">
-        <CloudIcon className="mt-0.5 h-6 w-6 shrink-0 text-blue-600" />
+        <CloudIcon className="mt-0.5 h-6 w-6 shrink-0 text-brand-600" />
         <div>
           <h2 className="font-semibold">로그인하면 도면과 측정값이 서버에 저장돼요</h2>
-          <p className="mt-0.5 text-sm text-slate-500">
+          <p className="mt-0.5 text-sm text-ink-500">
             다른 컴퓨터나 브라우저에서도 같은 계정으로 로그인하면 그대로 이어서 볼 수 있어요.
           </p>
         </div>
@@ -66,18 +66,18 @@ export function AuthPanel() {
           />
         )}
         {message && (
-          <p className={`rounded-md px-3 py-2 text-sm ${message.kind === 'error' ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-800'}`}>
+          <p className={`rounded-md px-3 py-2 text-sm ${message.kind === 'error' ? 'bg-danger-50 text-danger-700' : 'bg-ok-50 text-ok-800'}`}>
             {message.text}
           </p>
         )}
         <button
           type="submit"
           disabled={busy}
-          className="w-full rounded-md bg-blue-600 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+          className="w-full rounded-md bg-brand-600 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
         >
           {busy ? '잠시만요…' : mode === 'login' ? '로그인' : '재설정 메일 보내기'}
         </button>
-        <div className="flex justify-between text-xs text-slate-500">
+        <div className="flex justify-between text-xs text-ink-500">
           {mode === 'reset' ? (
             <button type="button" className="hover:underline" onClick={() => {
                 setMode('login')
@@ -113,8 +113,8 @@ export function AccountMenu({ user, onLogout, onChangePassword }) {
 
   if (!user)
     return (
-      <span className="flex items-center gap-1.5 text-xs text-slate-500" title="로그인하면 서버에 저장돼요">
-        <span className="h-2 w-2 rounded-full bg-amber-400" />이 브라우저에만 저장 중
+      <span className="flex items-center gap-1.5 text-xs text-ink-500" title="로그인하면 서버에 저장돼요">
+        <span className="h-2 w-2 rounded-full bg-warn-400" />이 브라우저에만 저장 중
       </span>
     )
 
@@ -122,17 +122,17 @@ export function AccountMenu({ user, onLogout, onChangePassword }) {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex max-w-64 items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-100"
+        className="flex max-w-64 items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-ink-700 hover:bg-ink-100"
         title="서버에 저장 중인 계정"
       >
-        <CloudIcon className="h-4 w-4 shrink-0 text-blue-600" />
+        <CloudIcon className="h-4 w-4 shrink-0 text-brand-600" />
         <span className="truncate">{user.email}</span>
-        <span className="text-xs text-slate-400">▾</span>
+        <span className="text-xs text-ink-400">▾</span>
       </button>
       {open && (
-        <div className="absolute right-0 z-30 mt-1 w-48 overflow-hidden rounded-lg bg-white py-1 text-sm shadow-lg ring-1 ring-slate-200">
+        <div className="absolute right-0 z-30 mt-1 w-48 overflow-hidden rounded-lg bg-white py-1 text-sm shadow-lg ring-1 ring-ink-200">
           <button
-            className="block w-full px-3 py-2 text-left hover:bg-slate-50"
+            className="block w-full px-3 py-2 text-left hover:bg-ink-50"
             onClick={() => {
               setOpen(false)
               onChangePassword()
@@ -141,7 +141,7 @@ export function AccountMenu({ user, onLogout, onChangePassword }) {
             비밀번호 바꾸기
           </button>
           <button
-            className="block w-full px-3 py-2 text-left text-red-600 hover:bg-red-50"
+            className="block w-full px-3 py-2 text-left text-danger-600 hover:bg-danger-50"
             onClick={() => {
               setOpen(false)
               onLogout()
@@ -186,7 +186,7 @@ export function PasswordDialog({ recovery, onClose }) {
       >
         <h2 className="text-lg font-bold">{recovery ? '새 비밀번호 정하기' : '비밀번호 바꾸기'}</h2>
         {done ? (
-          <p className="mt-3 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">비밀번호를 바꿨어요.</p>
+          <p className="mt-3 rounded-md bg-ok-50 px-3 py-2 text-sm text-ok-800">비밀번호를 바꿨어요.</p>
         ) : (
           <>
             <input
@@ -200,18 +200,18 @@ export function PasswordDialog({ recovery, onClose }) {
               onChange={(e) => setPassword(e.target.value)}
               className={`mt-4 ${inputCls}`}
             />
-            {message && <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{message}</p>}
+            {message && <p className="mt-3 rounded-md bg-danger-50 px-3 py-2 text-sm text-danger-700">{message}</p>}
           </>
         )}
         <div className="mt-5 flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="rounded-md px-4 py-2 text-sm text-slate-600 hover:bg-slate-100">
+          <button type="button" onClick={onClose} className="rounded-md px-4 py-2 text-sm text-ink-600 hover:bg-ink-100">
             {done ? '닫기' : '취소'}
           </button>
           {!done && (
             <button
               type="submit"
               disabled={busy}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-40"
+              className="rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-40"
             >
               {busy ? '바꾸는 중…' : '바꾸기'}
             </button>
@@ -279,7 +279,7 @@ export function MigrationCard({ store, onDone }) {
   }
 
   return (
-    <section className="mb-6 rounded-2xl bg-amber-50 p-4 text-sm text-amber-900 ring-1 ring-amber-200">
+    <section className="mb-6 rounded-2xl bg-warn-50 p-4 text-sm text-warn-900 ring-1 ring-warn-200">
       {progress && !progress.running ? (
         <p>
           서버로 {progress.done}개를 옮겼어요.
@@ -294,7 +294,7 @@ export function MigrationCard({ store, onDone }) {
           <button
             onClick={run}
             disabled={progress?.running}
-            className="rounded-md bg-amber-500 px-3 py-1.5 font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
+            className="rounded-md bg-warn-500 px-3 py-1.5 font-semibold text-white hover:bg-warn-600 disabled:opacity-60"
           >
             {progress?.running ? `옮기는 중 ${progress.done + progress.failed}/${progress.total}` : '서버로 옮기기'}
           </button>

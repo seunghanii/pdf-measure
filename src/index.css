@@ -1,13 +1,150 @@
 @import "tailwindcss";
 
-html,
-body,
-#root {
-  height: 100%;
+/*
+ * 색상 토큰 (자세한 설명은 DESIGN.md)
+ * 기본 Tailwind 색은 끄고 아래 이름만 씁니다. 화면 색을 바꿀 땐 여기만 고치면 돼요.
+ * - ink: 회색 (글자, 선, 바탕). 약간 푸른 흑연색
+ * - brand: 청사진 파랑. 주 버튼, 선택, 링크
+ * - ref: 줄자 주황. 기준 길이(축척)에만
+ * - snap: 자석
+ * - ok / warn / danger: 상태
+ * 도면 위 마크업·측정 색(lib/markup.js 등)은 사용자 데이터라 여기와 별개입니다.
+ */
+@theme {
+  --color-*: initial;
+  --color-white: #ffffff;
+  --color-black: #000000;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+
+  --color-ink-50: #f7f8fa;
+  --color-ink-100: #eff1f5;
+  --color-ink-200: #e2e5eb;
+  --color-ink-300: #cbd0da;
+  --color-ink-400: #9aa1b1;
+  --color-ink-500: #6b7385;
+  --color-ink-600: #505869;
+  --color-ink-700: #3b4252;
+  --color-ink-800: #262c39;
+  --color-ink-900: #161a24;
+
+  --color-brand-50: #eef3ff;
+  --color-brand-100: #dce6ff;
+  --color-brand-200: #bfd1ff;
+  --color-brand-300: #92b0ff;
+  --color-brand-400: #6088fb;
+  --color-brand-500: #3c64f4;
+  --color-brand-600: #2a4fe0;
+  --color-brand-700: #213fbd;
+  --color-brand-800: #1f3696;
+  --color-brand-900: #1d3077;
+
+  --color-ref-50: #fff5ed;
+  --color-ref-100: #ffe7d3;
+  --color-ref-200: #ffcba6;
+  --color-ref-300: #ffa56e;
+  --color-ref-400: #ff7a36;
+  --color-ref-500: #f75e0f;
+  --color-ref-600: #dd4805;
+  --color-ref-700: #b73608;
+  --color-ref-800: #922c0e;
+  --color-ref-900: #76270f;
+
+  --color-snap-50: #fdf2f8;
+  --color-snap-100: #fce7f3;
+  --color-snap-200: #fbcfe8;
+  --color-snap-300: #f9a8d4;
+  --color-snap-400: #f472b6;
+  --color-snap-500: #ec4899;
+  --color-snap-600: #db2777;
+  --color-snap-700: #be185d;
+  --color-snap-800: #9d174d;
+  --color-snap-900: #831843;
+
+  --color-ok-50: #ecfdf5;
+  --color-ok-100: #d1fae5;
+  --color-ok-200: #a7f3d0;
+  --color-ok-300: #6ee7b7;
+  --color-ok-400: #34d399;
+  --color-ok-500: #10b981;
+  --color-ok-600: #059669;
+  --color-ok-700: #047857;
+  --color-ok-800: #065f46;
+  --color-ok-900: #064e3b;
+
+  --color-warn-50: #fffbeb;
+  --color-warn-100: #fef3c7;
+  --color-warn-200: #fde68a;
+  --color-warn-300: #fcd34d;
+  --color-warn-400: #fbbf24;
+  --color-warn-500: #f59e0b;
+  --color-warn-600: #d97706;
+  --color-warn-700: #b45309;
+  --color-warn-800: #92400e;
+  --color-warn-900: #78350f;
+
+  --color-danger-50: #fef2f2;
+  --color-danger-100: #fee2e2;
+  --color-danger-200: #fecaca;
+  --color-danger-300: #fca5a5;
+  --color-danger-400: #f87171;
+  --color-danger-500: #ef4444;
+  --color-danger-600: #dc2626;
+  --color-danger-700: #b91c1c;
+  --color-danger-800: #991b1b;
+  --color-danger-900: #7f1d1d;
+
+  /* 도면을 올려 두는 책상 바탕 */
+  --color-desk: #e4e7ed;
+
+  --font-sans: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+
+  /* 그림자: 얇은 테두리 + 아주 옅은 그림자 (Linear·Figma 같은 도구 느낌) */
+  --shadow-xs: 0 1px 2px rgb(22 26 36 / 0.05);
+  --shadow-sm: 0 1px 2px rgb(22 26 36 / 0.06), 0 1px 3px rgb(22 26 36 / 0.04);
+  --shadow-md: 0 4px 12px -2px rgb(22 26 36 / 0.10), 0 2px 4px -2px rgb(22 26 36 / 0.06);
+  --shadow-lg: 0 12px 28px -6px rgb(22 26 36 / 0.16), 0 4px 8px -4px rgb(22 26 36 / 0.08);
+  --shadow-xl: 0 20px 40px -8px rgb(22 26 36 / 0.20), 0 8px 16px -8px rgb(22 26 36 / 0.10);
 }
 
-body {
-  font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+@layer base {
+  html {
+    color-scheme: light;
+    -webkit-tap-highlight-color: transparent;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    background: var(--color-ink-100);
+    color: var(--color-ink-800);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  button,
+  [role="tab"] {
+    touch-action: manipulation;
+  }
+  /* 키보드로 옮겨 다닐 때만 보이는 초점 테두리 */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: var(--color-brand-200);
+  }
+}
+
+/* 홈 바탕: 아주 옅은 모눈 (도면 용지 느낌). 정적인 배경이라 성능 영향 없음 */
+.bg-grid {
+  background-color: var(--color-ink-50);
+  background-image:
+    linear-gradient(rgb(59 66 82 / 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(59 66 82 / 0.05) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: -1px -1px;
 }
 
 /* 검색 결과로 이동했을 때 찾은 글자 표시 */
@@ -36,4 +173,13 @@ body {
 }
 .memo-hover [data-type="memo"]:hover .memo-icon {
   opacity: 1;
+}
+
+/* 움직임 줄이기 설정: 화면 전환 효과만 끔 (검색 위치 깜빡임은 위치를 알려 주는 용도라 그대로) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+  }
 }
