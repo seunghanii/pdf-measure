@@ -25,8 +25,8 @@ function formatSize(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-function scaleLabel(state) {
-  const c = state?.calibration
+function scaleLabel(summary) {
+  const c = summary?.calibration
   if (!c) return null
   return c.mode === 'ratio' ? `축척 1:${c.ratio.toLocaleString('ko-KR')}` : c.label
 }
@@ -365,8 +365,8 @@ const splitExt = (name) => {
 function FileRow({ item, isOpen, cloud, folders, folderId, onOpen, onRemove, onRename, onMove, onDragStart, onDragEnd }) {
   const [editing, setEditing] = useState(false)
   const [menu, setMenu] = useState(false)
-  const count = item.state?.measurements?.length ?? 0
-  const scale = scaleLabel(item.state)
+  const count = item.summary?.count ?? 0
+  const scale = scaleLabel(item.summary)
   const [base, ext] = splitExt(item.name)
 
   const finishRename = (value) => {

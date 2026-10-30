@@ -7,7 +7,7 @@
 // 도면에 넣은 사진도 사진마다 특별한 한 줄(file_key = "@img|" + 사진 id, name = 도면 id)의 state 에 base64 로 보관
 // (pdfs 보관함은 PDF 만 받도록 되어 있어서, 설정 SQL 을 다시 실행하지 않아도 되게).
 // 특별한 줄은 모두 size 가 0 이라 실제 도면(size > 0)과 구분됩니다.
-import { cacheDelete, cacheGet, cachePrune, cachePut } from './storage'
+import { cacheDelete, cacheGet, cachePrune, cachePut, summarize } from './storage'
 import { normalizeLibrary } from './library'
 import { base64ToBlob, blobToBase64 } from './images'
 
@@ -18,6 +18,8 @@ const LIBRARY_KEY = '__library__'
 const TEXT_PREFIX = '@text|'
 const IMAGE_PREFIX = '@img|'
 const COLS = 'file_key, name, size, storage_path, has_file, state, last_opened'
+// 홈 목록에는 측정값 전체 대신 요약(개수·축척)만 받음
+const LIST_COLS = 'file_key, name, size, storage_path, has_file, last_opened, summary:state->summary'
 
 const toRecord = (row) =>
   row && {
@@ -27,6 +29,7 @@ const toRecord = (row) =>
     path: row.storage_path,
     hasFile: row.has_file,
     state: row.state,
+    summary: row.summary ?? (row.state !== undefined ? summarize(row.state) : undefined),
     lastOpened: Date.parse(row.last_opened),
   }
 
@@ -56,8 +59,8 @@ export function createCloudStore(supabase, user) {
     return p
   }
 
-  async function findRow(id) {
-    return toRecord(check(await table().select(COLS).eq('user_id', uid).eq('file_key', id).maybeSingle()))
+  async function findRow(id, cols = COLS) {
+    return toRecord(check(await table().select(cols).eq('user_id', uid).eq('file_key', id).maybeSingle()))
   }
 
   async function upload(id, path, file) {
@@ -125,7 +128,7 @@ export function createCloudStore(supabase, user) {
 
     // 이 기기에 받아 둔 사본이 있으면 그것을, 없으면 서버에서 받음
     async getFile(id) {
-      const rec = await findRow(id)
+      const rec = await findRow(id, 'file_key, storage_path, has_file')
       if (!rec) return null
       const cached = await cacheGet(rec.path).catch(() => null)
       if (cached) return cached
@@ -142,7 +145,7 @@ export function createCloudStore(supabase, user) {
     saveState(id, state) {
       return track(
         table()
-          .update({ state, updated_at: new Date().toISOString() })
+          .update({ state: { ...state, summary: summarize(state) }, updated_at: new Date().toISOString() })
           .eq('user_id', uid)
           .eq('file_key', id)
           .then(check),
@@ -152,13 +155,20 @@ export function createCloudStore(supabase, user) {
     async listRecent() {
       const rows = check(
         await table()
-          .select(COLS)
+          .select(LIST_COLS)
           .eq('user_id', uid)
           .neq('file_key', LIBRARY_KEY)
           .gt('size', 0)
           .order('last_opened', { ascending: false })
           .limit(MAX_RECENT),
       )
+      // 요약을 넣기 전에 저장된 도면만 측정값 전체를 받아 요약 (다음 저장부터는 요약이 생김)
+      const old = rows.filter((r) => !r.summary).map((r) => r.file_key)
+      if (old.length) {
+        const full = check(await table().select('file_key, state').eq('user_id', uid).in('file_key', old))
+        const byKey = new Map(full.map((r) => [r.file_key, summarize(r.state)]))
+        for (const r of rows) if (!r.summary) r.summary = byKey.get(r.file_key)
+      }
       const list = rows.map(toRecord)
       cachePrune(new Set(list.map((r) => r.path))).catch(() => {})
       return list
