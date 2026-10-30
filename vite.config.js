@@ -14,8 +14,10 @@ export default defineConfig({
         // react-dom/server 는 PDF 저장 때만 쓰므로 react 묶음에서 빼서 첫 화면에 실리지 않게 함
         codeSplitting: {
           groups: [
-            { name: 'pdfjs', test: /node_modules[\\/]pdfjs-dist/ },
-            { name: 'react', test: /node_modules[\\/](react|react-dom|scheduler)[\\/](?!.*server)/ },
+            // vite 의 미리 받기 도우미가 pdfjs 묶음에 끼면 첫 화면이 pdf.js 를 통째로 받게 되므로 따로 둠
+            { name: 'preload', test: /preload-helper/ },
+            { name: 'pdfjs', test: /node_modules[\/]pdfjs-dist[\/](?!.*worker)/ },
+            { name: 'react', test: /node_modules[\/](react|react-dom|scheduler)[\/](?!.*server)/ },
             { name: 'supabase', test: /node_modules[\\/]@supabase/ },
           ],
         },
