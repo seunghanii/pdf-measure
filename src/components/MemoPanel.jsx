@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { cachedImageUrl, getImageBlob, isImageFile, newImageId, prepareImage, rememberImage } from '../lib/images'
 import { memoSummary, migrateMemo } from '../lib/memo'
+import { htmlToMarkdown } from '../lib/memoMarkdown'
+import MemoEditor, { MemoHelp } from './MemoEditor'
 import PhotoViewer from './PhotoViewer'
 
 // 메모 사진은 자세히 볼 수 있게 도면 사진보다 크게 저장
@@ -24,16 +26,18 @@ function loadSize() {
 export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, onDelete, onOpenLink, onPickLink, store, docId, onNotice }) {
   // 예전(글 속 사진) 메모는 처음 열 때 사진 목록으로 옮김
   const [migrated] = useState(() => migrateMemo(memo))
-  const [text, setText] = useState(migrated?.text ?? memo.text ?? '')
+  const [initialText] = useState(() => migrated?.text ?? memo.text ?? '')
   const photos = memo.images ?? migrated?.images ?? []
   const [, setLoaded] = useState(0)
   const [viewing, setViewing] = useState(null) // 크게 보는 사진 번호
   const [busy, setBusy] = useState(0) // 사진 넣는 중
   const [size, setSize] = useState(loadSize) // { w, h } px, 없으면 기본 크기
   const panelRef = useRef(null)
-  const areaRef = useRef(null)
+  const editorRef = useRef(null)
   const fileRef = useRef(null)
-  const pending = useRef(null) // 아직 저장 안 된 글
+  const pending = useRef(false) // 아직 저장 안 된 고침이 있음
+  const saveTimer = useRef(0)
+  const lastEditor = useRef(null)
 
   // 글은 잠시 멈추면 저장 (글자마다 저장하면 도면 화면까지 매번 다시 그려짐). 닫을 때도 저장
   const onChangeRef = useRef(onChange)
@@ -41,29 +45,24 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
     onChangeRef.current = onChange
   })
   const flush = () => {
-    if (pending.current === null) return
-    const t = pending.current
-    pending.current = null
-    onChangeRef.current({ text: t })
+    clearTimeout(saveTimer.current)
+    // 닫힐 때는 editorRef 가 먼저 비워지므로 마지막으로 고친 글 상자를 기억해 둠
+    const el = editorRef.current ?? lastEditor.current
+    if (!pending.current || !el) return
+    pending.current = false
+    onChangeRef.current({ text: htmlToMarkdown(el) })
+  }
+  const onEdit = () => {
+    lastEditor.current = editorRef.current
+    pending.current = true
+    clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(flush, 400)
   }
   useEffect(() => {
     if (migrated) onChangeRef.current(migrated)
     return () => flush()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  useEffect(() => {
-    if (pending.current === null) return
-    const t = setTimeout(flush, 400)
-    return () => clearTimeout(t)
-  }, [text])
-
-  // 글 상자 높이를 글에 맞춤
-  useLayoutEffect(() => {
-    const el = areaRef.current
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = `${Math.max(96, el.scrollHeight)}px`
-  }, [text, size])
 
   // 사진 불러오기
   const photoKey = photos.join()
@@ -234,26 +233,9 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
 
       {/* 글과 사진 (같이 스크롤) */}
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <textarea
-          ref={areaRef}
-          autoFocus={!text && !photos.length}
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value)
-            pending.current = e.target.value
-          }}
-          onBlur={flush}
-          onPaste={(e) => {
-            const files = [...(e.clipboardData?.files ?? [])].filter(isImageFile)
-            if (!files.length) return
-            e.preventDefault()
-            addImages(files)
-          }}
-          placeholder="메모를 적어 주세요. 사진은 Ctrl+V 로 붙여넣거나 끌어다 놓아도 돼요."
-          spellCheck={false}
-          rows={4}
-          className="block w-full resize-none overflow-hidden px-4 py-3 text-sm leading-relaxed text-ink-800 outline-none placeholder:text-ink-400"
-        />
+        <div onBlur={flush}>
+          <MemoEditor initial={initialText} editorRef={editorRef} onEdit={onEdit} onPasteFiles={addImages} autoFocus={!initialText && !photos.length} />
+        </div>
         {(photos.length > 0 || busy > 0) && (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-2 px-3 pb-3">
             {photos.map((id, i) => (
@@ -289,6 +271,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
           </svg>
           사진 넣기
         </button>
+        <MemoHelp />
         <input
           ref={fileRef}
           type="file"
