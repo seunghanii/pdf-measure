@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import { authErrorMessage, changePassword, sendPasswordReset, signIn, signUp } from '../lib/supabase'
+import { authErrorMessage, changePassword, sendPasswordReset, signIn } from '../lib/supabase'
 import { localStore } from '../lib/storage'
 import { mergeLibrary, moveDoc } from '../lib/library'
 
 const inputCls =
   'w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
 
-// 홈 화면의 로그인/회원가입 상자
+// 홈 화면의 로그인 상자 (새 회원가입은 막아 둠, 계정은 Supabase 대시보드에서만 만듦)
 export function AuthPanel() {
-  const [mode, setMode] = useState('login') // 'login' | 'signup' | 'reset'
+  const [mode, setMode] = useState('login') // 'login' | 'reset'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
@@ -20,11 +20,7 @@ export function AuthPanel() {
     setMessage(null)
     try {
       if (mode === 'login') await signIn(email.trim(), password)
-      else if (mode === 'signup') {
-        const data = await signUp(email.trim(), password)
-        if (!data.session)
-          setMessage({ kind: 'info', text: '가입 확인 메일을 보냈어요. 메일의 링크를 누른 뒤 여기서 로그인하세요.' })
-      } else {
+      else {
         await sendPasswordReset(email.trim())
         setMessage({ kind: 'info', text: '비밀번호를 다시 정하는 링크를 메일로 보냈어요. 메일의 링크를 눌러 주세요.' })
       }
@@ -34,19 +30,6 @@ export function AuthPanel() {
       setBusy(false)
     }
   }
-
-  const tab = (id, label) => (
-    <button
-      type="button"
-      onClick={() => {
-        setMode(id)
-        setMessage(null)
-      }}
-      className={`flex-1 rounded-md py-1.5 text-sm font-medium ${mode === id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-    >
-      {label}
-    </button>
-  )
 
   return (
     <section className="mb-6 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
@@ -61,12 +44,6 @@ export function AuthPanel() {
       </div>
 
       <form onSubmit={submit} className="mt-4 space-y-3">
-        {mode !== 'reset' && (
-          <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
-            {tab('login', '로그인')}
-            {tab('signup', '회원가입')}
-          </div>
-        )}
         <input
           type="email"
           required
@@ -81,8 +58,8 @@ export function AuthPanel() {
             type="password"
             required
             minLength={6}
-            autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-            placeholder={mode === 'signup' ? '비밀번호 (6자 이상)' : '비밀번호'}
+            autoComplete="current-password"
+            placeholder="비밀번호"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className={inputCls}
@@ -98,15 +75,21 @@ export function AuthPanel() {
           disabled={busy}
           className="w-full rounded-md bg-blue-600 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
         >
-          {busy ? '잠시만요…' : mode === 'login' ? '로그인' : mode === 'signup' ? '가입하고 시작하기' : '재설정 메일 보내기'}
+          {busy ? '잠시만요…' : mode === 'login' ? '로그인' : '재설정 메일 보내기'}
         </button>
         <div className="flex justify-between text-xs text-slate-500">
           {mode === 'reset' ? (
-            <button type="button" className="hover:underline" onClick={() => setMode('login')}>
+            <button type="button" className="hover:underline" onClick={() => {
+                setMode('login')
+                setMessage(null)
+              }}>
               ← 로그인으로 돌아가기
             </button>
           ) : (
-            <button type="button" className="hover:underline" onClick={() => setMode('reset')}>
+            <button type="button" className="hover:underline" onClick={() => {
+                setMode('reset')
+                setMessage(null)
+              }}>
               비밀번호를 잊었어요
             </button>
           )}
