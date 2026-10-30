@@ -616,7 +616,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
     return () => window.removeEventListener('keydown', onKey)
   }, [active, cropping, deleteItems, jumpTo, memoOpen, pageNum, pdfDoc, pendingCalibration, savePdf, selectedIds, tool, undo])
 
-  const visibleMeasurements = measurements.filter((m) => !m.hidden)
+  const visibleMeasurements = useMemo(() => measurements.filter((m) => !m.hidden), [measurements])
 
   // 눈 아이콘: 화면에서 숨기기/보이기 (값은 그대로 남음)
   // 숨긴 항목은 선택에서도 빠짐 (보이지 않는 것이 함께 지워지거나 옮겨지지 않도록)
