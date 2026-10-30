@@ -26,6 +26,9 @@ export default function Sidebar({
 }) {
   const [ratioText, setRatioText] = useState('100')
   const [showRatio, setShowRatio] = useState(false)
+  // 축척 설정 창: 축척이 정해져 있으면 기본으로 접어 두고, 머리줄 버튼으로 열고 닫음
+  const [scaleOpen, setScaleOpen] = useState(false)
+  const scaleShown = !mmPerPt || scaleOpen
 
   const measures = useMemo(() => measurements.filter((m) => !isMarkup(m.type)), [measurements])
   const markups = useMemo(() => measurements.filter((m) => isMarkup(m.type)), [measurements])
@@ -67,8 +70,37 @@ export default function Sidebar({
       {top}
       {/* 축척 */}
       <section className="border-b border-ink-200 p-4">
-        <h3 className="text-xs font-semibold tracking-wide text-ink-500">축척</h3>
         {mmPerPt ? (
+          <button
+            onClick={() => setScaleOpen((v) => !v)}
+            aria-expanded={scaleOpen}
+            title={scaleOpen ? '축척 설정 접기' : '축척 설정 펼치기'}
+            className="-mx-2 -my-1 flex w-[calc(100%+1rem)] items-center gap-2 rounded-lg px-2 py-1 text-left transition-colors hover:bg-ink-50"
+          >
+            <h3 className="text-xs font-semibold tracking-wide text-ink-500">축척</h3>
+            <span className="min-w-0 flex-1 truncate text-sm font-medium text-ref-700 tabular-nums">
+              {calibration.mode === 'ratio'
+                ? `1 : ${calibration.ratio}`
+                : `기준 ${calibrationInput(calibration).value} ${calibrationInput(calibration).unit}`}
+              <span className="ml-1.5 font-normal text-ink-400">· {unit}</span>
+            </span>
+            <svg
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              className={`h-4 w-4 shrink-0 text-ink-400 transition-transform ${scaleOpen ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
+        ) : (
+          <h3 className="text-xs font-semibold tracking-wide text-ink-500">축척</h3>
+        )}
+        {!scaleShown ? null : mmPerPt ? (
           <div className="mt-2 rounded-lg bg-ref-50 p-3 ring-1 ring-ref-200">
             <div className="flex items-center justify-between gap-2">
               {calibration.mode === 'ratio' ? (
@@ -141,20 +173,22 @@ export default function Sidebar({
           </div>
         )}
 
-        <div className="mt-3 flex items-center justify-between">
-          <span className="text-sm text-ink-600">표시 단위</span>
-          <div className="flex rounded-md bg-ink-100 p-0.5">
-            {Object.keys(UNITS).map((u) => (
-              <button
-                key={u}
-                onClick={() => setUnit(u)}
-                className={`rounded px-3 py-0.5 text-sm ${unit === u ? 'bg-white font-semibold shadow-sm' : 'text-ink-500'}`}
-              >
-                {u}
-              </button>
-            ))}
+        {scaleShown && (
+          <div className="mt-3 flex items-center justify-between">
+            <span className="text-sm text-ink-600">표시 단위</span>
+            <div className="flex rounded-md bg-ink-100 p-0.5">
+              {Object.keys(UNITS).map((u) => (
+                <button
+                  key={u}
+                  onClick={() => setUnit(u)}
+                  className={`rounded px-3 py-0.5 text-sm ${unit === u ? 'bg-white font-semibold shadow-sm' : 'text-ink-500'}`}
+                >
+                  {u}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </section>
 
       {/* 측정 목록 · 마크업 목록 */}
