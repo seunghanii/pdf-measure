@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { distance, snapTo45 } from '../lib/geometry'
 import { TYPE_INFO } from '../lib/measure'
 import MeasurementShape from './MeasurementShape'
@@ -63,6 +63,26 @@ export default function PdfViewer({
   const zoomAnchorRef = useRef(null) // 확대/축소 후에도 같은 지점을 같은 자리에
   const viewAnchorRef = useRef(null) // 현재 화면 가운데에 있는 페이지 위치
   const [, forceRender] = useState(0)
+  // 페이지별 항목 목록. 바뀌지 않은 페이지는 같은 배열을 그대로 써서 그 페이지 도형은 다시 그리지 않음
+  const byPageRef = useRef(new Map())
+  const byPage = useMemo(() => {
+    const groups = new Map()
+    for (const m of measurements) {
+      let list = groups.get(m.page)
+      if (!list) groups.set(m.page, (list = []))
+      list.push(m)
+    }
+    const prev = byPageRef.current
+    const next = new Map()
+    for (const [page, list] of groups) {
+      // 메모 범위는 다른 항목 아래에, 큰 범위부터 그려서 겹친 작은 범위도 누를 수 있게
+      const ordered = [...list.filter((m) => m.type === 'memo').sort(memoDrawOrder), ...list.filter((m) => m.type !== 'memo')]
+      const old = prev.get(page)
+      next.set(page, old && old.length === ordered.length && old.every((m, i) => m === ordered[i]) ? old : ordered)
+    }
+    byPageRef.current = next
+    return next
+  }, [measurements])
   const snapOn = useSnapEnabled()
   const snapIndexes = useRef(new Map()) // 페이지 번호 → 도면 선 색인 (자석용, 필요할 때 한 번 읽음)
   const pointerRef = useRef(null) // 마지막 마우스 위치 { page, p } (붙여넣은 사진을 놓을 자리)
@@ -778,23 +798,18 @@ export default function PdfViewer({
                       showHandles={tool === 'select'}
                     />
                   )}
-                  {[
-                    // 메모 범위는 다른 항목 아래에, 큰 범위부터 그려서 겹친 작은 범위도 누를 수 있게
-                    ...measurements.filter((m) => m.page === page && m.type === 'memo').sort(memoDrawOrder),
-                    ...measurements.filter((m) => m.page === page && m.type !== 'memo' && m.id !== editing?.id),
-                  ].map((m) => (
-                      <MeasurementShape
-                        key={m.id}
-                        m={m}
-                        zoom={zoom}
-                        mmPerPt={mmPerPt}
-                        unit={unit}
-                        selected={selectedIds.includes(m.id)}
-                        showHandles={tool === 'select'}
-                        showResize={tool === 'text' && m.type === 'text'}
-                        cropping={m.id === croppingId}
-                      />
-                    ))}
+                  {visible.has(i) && (
+                    <PageShapes
+                      items={byPage.get(page)}
+                      zoom={zoom}
+                      mmPerPt={mmPerPt}
+                      unit={unit}
+                      selectedIds={selectedIds}
+                      tool={tool}
+                      editingId={editing?.page === page ? editing.id : null}
+                      croppingId={croppingId}
+                    />
+                  )}
                   {renderPreview(page)}
                   {marquee && marquee.page === page && (() => {
                     const r = rectOf(marquee.a, marquee.b)
@@ -1020,6 +1035,26 @@ const PageCanvas = memo(function PageCanvas({ pdfDoc, page, size, zoom, visible,
         </div>
       )}
     </>
+  )
+})
+
+// 한 페이지의 측정·마크업 도형. 화면 근처 페이지만 그리고, 그 페이지 항목·배율 등이 그대로면 다시 그리지 않음
+const PageShapes = memo(function PageShapes({ items, zoom, mmPerPt, unit, selectedIds, tool, editingId, croppingId }) {
+  if (!items) return null
+  return items.map((m) =>
+    m.id === editingId ? null : (
+      <MeasurementShape
+        key={m.id}
+        m={m}
+        zoom={zoom}
+        mmPerPt={mmPerPt}
+        unit={unit}
+        selected={selectedIds.includes(m.id)}
+        showHandles={tool === 'select'}
+        showResize={tool === 'text' && m.type === 'text'}
+        cropping={m.id === croppingId}
+      />
+    ),
   )
 })
 
