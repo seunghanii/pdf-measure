@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { cachedImageUrl, getImageBlob, isImageFile, newImageId, prepareImage, rememberImage } from '../lib/images'
 import { memoSummary, migrateMemo } from '../lib/memo'
+import { htmlToMarkdown } from '../lib/memoMarkdown'
+import MemoEditor, { MemoHelp } from './MemoEditor'
 import PhotoViewer from './PhotoViewer'
 
 // 메모 사진은 자세히 볼 수 있게 도면 사진보다 크게 저장
@@ -19,21 +21,22 @@ function loadSize() {
   }
 }
 
-// 메모장. 도면 오른쪽 위에 떠 있고, 글을 바로 쓰고 사진을 붙입니다.
+// 메모장. 도면 오른쪽 위에 떠 있고, 글을 바로 쓰고 사진을 글 사이에 넣습니다.
 // others: 같은 자리에 겹친 메모들 (누르면 그 메모로 바뀜)
 export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, onDelete, onOpenLink, onPickLink, store, docId, onNotice }) {
-  // 예전(글 속 사진) 메모는 처음 열 때 사진 목록으로 옮김
+  // 예전(사진을 아래 칸에 모아 둔) 메모는 처음 열 때 사진을 글 끝으로 옮김
   const [migrated] = useState(() => migrateMemo(memo))
-  const [text, setText] = useState(migrated?.text ?? memo.text ?? '')
-  const photos = memo.images ?? migrated?.images ?? []
-  const [, setLoaded] = useState(0)
-  const [viewing, setViewing] = useState(null) // 크게 보는 사진 번호
+  const [initialText] = useState(() => migrated?.text ?? memo.text ?? '')
+  const [viewing, setViewing] = useState(null) // 크게 보는 사진 { ids, index }
   const [busy, setBusy] = useState(0) // 사진 넣는 중
   const [size, setSize] = useState(loadSize) // { w, h } px, 없으면 기본 크기
   const panelRef = useRef(null)
-  const areaRef = useRef(null)
+  const editorRef = useRef(null)
+  const editorApi = useRef(null)
   const fileRef = useRef(null)
-  const pending = useRef(null) // 아직 저장 안 된 글
+  const pending = useRef(false) // 아직 저장 안 된 고침이 있음
+  const saveTimer = useRef(0)
+  const lastEditor = useRef(null)
 
   // 글은 잠시 멈추면 저장 (글자마다 저장하면 도면 화면까지 매번 다시 그려짐). 닫을 때도 저장
   const onChangeRef = useRef(onChange)
@@ -41,37 +44,34 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
     onChangeRef.current = onChange
   })
   const flush = () => {
-    if (pending.current === null) return
-    const t = pending.current
-    pending.current = null
-    onChangeRef.current({ text: t })
+    clearTimeout(saveTimer.current)
+    // 닫힐 때는 editorRef 가 먼저 비워지므로 마지막으로 고친 글 상자를 기억해 둠
+    const el = editorRef.current ?? lastEditor.current
+    if (!pending.current || !el) return
+    pending.current = false
+    onChangeRef.current({ text: htmlToMarkdown(el) })
+  }
+  const onEdit = () => {
+    lastEditor.current = editorRef.current
+    pending.current = true
+    clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(flush, 400)
   }
   useEffect(() => {
     if (migrated) onChangeRef.current(migrated)
     return () => flush()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  useEffect(() => {
-    if (pending.current === null) return
-    const t = setTimeout(flush, 400)
-    return () => clearTimeout(t)
-  }, [text])
 
-  // 글 상자 높이를 글에 맞춤
-  useLayoutEffect(() => {
-    const el = areaRef.current
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = `${Math.max(96, el.scrollHeight)}px`
-  }, [text, size])
-
-  // 사진 불러오기
-  const photoKey = photos.join()
-  useEffect(() => {
-    const source = { store, docId }
-    for (const id of photos) if (!cachedImageUrl(id)) getImageBlob(source, id).then(() => setLoaded((n) => n + 1))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [photoKey, store, docId])
+  // 사진 불러오기 → 주소 (못 불러오면 null)
+  const loadPhoto = async (id) => {
+    try {
+      if (!cachedImageUrl(id)) await getImageBlob({ store, docId }, id)
+    } catch (e) {
+      console.warn('메모 사진 불러오기 실패', e)
+    }
+    return cachedImageUrl(id) ?? null
+  }
 
   // 사진 넣기 (도면 사진과 같은 방식으로 줄여서 따로 저장)
   const addImages = async (files) => {
@@ -96,15 +96,8 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
         setBusy((n) => n - 1)
       }
     }
-    if (added.length) {
-      flush()
-      onChange({ images: [...photos, ...added] })
-    }
-  }
-
-  const removePhoto = (id) => {
-    flush()
-    onChange({ images: photos.filter((x) => x !== id) })
+    // 글 사이 커서 자리에 넣음 (글과 함께 저장됨)
+    if (added.length) editorApi.current?.insertPhotos(added)
   }
 
   // 왼쪽 변·아래 변·왼쪽 아래 모서리를 끌어 크기 조절 (메모장은 오른쪽 위에 붙어 있음)
@@ -143,7 +136,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
 
   const color = memo.color ?? '#f59e0b'
   const link = memo.link
-  const urls = photos.map((id) => cachedImageUrl(id))
+  const urls = viewing ? viewing.ids.map((id) => cachedImageUrl(id)) : []
 
   return (
     <div
@@ -234,52 +227,25 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
 
       {/* 글과 사진 (같이 스크롤) */}
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <textarea
-          ref={areaRef}
-          autoFocus={!text && !photos.length}
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value)
-            pending.current = e.target.value
-          }}
-          onBlur={flush}
-          onPaste={(e) => {
-            const files = [...(e.clipboardData?.files ?? [])].filter(isImageFile)
-            if (!files.length) return
-            e.preventDefault()
-            addImages(files)
-          }}
-          placeholder="메모를 적어 주세요. 사진은 Ctrl+V 로 붙여넣거나 끌어다 놓아도 돼요."
-          spellCheck={false}
-          rows={4}
-          className="block w-full resize-none overflow-hidden px-4 py-3 text-sm leading-relaxed text-ink-800 outline-none placeholder:text-ink-400"
-        />
-        {(photos.length > 0 || busy > 0) && (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-2 px-3 pb-3">
-            {photos.map((id, i) => (
-              <div key={id} className="group relative aspect-[4/3] overflow-hidden rounded-lg border border-ink-200 bg-ink-100">
-                {urls[i] ? (
-                  <img src={urls[i]} alt={`사진 ${i + 1}`} onClick={() => setViewing(i)} className="h-full w-full cursor-zoom-in object-cover transition hover:opacity-90" />
-                ) : (
-                  <div className="flex h-full items-center justify-center text-xs text-ink-400">불러오는 중…</div>
-                )}
-                <button
-                  title="이 사진 빼기"
-                  onClick={() => removePhoto(id)}
-                  className="absolute top-1 right-1 hidden h-6 w-6 items-center justify-center rounded-full bg-black/60 text-sm text-white group-hover:flex hover:bg-black/80"
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-            {busy > 0 && <div className="flex aspect-[4/3] items-center justify-center rounded-lg border border-dashed border-ink-300 text-xs text-ink-400">사진 넣는 중…</div>}
-          </div>
-        )}
+        <div onBlur={flush}>
+          <MemoEditor
+            initial={initialText}
+            editorRef={editorRef}
+            apiRef={editorApi}
+            onEdit={onEdit}
+            onPasteFiles={addImages}
+            loadPhoto={loadPhoto}
+            onOpenPhoto={(ids, index) => setViewing({ ids, index })}
+            autoFocus={!initialText}
+          />
+        </div>
+        {busy > 0 && <div className="px-4 pb-3 text-xs text-ink-400">사진 넣는 중…</div>}
       </div>
 
       {/* 아래: 사진 넣기, 지우기 */}
       <div className="flex items-center gap-2 border-t border-ink-100 px-3 py-1.5">
         <button
+          onMouseDown={(e) => e.preventDefault() /* 글 속 커서 자리를 그대로 두어 그 자리에 넣음 */}
           onClick={() => fileRef.current?.click()}
           className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-ink-600 ring-1 ring-ink-300 hover:bg-ink-100"
           title="사진 넣기 (복사한 사진은 Ctrl+V, 끌어다 놓기도 돼요)"
@@ -289,6 +255,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
           </svg>
           사진 넣기
         </button>
+        <MemoHelp />
         <input
           ref={fileRef}
           type="file"
@@ -314,7 +281,15 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
         </svg>
       </div>
 
-      {viewing !== null && <PhotoViewer key={viewing} urls={urls} index={Math.min(viewing, urls.length - 1)} onIndex={setViewing} onClose={() => setViewing(null)} />}
+      {viewing && (
+        <PhotoViewer
+          key={viewing.index}
+          urls={urls}
+          index={Math.min(viewing.index, urls.length - 1)}
+          onIndex={(index) => setViewing((v) => ({ ...v, index }))}
+          onClose={() => setViewing(null)}
+        />
+      )}
     </div>
   )
 }
