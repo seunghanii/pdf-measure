@@ -143,9 +143,16 @@ const PageCanvas = memo(function PageCanvas({ pdfDoc, page, size, zoom, visible,
     }
     const root = scrollRoot.current
     const onScroll = () => scheduleDetail()
+    // 창 크기뿐 아니라 오른쪽 목록을 접고 펼 때도 보이는 칸이 바뀌므로 스크롤 영역 크기를 지켜봄
+    let ro = null
     if (capped && root) {
       root.addEventListener('scroll', onScroll, { passive: true })
-      window.addEventListener('resize', onScroll)
+      let first = true // 지켜보기 시작할 때 한 번 오는 알림은 건너뜀 (첫 그리기는 위에서 함)
+      ro = new ResizeObserver(() => {
+        if (first) first = false
+        else onScroll()
+      })
+      ro.observe(root)
     }
 
     return () => {
@@ -156,7 +163,7 @@ const PageCanvas = memo(function PageCanvas({ pdfDoc, page, size, zoom, visible,
       if (detailTask) detailTask.cancel()
       if (capped && root) {
         root.removeEventListener('scroll', onScroll)
-        window.removeEventListener('resize', onScroll)
+        ro.disconnect()
       }
     }
   }, [pdfDoc, page, size, zoom, visible, scrollRoot])

@@ -23,7 +23,7 @@ const MemoPanel = lazy(() => import('./MemoPanel'))
 const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`
 
 // 도면 하나(탭 하나)의 작업 공간. 탭을 바꿔도 마운트된 채로 남아서 상태가 유지됩니다.
-export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenLink }) {
+export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenLink, sidebarOpen, setSidebarOpen }) {
   const { pdfDoc, name: fileName } = doc
   const saved = doc.savedState
   const [pageNum, setPageNum] = useState(() => Math.min(saved?.pageNum ?? 1, pdfDoc.numPages))
@@ -464,8 +464,16 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
       // Ctrl+F: 브라우저 찾기 대신 도면 검색 창
       if (ctrl && e.key.toLowerCase() === 'f') {
         e.preventDefault()
-        searchRef.current?.focus()
-        searchRef.current?.select()
+        const focus = () => {
+          searchRef.current?.focus()
+          searchRef.current?.select()
+        }
+        // 목록을 접어 뒀으면 펼친 뒤 (다음 그리기 후) 검색 칸으로
+        if (sidebarOpen) focus()
+        else {
+          setSidebarOpen(true)
+          requestAnimationFrame(focus)
+        }
         return
       }
       if (ctrl && e.key.toLowerCase() === 's') {
@@ -541,7 +549,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [active, cropping, deleteItems, jumpTo, memoOpen, pageNum, pdfDoc, pendingCalibration, savePdf, selectedIds, tool, undo])
+  }, [active, cropping, deleteItems, jumpTo, memoOpen, pageNum, pdfDoc, pendingCalibration, savePdf, selectedIds, setSidebarOpen, sidebarOpen, tool, undo])
 
   const visibleMeasurements = useMemo(() => measurements.filter((m) => !m.hidden), [measurements])
 
@@ -693,7 +701,14 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
             </Suspense>
           )}
         </div>
+        {!sidebarOpen && (
+          <div className="flex shrink-0 justify-center border-t border-ink-200 bg-white p-1 md:w-10 md:flex-col md:justify-start md:border-t-0 md:border-l md:py-3">
+            <SidebarToggle open={false} onClick={() => setSidebarOpen(true)} />
+          </div>
+        )}
+        {/* 접어도 지우지 않고 숨기기만 (검색어·축척 창 상태 유지, 다시 펼칠 때 새로 그리지 않음) */}
         <Sidebar
+          collapsed={!sidebarOpen}
           calibration={calibration}
           mmPerPt={mmPerPt}
           unit={unit}
@@ -724,7 +739,15 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
           onApplyRatio={applyRatio}
           onResetCalibration={() => setCalibration(null)}
           fileName={fileName}
-          top={<DocSearch ref={searchRef} doc={doc} measurements={measurements} onGo={jumpToHit} />}
+          top={
+            <DocSearch
+              ref={searchRef}
+              doc={doc}
+              measurements={measurements}
+              onGo={jumpToHit}
+              action={<SidebarToggle open onClick={() => setSidebarOpen(false)} />}
+            />
+          }
         />
       </div>
 
@@ -763,5 +786,22 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
         />
       )}
     </ImageSource.Provider>
+  )
+}
+
+// 오른쪽 목록 접기/펼치기 버튼. 넓은 화면은 좌우(목록이 오른쪽), 좁은 화면은 위아래(목록이 아래)
+function SidebarToggle({ open, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label={open ? '오른쪽 목록 접기' : '오른쪽 목록 펼치기'}
+      aria-expanded={open}
+      title={open ? '목록 접기 (도면 넓게 보기)' : '목록 펼치기'}
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-800"
+    >
+      <svg viewBox="0 0 24 24" className="h-4 w-4 rotate-90 md:rotate-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d={open ? 'M6 6l6 6-6 6M13 6l6 6-6 6' : 'M18 6l-6 6 6 6M11 6l-6 6 6 6'} />
+      </svg>
+    </button>
   )
 }

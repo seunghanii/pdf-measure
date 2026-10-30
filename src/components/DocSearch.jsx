@@ -10,7 +10,7 @@ const PREVIEW_H = 96
 
 // 도면 안 검색 창 (오른쪽 목록 맨 위). 찾은 곳마다 작은 미리보기, 누르면 그 위치로 이동
 // 직접 넣은 글(텍스트 상자, 메모)은 도면 글자보다 먼저, 미리보기 없이 한 줄로 나옴
-const DocSearch = forwardRef(function DocSearch({ doc, measurements, onGo }, inputRef) {
+const DocSearch = forwardRef(function DocSearch({ doc, measurements, onGo, action }, inputRef) {
   const index = useDocIndex(doc.store, doc.id)
   const [query, setQuery] = useState('')
   const [current, setCurrent] = useState(-1)
@@ -31,7 +31,8 @@ const DocSearch = forwardRef(function DocSearch({ doc, measurements, onGo }, inp
 
   return (
     <section className="border-b border-ink-200 p-4">
-      <div className="flex items-center gap-2 rounded-lg border border-ink-300 px-2.5 py-1.5 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
+      <div className="flex items-center gap-1.5">
+      <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-ink-300 px-2.5 py-1.5 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
         <SearchIcon className="h-4 w-4 shrink-0 text-ink-400" />
         <input
           ref={inputRef}
@@ -58,6 +59,8 @@ const DocSearch = forwardRef(function DocSearch({ doc, measurements, onGo }, inp
             {current >= 0 ? `${current + 1}/${hits.length}` : `${hits.length}곳`}
           </span>
         )}
+      </div>
+      {action}
       </div>
 
       <div className="mt-1.5">

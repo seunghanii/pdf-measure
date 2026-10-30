@@ -23,6 +23,7 @@ export default function Sidebar({
   onResetCalibration,
   fileName,
   top, // 맨 위 (도면 안 검색 창)
+  collapsed, // 접힘: 숨기기만 함
 }) {
   const [ratioText, setRatioText] = useState('100')
   const [showRatio, setShowRatio] = useState(false)
@@ -66,7 +67,7 @@ export default function Sidebar({
   const rowProps = { mmPerPt, unit, pageNum, selectedIds, onSetAllHidden, rowActions }
 
   return (
-    <aside className="flex max-h-[35vh] w-full shrink-0 flex-col border-t border-ink-200 bg-white md:max-h-none md:w-80 md:border-t-0 md:border-l">
+    <aside className={`${collapsed ? 'hidden' : 'flex'} max-h-[35vh] w-full shrink-0 flex-col border-t border-ink-200 bg-white md:max-h-none md:w-80 md:border-t-0 md:border-l`}>
       {top}
       {/* 축척 */}
       <section className="border-b border-ink-200 p-4">
