@@ -716,6 +716,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
             onDropImages={insertImages}
             placeRef={placeRef}
             onOpenMemo={openMemoAt}
+            onDelete={deleteItems}
           />
           {memoItem && (
             <Suspense fallback={null}>

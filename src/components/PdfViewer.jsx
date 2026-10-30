@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { distance, snapTo45 } from '../lib/geometry'
 import { TYPE_INFO } from '../lib/measure'
 import MeasurementShape from './MeasurementShape'
+import SelectionBox from './SelectionBox'
 import PageCanvas from './PageCanvas'
 import TextEditor from './TextEditor'
 import { isTypingTarget } from '../lib/dom'
@@ -76,6 +77,7 @@ export default function PdfViewer({
   onDropImages, // (files, clientX, clientY) 사진 파일을 도면에 끌어다 놓음
   placeRef, // 사진 넣을 자리 계산 함수를 여기에 넣어 줌
   onOpenMemo, // (id, page, point, { force }) 메모 범위를 누름
+  onDelete, // (ids) 선택 상자의 × 단추
 }) {
   const containerRef = useRef(null)
   const pageEls = useRef([])
@@ -788,6 +790,9 @@ export default function PdfViewer({
   })
   useEffect(() => () => clearPendingTouch(), [])
 
+  // 이 손가락이 핀치에 쓰였는지 (선택 상자 × 단추가 핀치 중 눌린 것으로 치지 않게)
+  const isPinching = useCallback((id) => !!pinchRef.current || ignoredTouches.current.has(id), [])
+
   const startPinch = () => {
     // 첫 손가락이 시작한 일은 취소
     clearPendingTouch()
@@ -1004,6 +1009,19 @@ export default function PdfViewer({
                       tool={tool}
                       editingId={editing?.page === page ? editing.id : null}
                       croppingId={croppingId}
+                    />
+                  )}
+                  {visible.has(i) && tool === 'select' && !croppingId && (
+                    <SelectionBox
+                      items={byPage.get(page)}
+                      selectedIds={selectedIds}
+                      zoom={zoom}
+                      width={w}
+                      height={h}
+                      editingId={editing?.page === page ? editing.id : null}
+                      canDelete={!marquee}
+                      onDelete={onDelete}
+                      isPinching={isPinching}
                     />
                   )}
                   {renderPreview(page)}

@@ -337,10 +337,6 @@ function MarkupShape({ m, zoom, selected, showHandles, showResize, draft }) {
   return (
     <g data-shape={draft ? undefined : m.id} data-type={m.type} style={{ cursor: showHandles ? (m.type === 'memo' ? 'pointer' : 'move') : undefined }} opacity={draft ? 0.8 : 1}>
       {body}
-      {selected && bounds && !draft && (() => {
-        const g = m.type === 'rect' ? sw / 2 + 3 : 3
-        return <rect x={bounds.x - g} y={bounds.y - g} width={bounds.w + g * 2} height={bounds.h + g * 2} fill="none" stroke="#2563eb" strokeWidth={1} strokeDasharray="4 3" pointerEvents="none" />
-      })()}
       {/* 선택한 사각형·형광펜: 모서리와 변의 손잡이로 크기 조절. 텍스트는 좌우 변 전체를 잡아 너비 조절 */}
       {(showHandles || showResize) && selected && textResizable && !draft &&
         ['w', 'e'].map((dir) => (
@@ -416,9 +412,6 @@ function ImageShape({ m, zoom, selected, showHandles, cropping, exporting }) {
       )}
       {picture(r, `${c.x * iw} ${c.y * ih} ${c.w * iw} ${c.h * ih}`)}
       {border}
-      {selected && !cropping && (
-        <rect x={r.x - 3} y={r.y - 3} width={r.w + 6} height={r.h + 6} fill="none" stroke="#2563eb" strokeWidth={1} strokeDasharray="4 3" pointerEvents="none" />
-      )}
       {handles &&
         RESIZE_DIRS.map((dir) => {
           const p = resizeHandlePos(r, dir)
