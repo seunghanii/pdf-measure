@@ -7,7 +7,7 @@ import MemoEditor, { MemoHelp } from './MemoEditor'
 import PhotoViewer from './PhotoViewer'
 import { InstFields, RelatedDocs } from './InstCard'
 import ExcelFiles from './ExcelFiles'
-import { MAX_EXCEL_BYTES, XLSX_TYPE, isExcelFile, isOldExcel, newFileId } from '../lib/excel'
+import { MAX_EXCEL_BYTES, XLSM_TYPE, XLSX_TYPE, excelType, isExcelFile, isOldExcel, newFileId } from '../lib/excel'
 import { DEFAULT_STATUS, statusOf } from '../lib/instrument'
 
 // 메모 사진은 자세히 볼 수 있게 도면 사진보다 크게 저장
@@ -129,7 +129,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
     const added = []
     for (const file of list) {
       if (isOldExcel(file)) {
-        onNotice('예전 엑셀(.xls)은 읽을 수 없어요. 엑셀에서 .xlsx 로 다시 저장해서 넣어 주세요.')
+        onNotice('예전 엑셀(.xls)은 읽을 수 없어요. 엑셀에서 .xlsx(또는 .xlsm)로 다시 저장해서 넣어 주세요.')
         continue
       }
       if (!isExcelFile(file)) continue
@@ -138,7 +138,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
         continue
       }
       const id = newFileId()
-      const blob = new Blob([file], { type: XLSX_TYPE })
+      const blob = new Blob([file], { type: excelType(file) })
       rememberImage(id, blob) // 이번 창에서 바로 읽고, 정리 대상에서도 빠지게
       store.saveImage(docId, id, blob).catch((e) => {
         console.warn('엑셀 저장 실패', e)
@@ -370,7 +370,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
         <button
           onClick={() => excelRef.current?.click()}
           className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-ink-600 ring-1 ring-ink-300 hover:bg-ink-100"
-          title="엑셀(.xlsx) 첨부. 시트와 행·열 범위를 정해 메모장에서 바로 볼 수 있어요 (끌어다 놓기도 돼요)"
+          title="엑셀(.xlsx, .xlsm) 첨부. 시트와 행·열 범위를 정해 메모장에서 바로 볼 수 있어요 (끌어다 놓기도 돼요)"
         >
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M6 3h8l4 4v14H6zM14 3v4h4M9 11l5 6M14 11l-5 6" />
@@ -380,7 +380,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
         <input
           ref={excelRef}
           type="file"
-          accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          accept={`.xlsx,.xlsm,.xls,${XLSX_TYPE},${XLSM_TYPE}`}
           multiple
           className="hidden"
           onChange={(e) => {

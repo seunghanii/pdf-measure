@@ -1,11 +1,14 @@
 // 메모(계기 카드)에 첨부하는 엑셀: 파일은 사진과 같은 저장소(images.js)에 두고, 메모 항목에는
 // files: [{ id, name, sheet, r1, r2, c1, c2 }] 로 보여 줄 시트와 범위(행·열, 1부터)만 둡니다.
-// 읽기는 브라우저 안에서 (read-excel-file, .xlsx 만). 처음 열 때만 불러옴.
+// 읽기는 브라우저 안에서 (read-excel-file, .xlsx·.xlsm. .xlsm 의 매크로는 실행하지 않고 값만 읽음). 처음 열 때만 불러옴.
 
 export const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 export const MAX_EXCEL_BYTES = 10 * 1024 * 1024
 
-export const isExcelFile = (f) => !!f && (/\.xlsx$/i.test(f.name ?? '') || f.type === XLSX_TYPE)
+export const XLSM_TYPE = 'application/vnd.ms-excel.sheet.macroEnabled.12'
+export const isExcelFile = (f) => !!f && (/\.xls[xm]$/i.test(f.name ?? '') || f.type === XLSX_TYPE || f.type === XLSM_TYPE)
+// 저장할 때 붙일 파일 형식
+export const excelType = (f) => (/\.xlsm$/i.test(f.name ?? '') || f.type === XLSM_TYPE ? XLSM_TYPE : XLSX_TYPE)
 export const isOldExcel = (f) => !!f && /\.xls$/i.test(f.name ?? '')
 
 export const newFileId = () => `xls${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`

@@ -98,7 +98,7 @@ function ExcelFile({ file, loadBlob, onUpdate, onRemove }) {
       </div>
 
       {sheets === null && <p className="px-3 py-3 text-xs text-ink-400">엑셀 읽는 중…</p>}
-      {sheets === 'error' && <p className="px-3 py-3 text-xs text-danger-600">엑셀을 읽지 못했어요. .xlsx 파일인지 확인해 주세요.</p>}
+      {sheets === 'error' && <p className="px-3 py-3 text-xs text-danger-600">엑셀을 읽지 못했어요. .xlsx 나 .xlsm 파일인지 확인해 주세요.</p>}
 
       {ready && editing && sheet && range && (
         <RangeEditor key={`${sheet.sheet}|${rangeLabel(range)}`} sheets={sheets} sheet={sheet} range={range} onChange={onUpdate} onDone={() => setEditing(false)} />
