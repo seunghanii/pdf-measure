@@ -8,6 +8,7 @@ import { ImageSource, freshImageIds, getImageBlob, isImageFile, newImageId, prep
 import { TOOLS, toolForDigit } from '../lib/tools'
 import { toggleSnap } from '../lib/snapSetting'
 import { useAutosave } from '../lib/autosave'
+import { useDocIndex } from '../lib/indexer'
 import { isTypingTarget } from '../lib/dom'
 import PdfViewer from './PdfViewer'
 import Toolbar from './Toolbar'
@@ -81,6 +82,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
   // 측정값이 바뀌면 잠시 뒤 자동 저장 (로그인했으면 서버, 아니면 이 브라우저)
   const store = doc.store
   const cloud = store.kind === 'cloud'
+  const textIndex = useDocIndex(store, doc.id) // 도면 글자 (글자 복사 도구)
   const syncStatus = useAutosave({ store, docId: doc.id, measurements, categories, calibration, unit, markupStyle, counters, pageNum })
 
   // 축척: PDF 1pt 가 실제 몇 mm 인지
@@ -717,6 +719,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
             placeRef={placeRef}
             onOpenMemo={openMemoAt}
             onDelete={deleteItems}
+            textIndex={textIndex}
           />
           {memoItem && (
             <Suspense fallback={null}>
