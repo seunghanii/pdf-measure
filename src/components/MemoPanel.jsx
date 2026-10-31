@@ -40,7 +40,7 @@ function loadBottomH() {
 
 // 메모장. 도면 오른쪽 위(또는 아래에 길게, memoDock 설정)에 떠 있고, 글을 바로 쓰고 사진을 글 사이에 넣습니다.
 // others: 같은 자리에 겹친 메모들 (누르면 그 메모로 바뀜)
-export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, onDelete, onOpenLink, onPickLink, store, docId, onNotice, kinds, onAddKind }) {
+export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, onDelete, onOpenLink, onPickLink, store, library, docId, onNotice, kinds, onAddKind }) {
   // 예전(사진을 아래 칸에 모아 둔) 메모는 처음 열 때 사진을 글 끝으로 옮김
   const [migrated] = useState(() => migrateMemo(memo))
   const [initialText] = useState(() => migrated?.text ?? memo.text ?? '')
@@ -325,7 +325,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
       {memo.inst && <InstFields memo={memo} onChange={onChange} kinds={kinds} onAddKind={onAddKind} />}
 
       {/* 관련 도면 (여러 개) */}
-      <RelatedDocs memo={memo} onChange={onChange} onOpen={setPreviewing} onPick={onPickLink} />
+      <RelatedDocs memo={memo} library={library} onChange={onChange} onOpen={setPreviewing} onPick={onPickLink} />
 
       {/* 글과 사진 (같이 스크롤) */}
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -424,6 +424,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
         <DocPreview
           store={store}
           link={previewing}
+          alias={library?.aliases?.[previewing.id] ?? ''}
           onClose={() => setPreviewing(null)}
           onOpen={(link) => {
             setPreviewing(null)

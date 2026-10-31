@@ -7,8 +7,8 @@ const MAX_PIXELS = 4_000_000
 const LONG_SIDE = 2600
 
 // 관련 도면 미리보기: 사진 크게 보기처럼 그 페이지를 띄우고, "파일 열기" 로 도면 탭을 엶.
-// link: { id, name, page, role }, label: 화면에 보일 이름(별명)
-export default function DocPreview({ store, link, label, onOpen, onClose }) {
+// link: { id, name, page, role }, alias: 별명 (있으면 별명과 원래 파일 이름을 함께 보여 줌)
+export default function DocPreview({ store, link, alias, onOpen, onClose }) {
   const [pdf, setPdf] = useState(null)
   const [pages, setPages] = useState(0)
   const [index, setIndex] = useState(Math.max(0, (link.page || 1) - 1))
@@ -87,7 +87,6 @@ export default function DocPreview({ store, link, label, onOpen, onClose }) {
   }, [pdf, index])
 
   const list = Array.from({ length: Math.max(1, pages) }, (_, i) => urls[i] ?? null)
-  const name = label || link.name
 
   return (
     <PhotoViewer
@@ -100,7 +99,8 @@ export default function DocPreview({ store, link, label, onOpen, onClose }) {
       title={
         <span>
           {link.role && <span className="mr-1.5 rounded bg-white/20 px-1.5 py-px text-xs font-semibold">{link.role}</span>}
-          {name}
+          {alias || link.name}
+          {alias && <span className="ml-2 text-xs text-white/50">{link.name}</span>}
           {pages > 0 && <span className="ml-2 text-white/60 tabular-nums">{index + 1} / {pages}쪽</span>}
         </span>
       }
