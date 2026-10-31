@@ -5,7 +5,7 @@
 // 관련 문서(Hook-up, 루프도, 데이터시트 …)는 links: [{ id, name, page, role }] 로 여러 개.
 // 예전 메모의 link(도면 하나)도 그대로 읽고, 고칠 때 links 로 옮기면서 link 에는 첫 번째를 남겨 둠.
 // 상태 색은 분류처럼 항목 color 에 함께 넣어 두어 그리기 코드가 상태 목록을 몰라도 되게 함.
-import { rectOf } from './markup'
+import { isMarkup, rectOf } from './markup'
 
 export const INST_STATUSES = [
   { id: 'pre', label: '설치 전', color: '#64748b' },
@@ -25,6 +25,9 @@ export const KIND_PRESETS = ['FE', 'FT', 'LI', 'LS', 'LT', 'PDI', 'PDT', 'PI', '
 export const kindList = (custom) => [...new Set([...KIND_PRESETS, ...(custom ?? [])])]
 
 export const isInst = (m) => m?.type === 'memo' && !!m.inst
+
+// 오른쪽 목록의 묶음: 'measure' 측정 | 'markup' 마크업 | 'inst' 계기 카드 (마크업 전체 삭제에 휩쓸리지 않게 따로)
+export const itemGroup = (m) => (isInst(m) ? 'inst' : isMarkup(m.type) ? 'markup' : 'measure')
 
 // 메모의 관련 문서 목록 (예전 link 하나짜리 포함)
 export const memoLinks = (m) => (Array.isArray(m?.links) ? m.links : m?.link ? [m.link] : [])

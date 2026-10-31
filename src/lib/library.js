@@ -2,6 +2,8 @@
 // 도면의 측정값(state)과 따로 보관해서, 폴더를 바꿔도 측정값은 건드리지 않습니다.
 // { folders: [{ id, name, color }], assign: { [도면 id]: 폴더 id }, aliases: { [도면 id]: 별명 }, kinds: [사용자가 더한 계기 종류] }
 // 별명은 홈·탭에 짧게 보일 이름. 원래 파일 이름(name)은 그대로 두고 따로 둡니다.
+// trash: 휴지통에 넣은 도면 { [도면 id]: { at, name } } (lib/trash.js)
+import { normalizeDocTrash } from './trash'
 
 export const FOLDER_COLORS = [
   { id: 'blue', label: '파랑', hex: '#3b82f6' },
@@ -16,7 +18,7 @@ export const FOLDER_COLORS = [
 
 export const colorHex = (id) => (FOLDER_COLORS.find((c) => c.id === id) ?? FOLDER_COLORS[0]).hex
 
-export const EMPTY_LIBRARY = { folders: [], assign: {}, aliases: {}, kinds: [] }
+export const EMPTY_LIBRARY = { folders: [], assign: {}, aliases: {}, kinds: [], trash: {} }
 
 // 홈 화면에서 눌러 연 폴더 (이 브라우저에만 기억)
 const OPEN_FOLDER_KEY = 'pdf-measure:open-folder'
@@ -46,7 +48,7 @@ export function normalizeLibrary(lib) {
   const aliases = {}
   for (const [doc, alias] of Object.entries(lib?.aliases ?? {})) if (typeof alias === 'string' && alias.trim()) aliases[doc] = alias.trim()
   const kinds = Array.isArray(lib?.kinds) ? [...new Set(lib.kinds.filter((k) => typeof k === 'string' && k.trim()).map((k) => k.trim().toUpperCase()))] : []
-  return { folders, assign, aliases, kinds }
+  return { folders, assign, aliases, kinds, trash: normalizeDocTrash(lib?.trash) }
 }
 
 // 홈·탭에 보일 이름: 별명이 있으면 별명, 없으면 파일 이름에서 .pdf 를 뺀 것
@@ -64,8 +66,10 @@ export function setAlias(lib, docId, alias) {
 
 // 도면을 지울 때 폴더 배정과 별명도 함께 정리
 export function forgetDoc(lib, docId) {
-  if (!lib.assign[docId] && !lib.aliases?.[docId]) return lib
-  return setAlias(moveDoc(lib, docId, null), docId, '')
+  if (!lib.assign[docId] && !lib.aliases?.[docId] && !lib.trash?.[docId]) return lib
+  const trash = { ...(lib.trash ?? {}) }
+  delete trash[docId]
+  return { ...setAlias(moveDoc(lib, docId, null), docId, ''), trash }
 }
 
 export const newFolderId = () => `f${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
@@ -106,7 +110,9 @@ export function mergeLibrary(target, source, docIds) {
     assign[id] = dest.id
   }
   const kinds = [...new Set([...(target.kinds ?? []), ...(source.kinds ?? [])])]
-  return { folders, assign, aliases, kinds }
+  const trash = { ...(target.trash ?? {}) }
+  for (const id of docIds) if (source.trash?.[id] && !trash[id]) trash[id] = source.trash[id]
+  return { folders, assign, aliases, kinds, trash }
 }
 
 // 폴더 순서 바꾸기: id 폴더를 index 자리로 옮김 (홈 화면 칸 순서 = folders 배열 순서)

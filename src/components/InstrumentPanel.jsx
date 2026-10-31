@@ -1,3 +1,4 @@
+import { withoutTrashed } from '../lib/trash'
 import { useEffect, useMemo, useState } from 'react'
 import { INST_STATUSES, compareTags, downloadInstCsv, findTags, guessKind, instRows, kindDesc, statusOf, tagKey } from '../lib/instrument'
 import { textHas } from '../lib/textIndex'
@@ -76,7 +77,7 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
       .then((list) => {
         if (!alive) return
         const rows = []
-        for (const d of list) {
+        for (const d of withoutTrashed(list)) {
           if (d.id === docId) continue
           for (const r of d.summary?.inst ?? []) rows.push({ ...r, docId: d.id, docName: d.name })
         }

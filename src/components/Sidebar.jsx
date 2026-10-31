@@ -3,6 +3,8 @@ import { TYPE_INFO, describe } from '../lib/measure'
 import { UNITS, calibrationInput, formatArea, formatLength, parseNumber } from '../lib/units'
 import { isMarkup, kindName } from '../lib/markup'
 import { CATEGORY_COLORS, CATEGORY_PRESETS, categoryTotals } from '../lib/categories'
+import { itemGroup } from '../lib/instrument'
+import { TRASH_DAYS, leftLabel } from '../lib/trash'
 
 export default function Sidebar({
   calibration,
@@ -34,6 +36,9 @@ export default function Sidebar({
   instCount = 0, // 계기 카드 개수
   onOpenInstruments, // ('list' | 'find') 계기 목록 창 열기
   collapsed, // 접힘: 숨기기만 함
+  trash = [], // 휴지통 [{ item, at }]
+  onRestore, // (ids) 되살리기
+  onPurge, // (ids | undefined) 완전 삭제, 없으면 비우기
 }) {
   const [ratioText, setRatioText] = useState('100')
   const [showRatio, setShowRatio] = useState(false)
@@ -42,7 +47,8 @@ export default function Sidebar({
   const scaleShown = !mmPerPt || scaleOpen
 
   const measures = useMemo(() => measurements.filter((m) => !isMarkup(m.type)), [measurements])
-  const markups = useMemo(() => measurements.filter((m) => isMarkup(m.type)), [measurements])
+  const markups = useMemo(() => measurements.filter((m) => itemGroup(m) === 'markup'), [measurements])
+  const cards = useMemo(() => measurements.filter((m) => itemGroup(m) === 'inst'), [measurements])
   const totals = useMemo(() => categoryTotals(measures, categories), [measures, categories])
   // 분류 줄을 누르면 그 분류 항목만 목록에 보여 줌 (null: 전체, '': 분류 없음)
   const [catFilter, setCatFilter] = useState(null)
@@ -275,7 +281,7 @@ export default function Sidebar({
               </button>
               <button
                 className="text-danger-500 hover:underline"
-                onClick={() => window.confirm('모든 측정을 지울까요?') && onClear('measure')}
+                onClick={() => window.confirm('모든 측정을 지울까요? 지운 항목은 휴지통에 7일 동안 남아요.') && onClear('measure')}
               >
                 전체 삭제
               </button>
@@ -291,7 +297,7 @@ export default function Sidebar({
           actions={
             <button
               className="text-danger-500 hover:underline"
-              onClick={() => window.confirm('모든 마크업을 지울까요?') && onClear('markup')}
+              onClick={() => window.confirm('모든 마크업을 지울까요? 계기 카드는 지우지 않고, 지운 마크업은 휴지통에 7일 동안 남아요.') && onClear('markup')}
             >
               전체 삭제
             </button>
@@ -299,6 +305,15 @@ export default function Sidebar({
           group="markup"
           {...rowProps}
         />
+        {/* 계기 카드는 마크업과 따로: "마크업 전체 삭제"에 들어가지 않음, 한꺼번에 지우는 버튼도 없음 */}
+        <ItemSection
+          title="계기 카드"
+          items={cards}
+          empty="메모 범위 도구에서 '계기 카드'를 고르거나, 위 '태그 찾기'로 만들어요."
+          group="inst"
+          {...rowProps}
+        />
+        <TrashSection trash={trash} onRestore={onRestore} onPurge={onPurge} />
       </div>
 
       <details className="border-t border-ink-200 px-4 py-3 text-xs text-ink-500">
@@ -807,5 +822,86 @@ function CategoryEditor({ cat, onSave, onCancel, onDelete }) {
         </button>
       </div>
     </form>
+  )
+}
+
+// 휴지통: 지운 항목을 7일 동안 보관. 되살리면 원래 자리로 돌아감
+function TrashSection({ trash, onRestore, onPurge }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <section className="border-t border-ink-200">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-ink-50"
+      >
+        <TrashCan className="h-4 w-4 shrink-0 text-ink-400" />
+        <span className="text-xs font-semibold tracking-wide text-ink-500">휴지통 ({trash.length})</span>
+        <span className="min-w-0 flex-1 truncate text-xs text-ink-400">{TRASH_DAYS}일 뒤 완전 삭제</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true" className={`h-4 w-4 shrink-0 text-ink-400 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+      {open && (
+        <div className="px-2 pb-3">
+          {trash.length === 0 ? (
+            <p className="px-2 py-3 text-center text-sm text-ink-400">비어 있어요. 지운 측정·마크업·메모·계기 카드가 여기 {TRASH_DAYS}일 동안 남아요.</p>
+          ) : (
+            <>
+              <div className="flex justify-end gap-3 px-2 pb-1 text-xs">
+                <button className="font-medium text-brand-600 hover:underline" onClick={() => onRestore(trash.map((t) => t.item.id))}>
+                  모두 되살리기
+                </button>
+                <button
+                  className="text-danger-500 hover:underline"
+                  onClick={() => window.confirm(`휴지통의 ${trash.length}개 항목을 완전히 지울까요? 되돌릴 수 없어요.`) && onPurge()}
+                >
+                  비우기
+                </button>
+              </div>
+              <ul>
+                {trash.map(({ item: m, at }) => (
+                  <li key={m.id} className="group flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-ink-50">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full opacity-60" style={{ background: m.color ?? TYPE_INFO[m.type]?.color ?? '#94a3b8' }} />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm text-ink-600">{m.name || '(이름 없음)'}</div>
+                      <div className="truncate text-xs text-ink-400">
+                        {trashKind(m)} · {m.page}p · {leftLabel(at)}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => onRestore([m.id])}
+                      title="원래 자리로 되살리기"
+                      className="shrink-0 rounded-md px-2 py-0.5 text-xs font-medium text-brand-700 ring-1 ring-brand-200 hover:bg-brand-50"
+                    >
+                      되살리기
+                    </button>
+                    <button
+                      onClick={() => window.confirm(`"${m.name}" 을(를) 완전히 지울까요? 되돌릴 수 없어요.`) && onPurge([m.id])}
+                      title="완전 삭제"
+                      className="shrink-0 rounded p-1 text-ink-300 hover:bg-danger-50 hover:text-danger-500"
+                    >
+                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
+    </section>
+  )
+}
+
+const trashKind = (m) => (itemGroup(m) === 'inst' ? '계기 카드' : TYPE_INFO[m.type] ? kindName(m, TYPE_INFO) : m.type)
+
+function TrashCan({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+    </svg>
   )
 }
