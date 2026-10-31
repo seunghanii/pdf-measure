@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { cachedImageUrl, getImageBlob, isImageFile, newImageId, prepareImage, rememberImage } from '../lib/images'
 import { memoSummary, migrateMemo } from '../lib/memo'
+import { setMemoDock, useMemoDock } from '../lib/memoDock'
 import { htmlToMarkdown } from '../lib/memoMarkdown'
 import MemoEditor, { MemoHelp } from './MemoEditor'
 import PhotoViewer from './PhotoViewer'
@@ -20,8 +21,19 @@ function loadSize() {
     return null
   }
 }
+// 아래에 길게 놓을 때의 높이 (따로 기억)
+const BOTTOM_H_KEY = 'pdf-measure:memo-bottom-h'
+const MIN_BOTTOM_H = 160
+function loadBottomH() {
+  try {
+    const h = Number(localStorage.getItem(BOTTOM_H_KEY))
+    return h > 0 ? h : null
+  } catch {
+    return null
+  }
+}
 
-// 메모장. 도면 오른쪽 위에 떠 있고, 글을 바로 쓰고 사진을 글 사이에 넣습니다.
+// 메모장. 도면 오른쪽 위(또는 아래에 길게, memoDock 설정)에 떠 있고, 글을 바로 쓰고 사진을 글 사이에 넣습니다.
 // others: 같은 자리에 겹친 메모들 (누르면 그 메모로 바뀜)
 export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, onDelete, onOpenLink, onPickLink, store, docId, onNotice }) {
   // 예전(사진을 아래 칸에 모아 둔) 메모는 처음 열 때 사진을 글 끝으로 옮김
@@ -30,6 +42,9 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
   const [viewing, setViewing] = useState(null) // 크게 보는 사진 { ids, index }
   const [busy, setBusy] = useState(0) // 사진 넣는 중
   const [size, setSize] = useState(loadSize) // { w, h } px, 없으면 기본 크기
+  const [bottomH, setBottomH] = useState(loadBottomH) // 아래 자리 높이 px, 없으면 기본
+  const dock = useMemoDock() // 'right' | 'bottom' (모든 메모 공통)
+  const bottom = dock === 'bottom'
   const panelRef = useRef(null)
   const editorRef = useRef(null)
   const editorApi = useRef(null)
@@ -134,6 +149,37 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
     window.addEventListener('pointerup', up)
   }
 
+  // 아래 자리: 위 변을 끌어 높이 조절
+  const startResizeBottom = (e) => {
+    e.preventDefault()
+    const el = panelRef.current
+    const parent = el?.parentElement
+    if (!el || !parent) return
+    const r = el.getBoundingClientRect()
+    const pr = parent.getBoundingClientRect()
+    const startY = e.clientY
+    const startH = r.height
+    const maxH = pr.height - 24
+    let next = startH
+    const move = (ev) => {
+      next = Math.min(maxH, Math.max(MIN_BOTTOM_H, startH + (startY - ev.clientY)))
+      setBottomH(next)
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      document.body.style.cursor = ''
+      try {
+        localStorage.setItem(BOTTOM_H_KEY, String(Math.round(next)))
+      } catch {
+        // 저장 못 해도 이번에는 그 높이로 보임
+      }
+    }
+    document.body.style.cursor = 'ns-resize'
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+
   const color = memo.color ?? '#f59e0b'
   const link = memo.link
   const urls = viewing ? viewing.ids.map((id) => cachedImageUrl(id)) : []
@@ -141,8 +187,12 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
   return (
     <div
       ref={panelRef}
-      style={size ? { width: size.w, height: size.h } : undefined}
-      className={`absolute top-14 right-3 z-20 flex max-h-[calc(100%-4.25rem)] max-w-[calc(100%-1.5rem)] min-w-0 flex-col overflow-hidden rounded-xl border border-ink-200 bg-white shadow-2xl ${size ? '' : 'w-[400px]'}`}
+      style={bottom ? { height: bottomH ?? undefined } : size ? { width: size.w, height: size.h } : undefined}
+      className={`absolute z-20 flex min-w-0 flex-col overflow-hidden rounded-xl border border-ink-200 bg-white shadow-2xl ${
+        bottom
+          ? `right-3 bottom-3 left-3 max-h-[calc(100%-1.5rem)] ${bottomH ? '' : 'h-[38%] min-h-[200px]'}`
+          : `top-14 right-3 max-h-[calc(100%-4.25rem)] max-w-[calc(100%-1.5rem)] ${size ? '' : 'w-[400px]'}`
+      }`}
       onKeyDown={(e) => {
         if (e.key === 'Escape') {
           e.stopPropagation()
@@ -169,6 +219,26 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
           className="min-w-0 flex-1 rounded px-1 py-0.5 text-sm font-semibold text-ink-800 hover:bg-ink-50 focus:bg-white focus:outline focus:outline-brand-300"
           aria-label="메모 이름"
         />
+        <button
+          onClick={() => setMemoDock(bottom ? 'right' : 'bottom')}
+          className="rounded p-1 text-ink-400 hover:bg-ink-100 hover:text-ink-700"
+          title={bottom ? '메모장을 오른쪽에 놓기 (모든 메모에 적용)' : '메모장을 아래에 길게 놓기 (모든 메모에 적용)'}
+          aria-label={bottom ? '오른쪽에 놓기' : '아래에 놓기'}
+        >
+          {bottom ? (
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="16" rx="2" />
+              <path d="M14 4v16" />
+              <path d="M16.5 8h2M16.5 11h2" strokeLinecap="round" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="16" rx="2" />
+              <path d="M3 14h18" />
+              <path d="M7 17h6" strokeLinecap="round" />
+            </svg>
+          )}
+        </button>
         <button onClick={onClose} className="rounded p-1 text-ink-400 hover:bg-ink-100 hover:text-ink-700" title="닫기 (Esc)">
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <path d="M6 6l12 12M18 6L6 18" />
@@ -272,14 +342,20 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
         </button>
       </div>
 
-      {/* 크기 조절 손잡이: 왼쪽 변, 아래 변, 왼쪽 아래 모서리 */}
-      <div onPointerDown={(e) => startResize(e, 'w')} className="absolute top-0 bottom-3 left-0 w-1.5 cursor-ew-resize" title="끌어서 너비 조절" />
-      <div onPointerDown={(e) => startResize(e, 's')} className="absolute right-0 bottom-0 left-3 h-1.5 cursor-ns-resize" title="끌어서 높이 조절" />
-      <div onPointerDown={(e) => startResize(e, 'sw')} className="absolute bottom-0 left-0 h-4 w-4 cursor-nesw-resize" title="끌어서 크기 조절">
-        <svg viewBox="0 0 16 16" className="h-4 w-4 text-ink-300" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-          <path d="M3 7l6 6M3 11l2 2" />
-        </svg>
-      </div>
+      {/* 크기 조절 손잡이. 오른쪽: 왼쪽 변, 아래 변, 왼쪽 아래 모서리 / 아래: 위 변 */}
+      {bottom ? (
+        <div onPointerDown={startResizeBottom} className="absolute top-0 right-0 left-0 h-1.5 cursor-ns-resize" title="끌어서 높이 조절" />
+      ) : (
+        <>
+          <div onPointerDown={(e) => startResize(e, 'w')} className="absolute top-0 bottom-3 left-0 w-1.5 cursor-ew-resize" title="끌어서 너비 조절" />
+          <div onPointerDown={(e) => startResize(e, 's')} className="absolute right-0 bottom-0 left-3 h-1.5 cursor-ns-resize" title="끌어서 높이 조절" />
+          <div onPointerDown={(e) => startResize(e, 'sw')} className="absolute bottom-0 left-0 h-4 w-4 cursor-nesw-resize" title="끌어서 크기 조절">
+            <svg viewBox="0 0 16 16" className="h-4 w-4 text-ink-300" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <path d="M3 7l6 6M3 11l2 2" />
+            </svg>
+          </div>
+        </>
+      )}
 
       {viewing && (
         <PhotoViewer
