@@ -324,7 +324,7 @@ export default function PdfViewer({
         offsetX: el.clientWidth / 2,
         offsetY: el.clientHeight / 2,
       }
-      setFlash({ page: jump.page, rect: r, nonce: jump.nonce })
+      setFlash({ page: jump.page, rect: r, nonce: jump.nonce, peek: jump.peek ?? null })
       if (Math.abs(z - zoom) > 1e-6) {
         zoomAnchorRef.current = anchor
         onZoom(z)
@@ -1156,6 +1156,11 @@ export default function PdfViewer({
                       sel={textSel?.page === page ? rectOf(textSel.a, textSel.b) : null}
                       rects={textSel?.page === page ? livePicked?.map((q) => q.rect) : picked?.page === page ? picked.rects : null}
                     />
+                  )}
+                  {flash && flash.page === page && flash.peek && (
+                    <g key={`peek-${flash.nonce}`} className="search-peek" pointerEvents="none">
+                      <MeasurementShape m={{ ...flash.peek, hidden: false }} zoom={zoom} mmPerPt={mmPerPt} unit={unit} />
+                    </g>
                   )}
                   {flash && flash.page === page && (
                     <rect

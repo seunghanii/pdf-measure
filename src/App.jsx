@@ -502,7 +502,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
           onOpenHit={async (item, hit) => {
             setSearchOpen(false)
             await openRecent(item)
-            setSearchJump({ id: item.id, page: hit.page, rect: hit.rect, nonce: Date.now() })
+            setSearchJump({ id: item.id, page: hit.page, rect: hit.rect, peekId: hit.hidden ? hit.itemId : null, nonce: Date.now() })
           }}
         />
       )}
