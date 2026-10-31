@@ -51,8 +51,8 @@ export function InstFields({ memo, onChange, kinds, onAddKind }) {
         />
       </label>
       <div className="flex items-start gap-2">
-        <span className={`${label} w-14 shrink-0 pt-1`}>계기 종류</span>
-        <div className="flex min-w-0 flex-1 flex-wrap gap-1" role="group" aria-label="계기 종류">
+        <span className={`${label} w-14 shrink-0 pt-1`}>종류</span>
+        <div className="flex min-w-0 flex-1 flex-wrap gap-1" role="group" aria-label="종류">
           {options.map((k) => (
             <button
               key={k}
@@ -83,10 +83,10 @@ export function InstFields({ memo, onChange, kinds, onAddKind }) {
               }}
               placeholder="예: FIC"
               className="w-16 rounded border border-brand-400 px-1.5 py-0.5 text-xs font-semibold outline-none"
-              aria-label="새 계기 종류"
+              aria-label="새 종류"
             />
           ) : (
-            <button type="button" onClick={() => setAdding(true)} className="rounded px-1.5 py-0.5 text-xs text-brand-700 hover:bg-brand-50" title="계기 종류 더하기 (모든 도면에 적용)">
+            <button type="button" onClick={() => setAdding(true)} className="rounded px-1.5 py-0.5 text-xs text-brand-700 hover:bg-brand-50" title="종류 더하기 (모든 도면에 적용)">
               + 추가
             </button>
           )}
