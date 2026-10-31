@@ -28,6 +28,26 @@ function boxOf(m, zoom) {
   return { x: x1 * zoom - g, y: y1 * zoom - g, w: (x2 - x1) * zoom + g * 2, h: (y2 - y1) * zoom + g * 2 }
 }
 
+// 여러 개를 골랐을 때 모두를 감싸는 점선 상자(화면 픽셀). 이 안을 잡아 끌면 고른 것 전부가 함께 움직입니다.
+// 한 페이지에 고른 항목이 2개 미만이면 null
+export function groupBox(items, selectedIds, zoom, editingId) {
+  if (!items || selectedIds.length < 2) return null
+  const picked = items.filter((m) => m.id !== editingId && selectedIds.includes(m.id) && m.points?.length)
+  if (picked.length < 2) return null
+  let x1 = Infinity
+  let y1 = Infinity
+  let x2 = -Infinity
+  let y2 = -Infinity
+  for (const m of picked) {
+    const b = boxOf(m, zoom)
+    x1 = Math.min(x1, b.x)
+    y1 = Math.min(y1, b.y)
+    x2 = Math.max(x2, b.x + b.w)
+    y2 = Math.max(y2, b.y + b.h)
+  }
+  return { x: x1 - 4, y: y1 - 4, w: x2 - x1 + 8, h: y2 - y1 + 8 }
+}
+
 const SelectionBox = memo(function SelectionBox({ items, selectedIds, zoom, width, height, editingId, canDelete, onDelete, isPinching }) {
   const downRef = useRef(null)
   if (!items || !selectedIds.length) return null
@@ -60,7 +80,8 @@ const SelectionBox = memo(function SelectionBox({ items, selectedIds, zoom, widt
         </g>
       ))}
       {picked.length > 1 && (
-        <rect x={left - 4} y={top - 4} width={right - left + 8} height={Math.max(...boxes.map((b) => b.y + b.h)) - top + 8} rx={3} fill="none" stroke={BLUE} strokeWidth={1} strokeDasharray="5 3" />
+        // 안쪽 빈 곳에서도 '옮기기' 커서가 보이게 (실제 잡기는 PdfViewer 가 좌표로 판단)
+        <rect x={left - 4} y={top - 4} width={right - left + 8} height={Math.max(...boxes.map((b) => b.y + b.h)) - top + 8} rx={3} fill="transparent" stroke={BLUE} strokeWidth={1} strokeDasharray="5 3" pointerEvents="all" style={{ cursor: 'move' }} />
       )}
       {deletable && (
         <g

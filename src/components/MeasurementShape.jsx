@@ -80,9 +80,10 @@ function offsetLabel(a, b, dist = 14) {
 
 // cropping: 사진 자르기 중 (원본 전체를 흐리게 보여 주고 자르기 손잡이 표시)
 // exporting: PDF 저장용. 사진은 따로 넣으므로 테두리만 그림
-function MeasurementShape({ m, zoom, mmPerPt, unit, selected, showHandles, showResize, draft, closeHint, endHint, cropping, exporting }) {
-  if (m.type === 'image') return <ImageShape m={m} zoom={zoom} selected={selected} showHandles={showHandles} cropping={cropping} exporting={exporting} />
-  if (isMarkup(m.type)) return <MarkupShape m={m} zoom={zoom} selected={selected} showHandles={showHandles} showResize={showResize} draft={draft} />
+function MeasurementShape({ m, zoom, mmPerPt, unit, selected, showHandles, showResize, noResize, draft, closeHint, endHint, cropping, exporting }) {
+  // noResize: 여러 개를 고른 동안에는 크기 손잡이를 숨김 (잡으면 함께 옮기기)
+  if (m.type === 'image') return <ImageShape m={m} zoom={zoom} selected={selected && (!noResize || cropping)} showHandles={showHandles} cropping={cropping} exporting={exporting} />
+  if (isMarkup(m.type)) return <MarkupShape m={m} zoom={zoom} selected={selected && !noResize} showHandles={showHandles} showResize={showResize} draft={draft} />
   const color = m.color ?? TYPE_INFO[m.type].color // 분류가 있으면 분류 색
   const pts = m.points.map((p) => ({ x: p.x * zoom, y: p.y * zoom }))
   const strokeWidth = selected ? 3 : 2
