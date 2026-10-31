@@ -1,6 +1,6 @@
 // 홈 화면의 도면 목록: 폴더 칸, 도면 줄, 폴더 만들기·고치기 창
 import { useState } from 'react'
-import { FOLDER_COLORS, colorHex, deleteFolder, moveDoc } from '../lib/library'
+import { FOLDER_COLORS, colorHex, deleteFolder, fileBase, moveDoc, setAlias } from '../lib/library'
 
 function timeAgo(ts) {
   const diff = Date.now() - ts
@@ -19,12 +19,6 @@ function formatSize(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-function scaleLabel(summary) {
-  const c = summary?.calibration
-  if (!c) return null
-  return c.mode === 'ratio' ? `축척 1:${c.ratio.toLocaleString('ko-KR')}` : c.label
-}
-
 const DRAG_TYPE = 'application/x-pdf-measure-doc'
 
 export function FolderIcon({ className, color, open, fill }) {
@@ -40,7 +34,7 @@ export function FolderIcon({ className, color, open, fill }) {
 }
 
 // 폴더별로 묶은 도면 목록
-export default function Library({ list, library, openIds, cloud, onOpen, onRemove, onRename, onUpdateLibrary, onEditFolder, openFolderId, setOpenFolderId }) {
+export default function Library({ list, library, openIds, cloud, onOpen, onRemove, onUpdateLibrary, onEditFolder, openFolderId, setOpenFolderId }) {
   const [dropTarget, setDropTarget] = useState(undefined) // 폴더 id, 'none' = 폴더 밖
   const [dragging, setDragging] = useState(false)
 
@@ -80,9 +74,10 @@ export default function Library({ list, library, openIds, cloud, onOpen, onRemov
       cloud={cloud}
       folders={folders}
       folderId={assign[item.id] ?? null}
+      alias={library.aliases?.[item.id] ?? ''}
       onOpen={onOpen}
       onRemove={onRemove}
-      onRename={onRename}
+      onSetAlias={(alias) => onUpdateLibrary((lib) => setAlias(lib, item.id, alias))}
       onMove={move}
       onDragStart={() => setDragging(true)}
       onDragEnd={() => {
@@ -210,22 +205,18 @@ function TrashIcon() {
   )
 }
 
-const splitExt = (name) => {
-  const m = name.match(/\.pdf$/i)
-  return m ? [name.slice(0, m.index), m[0]] : [name, '']
-}
-
-function FileRow({ item, isOpen, cloud, folders, folderId, onOpen, onRemove, onRename, onMove, onDragStart, onDragEnd }) {
+function FileRow({ item, isOpen, cloud, folders, folderId, alias, onOpen, onRemove, onSetAlias, onMove, onDragStart, onDragEnd }) {
   const [editing, setEditing] = useState(false)
   const [menu, setMenu] = useState(false)
-  const count = item.summary?.count ?? 0
-  const scale = scaleLabel(item.summary)
-  const [base, ext] = splitExt(item.name)
+  const base = fileBase(item.name)
+  const shown = alias || base
 
-  const finishRename = (value) => {
+  // 별명 정하기. 비우거나 파일 이름과 같게 쓰면 별명을 지움 (파일 이름이 다시 보임)
+  const finishAlias = (value) => {
     setEditing(false)
     const next = value.trim()
-    if (next && next !== base) onRename(item, next + ext)
+    const wanted = next === base ? '' : next
+    if (wanted !== alias) onSetAlias(wanted)
   }
 
   return (
@@ -255,18 +246,23 @@ function FileRow({ item, isOpen, cloud, folders, folderId, onOpen, onRemove, onR
             {editing ? (
               <input
                 autoFocus
-                defaultValue={base}
+                defaultValue={alias}
+                placeholder={base}
+                aria-label="도면 별명"
+                title="비워 두면 원래 파일 이름이 보여요"
                 onFocus={(e) => e.target.select()}
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') finishRename(e.currentTarget.value)
+                  if (e.key === 'Enter') finishAlias(e.currentTarget.value)
                   if (e.key === 'Escape') setEditing(false)
                 }}
-                onBlur={(e) => finishRename(e.currentTarget.value)}
+                onBlur={(e) => finishAlias(e.currentTarget.value)}
                 className="w-full min-w-0 rounded border border-brand-400 px-1.5 py-0.5 font-medium text-ink-800 outline-none ring-2 ring-brand-100"
               />
             ) : (
-              <span className="truncate font-medium text-ink-800">{item.name}</span>
+              <span className="truncate font-medium text-ink-800" title={alias ? `파일 이름: ${item.name}` : item.name}>
+                {shown}
+              </span>
             )}
             {isOpen && !editing && (
               <span className="shrink-0 rounded bg-brand-100 px-1.5 py-0.5 text-xs text-brand-700">열려 있음</span>
@@ -275,8 +271,6 @@ function FileRow({ item, isOpen, cloud, folders, folderId, onOpen, onRemove, onR
           <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-ink-500">
             <span>{timeAgo(item.lastOpened)}</span>
             <span>· {formatSize(item.size)}</span>
-            <span>· 측정 {count}개</span>
-            {scale && <span className="text-ref-600">· {scale}</span>}
             {cloud && item.hasFile === false && <span className="text-warn-600">· PDF 파일 없음</span>}
           </div>
         </div>
@@ -284,7 +278,7 @@ function FileRow({ item, isOpen, cloud, folders, folderId, onOpen, onRemove, onR
       <div className={`flex shrink-0 items-center ${menu ? '' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'}`}>
         <button
           onClick={() => setEditing(true)}
-          title="이름 바꾸기"
+          title="별명 붙이기 (짧게 보일 이름)"
           className="rounded p-1.5 text-ink-400 hover:bg-ink-100 hover:text-ink-700"
         >
           <PencilIcon />
@@ -301,8 +295,8 @@ function FileRow({ item, isOpen, cloud, folders, folderId, onOpen, onRemove, onR
         <button
           onClick={() => {
             const ask = cloud
-              ? `"${item.name}" 을(를) 서버에서 지울까요? PDF 파일과 측정값이 서버에서 완전히 지워집니다.`
-              : `"${item.name}" 을(를) 최근 목록에서 지울까요? 저장된 측정값도 함께 지워집니다.`
+              ? `"${shown}" 을(를) 서버에서 지울까요? PDF 파일과 측정값이 서버에서 완전히 지워집니다.`
+              : `"${shown}" 을(를) 최근 목록에서 지울까요? 저장된 측정값도 함께 지워집니다.`
             if (window.confirm(ask)) onRemove(item)
           }}
           disabled={isOpen}

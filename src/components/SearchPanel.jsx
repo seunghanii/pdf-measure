@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ensureIndexed, listIndexes, onIndexed, scopeOf, useIndexerStatus } from '../lib/indexer'
-import { searchIndex, searchNotes, splitMatch } from '../lib/textIndex'
-import { colorHex } from '../lib/library'
+import { searchIndex, searchNotes, splitMatch, textHas } from '../lib/textIndex'
+import { colorHex, displayName, fileBase } from '../lib/library'
 
 const MAX_HITS_PER_DOC = 8
 
@@ -55,7 +55,7 @@ export function IndexerStatusLine({ onlyId }) {
 }
 
 // 홈 화면 돋보기: 모든 도면에서 글자 찾기
-export default function SearchPanel({ store, recent, library, onOpenHit, onClose }) {
+export default function SearchPanel({ store, recent, library, onOpenHit, onOpenDoc, onClose }) {
   const [query, setQuery] = useState('')
   const [indexes, setIndexes] = useState(null) // Map id → 색인
   const [failed, setFailed] = useState(false)
@@ -104,6 +104,12 @@ export default function SearchPanel({ store, recent, library, onOpenHit, onClose
     return out
   }, [docs, indexes, query])
 
+  // 별명·파일 이름으로 도면 찾기 (색인 없이도 바로)
+  const nameHits = useMemo(() => {
+    if (!query.trim()) return []
+    return docs.filter((d) => textHas(library.aliases?.[d.id], query) || textHas(fileBase(d.name), query))
+  }, [docs, library, query])
+
   const missing = indexes ? docs.filter((d) => !indexes.has(d.id)).length : 0
   const folderOf = (id) => library.folders.find((f) => f.id === library.assign[id])
 
@@ -119,7 +125,7 @@ export default function SearchPanel({ store, recent, library, onOpenHit, onClose
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="도면 속 글자 찾기 (예: P-101, 거실, 도면번호)"
+            placeholder="도면 이름·별명이나 도면 속 글자 찾기 (예: 1층, P-101, 거실)"
             className="min-w-0 flex-1 text-base outline-none placeholder:text-ink-400"
           />
           <button onClick={onClose} className="rounded-md px-2 py-1 text-sm text-ink-500 hover:bg-ink-100">
@@ -128,14 +134,60 @@ export default function SearchPanel({ store, recent, library, onOpenHit, onClose
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto">
+          {nameHits.length > 0 && (
+            <section className="border-b border-ink-100 px-2 py-2">
+              <div className="flex items-center gap-2 px-2 py-1 text-xs font-semibold text-ink-500">
+                도면
+                <span className="ml-auto font-normal text-ink-400">{nameHits.length}개</span>
+              </div>
+              <ul>
+                {nameHits.map((doc) => {
+                  const alias = library.aliases?.[doc.id]
+                  const folder = folderOf(doc.id)
+                  return (
+                    <li key={doc.id}>
+                      <button
+                        onClick={() => onOpenDoc(doc)}
+                        title={doc.name}
+                        className="flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-brand-50"
+                      >
+                        <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-danger-500" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round">
+                          <path d="M6 2h9l5 5v15H6z" />
+                          <path d="M15 2v5h5" />
+                        </svg>
+                        <span className="min-w-0 flex-1 truncate">
+                          <span className="font-medium">
+                            <Highlighted text={alias || fileBase(doc.name)} query={query} />
+                          </span>
+                          {alias && (
+                            <span className="ml-2 text-xs text-ink-400">
+                              <Highlighted text={fileBase(doc.name)} query={query} />
+                            </span>
+                          )}
+                        </span>
+                        {folder && (
+                          <span
+                            className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium text-white"
+                            style={{ background: colorHex(folder.color) }}
+                          >
+                            {folder.name}
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            </section>
+          )}
           {failed && <p className="px-4 py-6 text-center text-sm text-danger-600">검색 색인을 불러오지 못했어요.</p>}
           {!failed && !indexes && <p className="px-4 py-6 text-center text-sm text-ink-400">색인 불러오는 중…</p>}
-          {indexes && query.trim() && results.length === 0 && (
+          {indexes && query.trim() && results.length === 0 && nameHits.length === 0 && (
             <p className="px-4 py-6 text-center text-sm text-ink-400">"{query}" 이(가) 들어 있는 도면이 없어요.</p>
           )}
           {indexes && !query.trim() && (
             <p className="px-4 py-6 text-center text-sm text-ink-400">
-              도면 {docs.length - missing}개에서 찾을 수 있어요. 태그·실 이름·도면번호처럼 도면에 적힌 글자를 입력하세요.
+              도면 이름·별명으로 도면을 찾거나, 태그·실 이름·도면번호처럼 도면 {docs.length - missing}개에 적힌 글자를 입력하세요.
             </p>
           )}
           {results.map(({ doc, hits }) => {
@@ -143,7 +195,9 @@ export default function SearchPanel({ store, recent, library, onOpenHit, onClose
             return (
               <section key={doc.id} className="border-b border-ink-100 px-2 py-2">
                 <div className="flex items-center gap-2 px-2 py-1">
-                  <span className="truncate text-sm font-semibold">{doc.name.replace(/\.pdf$/i, '')}</span>
+                  <span className="truncate text-sm font-semibold" title={doc.name}>
+                    {displayName(library, doc.id, doc.name)}
+                  </span>
                   {folder && (
                     <span
                       className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium text-white"
