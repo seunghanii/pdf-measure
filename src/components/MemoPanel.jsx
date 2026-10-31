@@ -219,9 +219,14 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
 
   const color = memo.color ?? '#f59e0b'
   // 계기 카드로 만들기 / 계기 정보 빼기 (빼도 글·사진·연결은 그대로)
+  // 뺄 때 태그·종류·상태는 instKept 에 넣어 두고, 다시 계기 카드로 만들면 되살림.
+  // inst 가 null 이면 계기 목록·검색·CSV 에는 안 들어감 (instKept 는 아무 데서도 안 셈)
   const toggleInst = () => {
-    if (memo.inst) onChange({ inst: null })
-    else onChange({ inst: { tag: '', kind: '', status: DEFAULT_STATUS }, color: statusOf(DEFAULT_STATUS).color })
+    if (memo.inst) onChange({ inst: null, instKept: memo.inst })
+    else {
+      const inst = memo.instKept ?? { tag: '', kind: '', status: DEFAULT_STATUS }
+      onChange({ inst, instKept: undefined, color: statusOf(inst.status ?? DEFAULT_STATUS).color })
+    }
   }
   const urls = viewing ? viewing.ids.map((id) => cachedImageUrl(id)) : []
 
