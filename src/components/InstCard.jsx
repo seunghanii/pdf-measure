@@ -1,66 +1,100 @@
-import { useId } from 'react'
-import { INST_STATUSES, KIND_PRESETS, DEFAULT_STATUS, guessKind, memoLinks, linksPatch, normTag, statusOf } from '../lib/instrument'
+import { useState } from 'react'
+import { INST_STATUSES, DEFAULT_STATUS, guessKind, memoLinks, linksPatch, normTag, statusOf } from '../lib/instrument'
 import { isDefaultName } from '../lib/categories'
 
-// 메모장 안의 계기 카드 칸: 태그, 계기 종류, 서비스, 루프 번호, 상태
-// onChange(patch): 메모 항목에 합칠 값
-export function InstFields({ memo, onChange }) {
+// 메모장 안의 계기 카드 칸: 태그 번호, 계기 종류, 상태
+// onChange(patch): 메모 항목에 합칠 값. kinds: 계기 종류 목록, onAddKind(약어): 목록에 더하기 (모든 도면 공통)
+export function InstFields({ memo, onChange, kinds, onAddKind }) {
   const inst = memo.inst
-  const listId = useId()
-  const set = (key, value) => onChange({ inst: { ...inst, [key]: value } })
+  const [adding, setAdding] = useState(false)
+  const [newKind, setNewKind] = useState('')
 
   const setTag = (raw) => {
     const tag = raw.toUpperCase()
     const next = { ...inst, tag }
-    // 종류를 비워 뒀거나 태그로 짐작한 값 그대로면 새 태그로 다시 짐작
-    if (!inst.kind?.trim() || inst.kind === guessKind(inst.tag)) next.kind = guessKind(tag)
+    // 종류를 비워 뒀거나 태그로 짐작한 값 그대로면 새 태그로 다시 짐작 (FT-1001 → FT)
+    if (!inst.kind?.trim() || inst.kind === guessKind(inst.tag, kinds)) next.kind = guessKind(tag, kinds)
     const patch = { inst: next }
     // 메모 이름이 기본 이름이거나 예전 태그와 같으면 이름도 태그로
     if (isDefaultName(memo.name) || !memo.name?.trim() || memo.name === inst.tag) patch.name = tag || memo.name
     onChange(patch)
   }
-
+  const setKind = (kind) => onChange({ inst: { ...inst, kind } })
   const setStatus = (status) => onChange({ inst: { ...inst, status }, color: statusOf(status).color })
 
-  const field = 'min-w-0 rounded-md border border-ink-200 px-2 py-1 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200'
+  const addKind = () => {
+    const k = newKind.trim().toUpperCase()
+    if (k) {
+      onAddKind?.(k)
+      setKind(k)
+    }
+    setNewKind('')
+    setAdding(false)
+  }
+
   const label = 'text-[11px] font-semibold tracking-wide text-ink-500'
   const status = inst.status ?? DEFAULT_STATUS
+  // 예전에 적은 종류(목록에 없는 글)도 고른 상태로 보이게
+  const options = inst.kind && !kinds.includes(inst.kind) ? [...kinds, inst.kind] : kinds
 
   return (
-    <div className="border-b border-ink-100 px-3 py-2">
-      <div className="grid grid-cols-2 gap-x-2 gap-y-1.5">
-        <label className="flex flex-col gap-0.5">
-          <span className={label}>태그 번호</span>
-          <input
-            value={inst.tag ?? ''}
-            onChange={(e) => setTag(e.target.value)}
-            onBlur={(e) => e.target.value && setTag(normTag(e.target.value))}
-            placeholder="FT-1001"
-            className={`${field} font-semibold tabular-nums`}
-            autoFocus={!inst.tag}
-          />
-        </label>
-        <label className="flex flex-col gap-0.5">
-          <span className={label}>계기 종류</span>
-          <input value={inst.kind ?? ''} onChange={(e) => set('kind', e.target.value)} list={listId} placeholder="유량 전송기" className={field} />
-          <datalist id={listId}>
-            {KIND_PRESETS.map((k) => (
-              <option key={k} value={k} />
-            ))}
-          </datalist>
-        </label>
-        <label className="flex flex-col gap-0.5">
-          <span className={label}>서비스</span>
-          <input value={inst.service ?? ''} onChange={(e) => set('service', e.target.value)} placeholder="예: 보일러 급수" className={field} />
-        </label>
-        <label className="flex flex-col gap-0.5">
-          <span className={label}>루프 번호</span>
-          <input value={inst.loop ?? ''} onChange={(e) => set('loop', e.target.value)} placeholder="예: L-1001" className={`${field} tabular-nums`} />
-        </label>
+    <div className="flex flex-col gap-2 border-b border-ink-100 px-3 py-2">
+      <label className="flex items-center gap-2">
+        <span className={`${label} w-14 shrink-0`}>태그 번호</span>
+        <input
+          value={inst.tag ?? ''}
+          onChange={(e) => setTag(e.target.value)}
+          onBlur={(e) => e.target.value && setTag(normTag(e.target.value))}
+          placeholder="FT-1001"
+          className="min-w-0 flex-1 rounded-md border border-ink-200 px-2 py-1 text-sm font-semibold tabular-nums outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+          autoFocus={!inst.tag}
+        />
+      </label>
+      <div className="flex items-start gap-2">
+        <span className={`${label} w-14 shrink-0 pt-1`}>계기 종류</span>
+        <div className="flex min-w-0 flex-1 flex-wrap gap-1" role="group" aria-label="계기 종류">
+          {options.map((k) => (
+            <button
+              key={k}
+              type="button"
+              aria-pressed={inst.kind === k}
+              onClick={() => setKind(inst.kind === k ? '' : k)}
+              className={`rounded px-1.5 py-0.5 text-xs font-semibold tabular-nums ${inst.kind === k ? 'bg-ink-800 text-white' : 'text-ink-600 ring-1 ring-ink-200 hover:bg-ink-50'}`}
+            >
+              {k}
+            </button>
+          ))}
+          {adding ? (
+            <input
+              autoFocus
+              value={newKind}
+              onChange={(e) => setNewKind(e.target.value.toUpperCase())}
+              onBlur={addKind}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  addKind()
+                }
+                if (e.key === 'Escape') {
+                  e.stopPropagation()
+                  setNewKind('')
+                  setAdding(false)
+                }
+              }}
+              placeholder="예: FIC"
+              className="w-16 rounded border border-brand-400 px-1.5 py-0.5 text-xs font-semibold outline-none"
+              aria-label="새 계기 종류"
+            />
+          ) : (
+            <button type="button" onClick={() => setAdding(true)} className="rounded px-1.5 py-0.5 text-xs text-brand-700 hover:bg-brand-50" title="계기 종류 더하기 (모든 도면에 적용)">
+              + 추가
+            </button>
+          )}
+        </div>
       </div>
-      <div className="mt-2">
-        <span className={label}>상태</span>
-        <StatusPicker value={status} onChange={setStatus} className="mt-1" />
+      <div className="flex items-start gap-2">
+        <span className={`${label} w-14 shrink-0 pt-1`}>상태</span>
+        <StatusPicker value={status} onChange={setStatus} className="min-w-0 flex-1" />
       </div>
     </div>
   )

@@ -17,6 +17,7 @@ import CalibrationDialog from './CalibrationDialog'
 import DocSearch from './DocSearch'
 import LinkPicker from './LinkPicker'
 import { DEFAULT_MEMO_COLOR, isLinkOnly, memoPhotoIds, memosAt } from '../lib/memo'
+import { memoFileIds } from '../lib/excel'
 import { DEFAULT_STATUS, cardBoxFor, guessKind, isInst, linksPatch, memoLinks, statusOf } from '../lib/instrument'
 import { MAX_ZOOM, MIN_ZOOM } from '../lib/zoom'
 
@@ -27,7 +28,7 @@ const InstrumentPanel = lazy(() => import('./InstrumentPanel'))
 const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`
 
 // 도면 하나(탭 하나)의 작업 공간. 탭을 바꿔도 마운트된 채로 남아서 상태가 유지됩니다.
-export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenLink, sidebarOpen, setSidebarOpen }) {
+export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenLink, sidebarOpen, setSidebarOpen, instKinds, onAddKind }) {
   const { pdfDoc, name: fileName } = doc
   const saved = doc.savedState
   const [pageNum, setPageNum] = useState(() => Math.min(saved?.pageNum ?? 1, pdfDoc.numPages))
@@ -155,7 +156,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
           m.text = ''
           // 계기 카드로 그리기: 태그·상태 칸이 있는 메모 (상태 색)
           if (markupStyle.memoKind === 'inst') {
-            m.inst = { tag: '', kind: '', service: '', loop: '', status: DEFAULT_STATUS }
+            m.inst = { tag: '', kind: '', status: DEFAULT_STATUS }
             m.color = statusOf(DEFAULT_STATUS).color
           }
         }
@@ -405,7 +406,10 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
         for (const list of [measurementsRef.current, ...historyRef.current])
           for (const m of list) {
             if (m.type === 'image') used.add(m.imageId)
-            if (m.type === 'memo') memoPhotoIds(m).forEach((id) => used.add(id))
+            if (m.type === 'memo') {
+              memoPhotoIds(m).forEach((id) => used.add(id))
+              memoFileIds(m).forEach((id) => used.add(id)) // 첨부한 엑셀
+            }
           }
         const unused = ids.filter((id) => !used.has(id) && !freshImageIds.has(id))
         if (unused.length) await store.removeImages(doc.id, unused)
@@ -515,13 +519,13 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
         name: h.tag,
         text: '',
         color,
-        inst: { tag: h.tag, kind: guessKind(h.tag), service: '', loop: '', status: DEFAULT_STATUS },
+        inst: { tag: h.tag, kind: guessKind(h.tag, instKinds), status: DEFAULT_STATUS },
       }))
       commit((prev) => [...prev, ...cards])
       setSelectedIds(cards.map((c) => c.id))
       setNotice(`계기 카드 ${cards.length}개를 만들었어요. 잘못 만든 것은 Ctrl+Z 로 한 번에 되돌릴 수 있어요.`)
     },
-    [commit],
+    [commit, instKinds],
   )
 
   // ids: 지울 항목 id 배열 (기준선은 목록에서 따로 지움)
@@ -812,6 +816,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
                 onSetStatus={setCardStatus}
                 onPreview={(hit) => jumpToHit({ page: hit.page, rect: hit.rect })}
                 onCreateCards={createCards}
+                kinds={instKinds}
               />
             </Suspense>
           )}
@@ -833,6 +838,8 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
                 store={store}
                 docId={doc.id}
                 onNotice={setNotice}
+                kinds={instKinds}
+                onAddKind={onAddKind}
               />
             </Suspense>
           )}

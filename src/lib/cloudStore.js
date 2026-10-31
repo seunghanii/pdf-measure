@@ -106,8 +106,11 @@ export function createCloudStore(supabase, user) {
     return false
   }
 
+  // 메모에 첨부한 엑셀 같은 사진 아닌 파일은 보관함(사진·PDF 만 받음)에 올리지 않고 바로 DB 에 (올리다 실패하면 사진까지 보관함을 안 쓰게 되므로)
+  const isImageBlob = (blob) => /^image\//.test(blob.type)
+
   async function putImage(docId, imageId, blob) {
-    const state = (await uploadImage(imageId, blob))
+    const state = isImageBlob(blob) && (await uploadImage(imageId, blob))
       ? { type: blob.type, path: imagePath(imageId) }
       : { type: blob.type, data: await blobToBase64(blob) }
     await upsertSpecial(IMAGE_PREFIX + imageId, docId, state)
@@ -115,7 +118,7 @@ export function createCloudStore(supabase, user) {
 
   // 예전에 DB 에 base64 로 넣은 사진을 보관함으로 옮김 (실패해도 그대로 둠)
   async function moveImageToBucket(docId, imageId, blob) {
-    if (!(await uploadImage(imageId, blob))) return
+    if (!isImageBlob(blob) || !(await uploadImage(imageId, blob))) return
     await upsertSpecial(IMAGE_PREFIX + imageId, docId, { type: blob.type, path: imagePath(imageId) })
   }
 

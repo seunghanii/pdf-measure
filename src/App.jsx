@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { loadPdf } from './lib/pdf'
 import { fileIdOf, loadSession, localStore, saveSession } from './lib/storage'
 import { createCloudStore, MAX_UPLOAD_BYTES } from './lib/cloudStore'
+import { kindList } from './lib/instrument'
 import { EMPTY_LIBRARY, forgetDoc, loadOpenFolder, moveDoc, saveOpenFolder } from './lib/library'
 import { cloudConfigured, networkHint, signOut, supabase } from './lib/supabase'
 import Workspace from './components/Workspace'
@@ -104,6 +105,13 @@ function Session({ store, user, onLogout, onChangePassword }) {
       return next
     })
   }, [])
+
+  // 계기 종류 목록: 기본 약어 + 사용자가 더한 것 (폴더 정보와 함께 저장, 모든 도면 공통)
+  const instKinds = useMemo(() => kindList(library.kinds), [library.kinds])
+  const addKind = useCallback(
+    (k) => updateLibrary((lib) => (kindList(lib.kinds).includes(k) ? lib : { ...lib, kinds: [...(lib.kinds ?? []), k] })),
+    [updateLibrary],
+  )
 
   const watchUpload = useCallback((upload, name) => {
     setUploading((u) => [...u, name])
@@ -456,6 +464,8 @@ function Session({ store, user, onLogout, onChangePassword }) {
           onOpenFile={openFiles}
           searchJump={searchJump?.id === doc.id ? searchJump : null}
           onOpenLink={openLinked}
+          instKinds={instKinds}
+          onAddKind={addKind}
           sidebarOpen={sidebarOpen}
           setSidebarOpen={setSidebarOpen}
         />

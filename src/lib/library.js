@@ -1,6 +1,6 @@
 // 홈 화면의 폴더 정보: 폴더 목록과 "어떤 도면이 어느 폴더에 있는지".
 // 도면의 측정값(state)과 따로 보관해서, 폴더를 바꿔도 측정값은 건드리지 않습니다.
-// { folders: [{ id, name, color }], assign: { [도면 id]: 폴더 id }, aliases: { [도면 id]: 별명 } }
+// { folders: [{ id, name, color }], assign: { [도면 id]: 폴더 id }, aliases: { [도면 id]: 별명 }, kinds: [사용자가 더한 계기 종류] }
 // 별명은 홈·탭에 짧게 보일 이름. 원래 파일 이름(name)은 그대로 두고 따로 둡니다.
 
 export const FOLDER_COLORS = [
@@ -16,7 +16,7 @@ export const FOLDER_COLORS = [
 
 export const colorHex = (id) => (FOLDER_COLORS.find((c) => c.id === id) ?? FOLDER_COLORS[0]).hex
 
-export const EMPTY_LIBRARY = { folders: [], assign: {}, aliases: {} }
+export const EMPTY_LIBRARY = { folders: [], assign: {}, aliases: {}, kinds: [] }
 
 // 홈 화면에서 눌러 연 폴더 (이 브라우저에만 기억)
 const OPEN_FOLDER_KEY = 'pdf-measure:open-folder'
@@ -45,7 +45,8 @@ export function normalizeLibrary(lib) {
   for (const [doc, folder] of Object.entries(lib?.assign ?? {})) if (ids.has(folder)) assign[doc] = folder
   const aliases = {}
   for (const [doc, alias] of Object.entries(lib?.aliases ?? {})) if (typeof alias === 'string' && alias.trim()) aliases[doc] = alias.trim()
-  return { folders, assign, aliases }
+  const kinds = Array.isArray(lib?.kinds) ? [...new Set(lib.kinds.filter((k) => typeof k === 'string' && k.trim()).map((k) => k.trim().toUpperCase()))] : []
+  return { folders, assign, aliases, kinds }
 }
 
 // 홈·탭에 보일 이름: 별명이 있으면 별명, 없으면 파일 이름에서 .pdf 를 뺀 것
@@ -104,5 +105,6 @@ export function mergeLibrary(target, source, docIds) {
     if (!dest) folders.push((dest = { ...f }))
     assign[id] = dest.id
   }
-  return { folders, assign, aliases }
+  const kinds = [...new Set([...(target.kinds ?? []), ...(source.kinds ?? [])])]
+  return { folders, assign, aliases, kinds }
 }

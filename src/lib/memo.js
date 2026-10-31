@@ -4,7 +4,7 @@
 // (PR #18~#28 판은 사진을 글 아래 칸(images)에 따로 모았음. 그런 메모는 열 때 글 끝으로 옮김)
 import { rectOf } from './markup'
 import { markdownPlainLines } from './memoPlain'
-import { memoLinks } from './instrument'
+import { memoLinks, statusOf } from './instrument'
 
 export const MEMO_COLORS = ['#f59e0b', '#2563eb', '#16a34a', '#db2777', '#64748b']
 export const DEFAULT_MEMO_COLOR = MEMO_COLORS[0]
@@ -39,7 +39,7 @@ export function memoSummary(m) {
     const i = m.inst
     // 이름이 태그와 같으면 (목록에서 이름 아래 줄로 보일 때) 태그는 한 번만
     const tag = String(i.tag ?? '').trim()
-    const head = [tag !== String(m.name ?? '').trim() && tag, i.kind, i.service].map((v) => String(v || '').trim()).filter(Boolean).join(' · ')
+    const head = [tag !== String(m.name ?? '').trim() && tag, i.kind, statusOf(i.status).label].map((v) => String(v || '').trim()).filter(Boolean).join(' · ')
     if (head) return head
   }
   const first = markdownPlainLines(String(m.text ?? '').replace(/!\[[^\]]*\]\(img:[^)]*\)/g, ''))
