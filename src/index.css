@@ -156,6 +156,14 @@
 .search-flash {
   animation: search-flash 2.6s ease-out forwards;
 }
+/* 숨긴 항목을 검색으로 찾았을 때: 깜빡이는 동안만 흐리게 보였다가 사라짐 */
+@keyframes search-peek {
+  0%, 75% { opacity: 0.6; }
+  100% { opacity: 0; }
+}
+.search-peek {
+  animation: search-peek 2.6s ease-out forwards;
+}
 
 /* 메모 범위: 평소엔 아주 옅게, 마우스를 올리면 조금 진하게 (선택·이동 도구일 때만) */
 .memo-area {

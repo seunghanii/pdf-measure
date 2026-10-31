@@ -29,7 +29,12 @@ export function Highlighted({ text, query }) {
 export function HitBadge({ hit }) {
   const label = hit.note === 'text' ? '글 상자' : hit.note === 'memo' ? '메모' : hit.note === 'measure' ? '측정' : hit.ocr ? 'OCR' : null
   if (!label) return null
-  return <span className={`shrink-0 text-[10px] ${hit.note ? 'text-warn-600' : 'text-ink-400'}`}>{label}</span>
+  return (
+    <span className={`shrink-0 text-[10px] ${hit.note ? 'text-warn-600' : 'text-ink-400'}`}>
+      {label}
+      {hit.hidden ? ' · 숨김' : ''}
+    </span>
+  )
 }
 
 // 검색 색인을 만드는 중이면 한 줄로 알려 줌

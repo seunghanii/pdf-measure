@@ -72,12 +72,20 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
   )
   // 검색 결과로 이동: 그 글자가 화면 가운데 오도록 확대하고 잠깐 깜빡임
   const jumpToHit = useCallback(
-    (hit) => setJump({ page: hit.page, rect: hit.rect, nonce: Date.now() + Math.random() }),
+    (hit) =>
+      setJump({ page: hit.page, rect: hit.rect, peekId: hit.hidden ? hit.itemId : null, nonce: Date.now() + Math.random() }),
     [],
   )
   // 홈 화면 검색에서 고른 위치 ({ page, rect, nonce }) 와 이 화면의 이동 요청 중 나중 것
   const pickedJump = searchJump && (!jump || searchJump.nonce > jump.nonce) ? searchJump : jump
-  const viewerJump = pickedJump && pickedJump.page > pdfDoc.numPages ? { ...pickedJump, page: pdfDoc.numPages } : pickedJump
+  const clampedJump = pickedJump && pickedJump.page > pdfDoc.numPages ? { ...pickedJump, page: pdfDoc.numPages } : pickedJump
+  // 숨긴 항목을 찾아 이동하면, 깜빡이는 동안만 그 항목을 흐리게 보여 줌 (숨김 설정은 그대로)
+  const peekItem = clampedJump?.peekId ? measurements.find((m) => m.id === clampedJump.peekId && m.hidden) : null
+  const viewerJump = useMemo(
+    () => (clampedJump && peekItem ? { ...clampedJump, peek: peekItem } : clampedJump),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [clampedJump?.nonce, clampedJump?.page, !!peekItem],
+  )
   const searchRef = useRef(null)
 
   // 측정값이 바뀌면 잠시 뒤 자동 저장 (로그인했으면 서버, 아니면 이 브라우저)
