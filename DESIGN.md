@@ -1,4 +1,4 @@
-# DESIGN.md — PDF 도면 측정기
+# DESIGN.md — JCP 도면 관리
 
 이 앱의 화면 규칙입니다. [awesome-design-md](https://github.com/VoltAgent/awesome-design-md)의 DESIGN.md 형식을 따랐고,
 Linear·Figma 견본처럼 "도구는 조용하게, 도면이 주인공"을 목표로 합니다.

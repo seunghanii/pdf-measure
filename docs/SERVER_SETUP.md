@@ -62,8 +62,8 @@
    - 끄면 가입하자마자 바로 쓸 수 있어요.
    - 켜 두면 가입할 때 확인 메일이 가는데, Supabase 기본 메일은 **프로젝트 팀원(나) 주소로만, 시간당 2통**까지 보내져서 다른 사람은 가입 확인을 못 받아요.
 4. 같은 Authentication 메뉴의 **URL Configuration** 으로 가서:
-   - **Site URL** 을 `https://pdf-measure-three.vercel.app` 로 바꾸고 **Save**
-   - **Redirect URLs** 에 **Add URL** 로 `https://pdf-measure-three.vercel.app` 를 추가
+   - **Site URL** 을 `https://jcp-dwg.vercel.app` 로 바꾸고 **Save**
+   - **Redirect URLs** 에 **Add URL** 로 `https://jcp-dwg.vercel.app` 를 추가 (예전 주소 `https://pdf-measure-three.vercel.app` 도 남겨 두면 둘 다 동작)
    - (비밀번호 재설정 메일의 링크가 이 앱으로 돌아오게 하는 설정이에요.)
 
 ## 4단계. 앱에 넣을 값 두 개 복사하기
@@ -111,7 +111,7 @@
 
 ## 6단계. 확인하기
 
-1. https://pdf-measure-three.vercel.app 를 열고 새로고침합니다.
+1. https://jcp-dwg.vercel.app 를 열고 새로고침합니다.
 2. 홈 화면 위쪽에 **"로그인하면 도면과 측정값이 서버에 저장돼요"** 상자가 보이면 연결된 거예요.
 3. **회원가입** 탭에서 이메일과 비밀번호(6자 이상)를 넣고 **가입하고 시작하기** 를 누릅니다.
 4. 오른쪽 위에 내 이메일이 보이면 로그인된 상태입니다.

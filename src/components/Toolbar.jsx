@@ -48,7 +48,7 @@ export default function Toolbar({
     <header className="relative z-20 flex flex-wrap items-center gap-x-2.5 gap-y-2 border-b border-ink-200 bg-white px-3 py-2">
       <div className="flex items-center gap-2">
         <Logo />
-        <span className="hidden text-[15px] font-semibold tracking-tight text-ink-900 xl:inline">PDF 도면 측정기</span>
+        <span className="hidden text-[15px] font-semibold tracking-tight text-ink-900 xl:inline">JCP 도면 관리</span>
       </div>
 
       <button
