@@ -475,6 +475,11 @@ function FileRow({ item, isOpen, cloud, library, folderId, alias, onOpen, onRemo
                 {shown}
               </span>
             )}
+            {item.summary?.rev && !editing && (
+              <span className="shrink-0 rounded bg-ink-100 px-1.5 py-0.5 text-xs font-medium text-ink-600" title="지금 판 (도면 안 '개정' 에서 바꾸기)">
+                {item.summary.rev}
+              </span>
+            )}
             {isOpen && !editing && (
               <span className="shrink-0 rounded bg-brand-100 px-1.5 py-0.5 text-xs text-brand-700">열려 있음</span>
             )}

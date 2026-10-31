@@ -79,11 +79,28 @@ export async function ensureIndexed(store, id, name, getPdf) {
   pump()
 }
 
+// 개정판으로 바꾼 도면: 예전 색인을 지우고 새 PDF 로 다시 만듦 (만드는 중이던 예전 PDF 색인은 저장하지 않음)
+export async function reindex(store, id, name, getPdf) {
+  const key = keyOf(store, id)
+  cache.delete(key)
+  for (let i = queue.length - 1; i >= 0; i--) if (queue[i].key === key) queue.splice(i, 1)
+  if (running?.key === key) running.stale = true
+  try {
+    await store.saveTextIndex(id, null)
+  } catch (e) {
+    console.warn('예전 색인 지우기 실패', e)
+  }
+  cache.delete(key)
+  queue.push({ key, store, id, name, getPdf })
+  emit()
+  pump()
+}
+
 async function pump() {
   if (running) return
   const job = queue.shift()
   if (!job) return emit()
-  running = { key: job.key, id: job.id, name: job.name, progress: null }
+  const me = (running = { key: job.key, id: job.id, name: job.name, progress: null })
   emit()
   let own = null // 이 대기열이 직접 연 PDF (끝나면 닫음)
   try {
@@ -104,6 +121,7 @@ async function pump() {
         }
       },
     })
+    if (me.stale) return // 그사이 개정판으로 바뀜 (새 판 색인이 대기열에 있음)
     await job.store.saveTextIndex(job.id, index)
     cache.set(job.key, index)
     for (const fn of doneListeners) fn(scopeOf(job.store), job.id, index)

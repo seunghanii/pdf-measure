@@ -21,6 +21,8 @@ import { memoFileIds } from '../lib/excel'
 import { DEFAULT_STATUS, cardBoxFor, guessKind, isInst, itemGroup, linksPatch, memoLinks, statusOf } from '../lib/instrument'
 import { liveItemTrash, pushItems } from '../lib/trash'
 import { MAX_ZOOM, MIN_ZOOM } from '../lib/zoom'
+import { adaptState, newRevKey } from '../lib/revision'
+import RevisionDialog from './RevisionDialog'
 
 // 메모장은 마크다운 읽는 도구까지 필요할 때만 불러옴
 const MemoPanel = lazy(() => import('./MemoPanel'))
@@ -29,7 +31,7 @@ const InstrumentPanel = lazy(() => import('./InstrumentPanel'))
 const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`
 
 // 도면 하나(탭 하나)의 작업 공간. 탭을 바꿔도 마운트된 채로 남아서 상태가 유지됩니다.
-export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenLink, library, onImportFile, sidebarOpen, setSidebarOpen, instKinds, onAddKind }) {
+export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenLink, library, onImportFile, onReplaceFile, sidebarOpen, setSidebarOpen, instKinds, onAddKind }) {
   const { pdfDoc, name: fileName } = doc
   const saved = doc.savedState
   const [pageNum, setPageNum] = useState(() => Math.min(saved?.pageNum ?? 1, pdfDoc.numPages))
@@ -70,7 +72,11 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
   const placeRef = useRef(null) // 뷰어가 사진 넣을 자리를 알려 주는 함수
   const imageInputRef = useRef(null)
   const [saving, setSaving] = useState(false)
-  const [notice, setNotice] = useState('')
+  const [notice, setNotice] = useState(doc.notice ?? '') // 개정판으로 바꾼 직후 안내
+  // 개정판: 지금 판 { label, name, size, at } 과 예전 판 목록 (lib/revision.js). 바꾼 적 없으면 비어 있음
+  const [revs, setRevs] = useState(() => ({ rev: saved?.rev ?? null, revisions: saved?.revisions ?? [] }))
+  const [revisionOpen, setRevisionOpen] = useState(false)
+  const autosaveCtl = useRef(null)
   // 툴바·목록에서 특정 페이지로 이동 요청 (뷰어가 스크롤)
   const [jump, setJump] = useState(null)
   const jumpTo = useCallback(
@@ -99,7 +105,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
   const store = doc.store
   const cloud = store.kind === 'cloud'
   const textIndex = useDocIndex(store, doc.id) // 도면 글자 (글자 복사 도구)
-  const syncStatus = useAutosave({ store, docId: doc.id, measurements, categories, calibration, unit, markupStyle, counters, pageNum, trash })
+  const syncStatus = useAutosave({ store, docId: doc.id, measurements, categories, calibration, unit, markupStyle, counters, pageNum, trash, revs, controlRef: autosaveCtl })
 
   // 축척: PDF 1pt 가 실제 몇 mm 인지
   const mmPerPt = useMemo(() => {
@@ -726,6 +732,45 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
 
   if (!active) return null
 
+  // ---------- 개정판으로 바꾸기 ----------
+  // 처음 바꿀 때는 지금 PDF 를 "처음 판" 으로 (크기는 도면 id "이름|크기" 에서)
+  const currentRev = revs.rev ?? { label: '처음 판', name: fileName, size: Number(doc.id.slice(doc.id.lastIndexOf('|') + 1)) || 0, at: null }
+  const applyRevision = async ({ file, newPdf, oldSizes, newSizes, fit, label, fromRev, report }) => {
+    const adapted = adaptState({ measurements, trash, calibration }, oldSizes, newSizes, fit)
+    const keepKey = newRevKey()
+    const now = Date.now()
+    const rest = revs.revisions.filter((r) => r.key !== fromRev?.key)
+    const buildState = (kept) => ({
+      measurements: adapted.measurements,
+      categories,
+      calibration: adapted.calibration,
+      unit,
+      markupStyle,
+      counters: counters.current,
+      trash: adapted.trash,
+      pageNum: Math.min(pageNum, newPdf.numPages),
+      rev: { label, name: file.name, size: file.size, at: now },
+      revisions: [{ ...currentRev, key: keepKey, file: kept, replacedAt: now }, ...rest],
+    })
+    const parts = [`"${label}" 판으로 ${fromRev ? '되돌렸어요' : '바꿨어요'}.`]
+    if (fit && report.scaled.length) parts.push('쪽 크기가 바뀌어 마크업과 축척을 새 크기에 맞췄어요.')
+    if (report.reshaped.length) parts.push(`${report.reshaped.map((p) => p.page).join(', ')}쪽은 비율이 달라 마크업 자리를 확인해 주세요.`)
+    if (report.goneCount) parts.push(`${report.goneFrom}쪽부터 있던 항목 ${report.goneCount}개는 보관만 해 뒀어요.`)
+    if (calibration) parts.push('기준 길이가 맞는지 한 번 확인해 주세요.')
+    // 바꾸는 동안 자동 저장을 멈춤 (예전 PDF 에 맞춘 상태가 새 상태를 덮어쓰지 않게)
+    await autosaveCtl.current?.stop()
+    try {
+      await onReplaceFile({ file, pdfDoc: newPdf, keepKey, buildState, dropRevKey: fromRev?.key, notice: parts.join(' ') })
+    } catch (e) {
+      autosaveCtl.current?.resume()
+      throw e
+    }
+  }
+  const removeRevision = (r) => {
+    setRevs((v) => ({ ...v, revisions: v.revisions.filter((x) => x.key !== r.key) }))
+    if (r.file) store.removeRevisionFile(doc.id, r.key).catch((e) => console.warn('예전 판 PDF 지우기 실패', e))
+  }
+
   return (
     <ImageSource.Provider value={imageSource}>
       <input
@@ -785,6 +830,8 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
             : null
         }
         onSave={savePdf}
+        onRevision={onReplaceFile ? () => setRevisionOpen(true) : null}
+        revLabel={revs.rev?.label}
         saving={saving}
         syncStatus={cloud ? syncStatus : null}
       />
@@ -888,6 +935,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
         {/* 접어도 지우지 않고 숨기기만 (검색어·축척 창 상태 유지, 다시 펼칠 때 새로 그리지 않음) */}
         <Sidebar
           collapsed={!sidebarOpen}
+          numPages={pdfDoc.numPages}
           calibration={calibration}
           mmPerPt={mmPerPt}
           unit={unit}
@@ -970,6 +1018,22 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
             editMemo(linkItem.id, linksPatch(next))
             setLinkPicking(null)
           }}
+        />
+      )}
+
+      {revisionOpen && (
+        <RevisionDialog
+          pdfDoc={pdfDoc}
+          store={store}
+          docId={doc.id}
+          current={currentRev}
+          revisions={revs.revisions}
+          items={[...measurements, ...trash.map((t) => t.item)]}
+          calibrated={!!calibration}
+          calPage={calibration?.mode === 'line' ? calibration.page : null}
+          onCancel={() => setRevisionOpen(false)}
+          onApply={applyRevision}
+          onRemoveRev={removeRevision}
         />
       )}
 

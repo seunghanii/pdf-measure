@@ -13,6 +13,7 @@ export default function Sidebar({
   setUnit,
   measurements,
   pageNum,
+  numPages, // 지금 PDF 쪽 수 (개정판에서 없어진 쪽의 항목 표시)
   selectedIds,
   onSelect,
   onDelete,
@@ -106,7 +107,7 @@ export default function Sidebar({
     }),
     [],
   )
-  const rowProps = { mmPerPt, unit, pageNum, selectedIds, onSetAllHidden, rowActions, categories }
+  const rowProps = { mmPerPt, unit, pageNum, numPages, selectedIds, onSetAllHidden, rowActions, categories }
 
   return (
     <aside className={`${collapsed ? 'hidden' : 'flex'} max-h-[35vh] w-full shrink-0 flex-col border-t border-ink-200 bg-white md:max-h-none md:w-80 md:border-t-0 md:border-l`}>
@@ -427,7 +428,7 @@ function EyeButton({ hidden, onClick, label }) {
   )
 }
 
-function ItemSection({ title, items, total = items.length, head, empty, actions, group, mmPerPt, unit, pageNum, selectedIds, onSetAllHidden, rowActions, categories }) {
+function ItemSection({ title, items, total = items.length, head, empty, actions, group, mmPerPt, unit, pageNum, numPages, selectedIds, onSetAllHidden, rowActions, categories }) {
   const allHidden = items.length > 0 && items.every((m) => m.hidden)
   return (
     <section className="border-b border-ink-100 last:border-b-0">
@@ -458,6 +459,7 @@ function ItemSection({ title, items, total = items.length, head, empty, actions,
             mmPerPt={mmPerPt}
             unit={unit}
             otherPage={m.page !== pageNum}
+            gonePage={numPages > 0 && m.page > numPages}
             selected={selectedIds.includes(m.id)}
             actions={rowActions}
             categories={isMarkup(m.type) ? null : categories}
@@ -469,7 +471,7 @@ function ItemSection({ title, items, total = items.length, head, empty, actions,
 }
 
 // 측정·마크업 목록 한 줄. 값이 그대로면 다시 그리지 않음 (끌어서 옮기는 동안 목록 전체가 다시 그려지지 않게)
-const ItemRow = memo(function ItemRow({ m, mmPerPt, unit, otherPage, selected, actions, categories }) {
+const ItemRow = memo(function ItemRow({ m, mmPerPt, unit, otherPage, gonePage, selected, actions, categories }) {
   const { onSelect, onDelete, onToggleHidden, onRename, onAssign } = actions
   const d = describe(m, mmPerPt, unit)
   const color = m.color ?? TYPE_INFO[m.type].color
@@ -490,7 +492,14 @@ const ItemRow = memo(function ItemRow({ m, mmPerPt, unit, otherPage, selected, a
             onClick={(e) => e.stopPropagation()}
             className="min-w-0 flex-1 truncate rounded bg-transparent px-1 text-sm text-ink-600 hover:bg-white focus:bg-white focus:outline focus:outline-brand-300"
           />
-          {otherPage && <span className="shrink-0 text-xs text-ink-400">{m.page}p</span>}
+          {otherPage && (
+            <span
+              className={`shrink-0 text-xs ${gonePage ? 'text-warn-600' : 'text-ink-400'}`}
+              title={gonePage ? '개정판에 없는 쪽이라 도면에 보이지 않아요 (예전 판으로 되돌리면 다시 보여요)' : undefined}
+            >
+              {m.page}p{gonePage && ' 없음'}
+            </span>
+          )}
         </div>
         {markup ? (
           d.main && <div className="truncate px-1 text-sm text-ink-700">{d.main}</div>

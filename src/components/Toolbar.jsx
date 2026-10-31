@@ -37,6 +37,8 @@ export default function Toolbar({
   memoActions, // 메모 범위만 선택했을 때: { onOpen, onLink, linked }
   imageActions, // 사진만 선택했을 때: 자르기·숨기기 { cropping, cropped, onToggleCrop, onResetCrop, onHide }
   onSave,
+  onRevision, // 도면 개정 창 열기 (개정판으로 바꾸기·예전 판)
+  revLabel, // 지금 판 이름 (바꾼 적 있을 때)
   saving,
   syncStatus, // 서버 저장 상태: 'saved' | 'saving' | 'error' (로그인했을 때만)
   right, // 홈 화면 오른쪽 (계정)
@@ -113,6 +115,16 @@ export default function Toolbar({
 
           <div className="ml-auto flex items-center gap-3">
             {syncStatus && <SyncBadge status={syncStatus} />}
+            {onRevision && (
+              <button
+                className="flex items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-2.5 py-1.5 text-sm font-medium text-ink-700 shadow-xs transition-colors hover:border-ink-300 hover:bg-ink-50"
+                onClick={onRevision}
+                title="도면 개정: 새 개정판 PDF 로 바꾸기 (마크업·메모는 그대로), 예전 판 보기"
+              >
+                <Icon d="M4 12a8 8 0 0 1 14-5.3M20 4v4h-4M20 12a8 8 0 0 1-14 5.3M4 20v-4h4" />
+                <span className="hidden sm:inline">{revLabel ?? '개정'}</span>
+              </button>
+            )}
             <button
               className="flex items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-2.5 py-1.5 text-sm font-medium whitespace-nowrap text-ink-700 shadow-xs pointer-coarse:py-2.5 transition-colors hover:border-ink-300 hover:bg-ink-50 disabled:opacity-50"
               onClick={onSave}

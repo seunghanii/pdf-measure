@@ -125,6 +125,7 @@ export function summarize(state) {
     calibration: state?.calibration ?? null,
     notes: noteItems(state?.measurements, state?.categories),
     inst: instRows(state?.measurements), // 모든 도면 계기 목록용
+    rev: state?.rev?.label ?? null, // 개정판으로 바꾼 도면의 지금 판 이름 (lib/revision.js)
   }
 }
 
@@ -136,9 +137,43 @@ export function renameFile(id, name) {
   })
 }
 
+// 예전 판 PDF 는 files 에 "도면 id#rev#판 key" 로 보관 (lib/revision.js)
+const revFileId = (id, key) => `${id}#rev#${key}`
+const revRange = (id) => IDBKeyRange.bound(`${id}#rev#`, `${id}#rev#\uffff`)
+
+// 개정판으로 바꾸기: 도면 id 는 그대로 두고 PDF 만 새 파일로. keepKey 가 있으면 지금 PDF 를 그 이름으로 보관
+export function replaceFile(id, file, { keepKey } = {}) {
+  return run(['files', 'docs'], 'readwrite', async (files, docs) => {
+    const existing = await req2promise(docs.get(id))
+    if (!existing) throw new Error('missing doc')
+    let kept = false
+    if (keepKey) {
+      const old = await req2promise(files.get(id))
+      if (old?.blob) {
+        files.put({ id: revFileId(id, keepKey), blob: old.blob })
+        kept = true
+      }
+    }
+    files.put({ id, blob: file })
+    docs.put({ ...existing, name: file.name, size: file.size })
+    return { kept }
+  })
+}
+
+export function getRevisionFile(id, key) {
+  return run('files', 'readonly', (files) => req2promise(files.get(revFileId(id, key)))).then((r) => r?.blob ?? null)
+}
+
+export function removeRevisionFile(id, key) {
+  return run('files', 'readwrite', (files) => {
+    files.delete(revFileId(id, key))
+  })
+}
+
 export function removeFile(id) {
   return run(['files', 'docs', 'text', 'images'], 'readwrite', async (files, docs, text, images) => {
     files.delete(id)
+    files.delete(revRange(id))
     docs.delete(id)
     text.delete(id)
     const keys = await req2promise(images.index('docId').getAllKeys(id))
@@ -246,6 +281,9 @@ export const localStore = {
   listRecent: () => listRecent(),
   removeFile,
   renameFile,
+  replaceFile,
+  getRevisionFile,
+  removeRevisionFile,
   getTextIndex,
   saveTextIndex,
   listTextIndexes,

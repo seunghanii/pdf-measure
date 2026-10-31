@@ -12,7 +12,8 @@ import TabBar from './components/TabBar'
 import EmptyState from './components/EmptyState'
 import { AccountMenu, PasswordDialog } from './components/Account'
 import SearchPanel, { SearchIcon } from './components/SearchPanel'
-import { ensureIndexed, forgetIndex } from './lib/indexer'
+import { ensureIndexed, forgetIndex, reindex } from './lib/indexer'
+import { linkRevision, resolveFile } from './lib/revision'
 
 export default function App() {
   // ---------- 로그인 ----------
@@ -215,6 +216,16 @@ function Session({ store, user, onLogout, onChangePassword }) {
     [watchUpload, updateLibrary],
   )
 
+  // 저장소에 있는 PDF 로 열기 (예전 판 PDF 를 열려고 할 때 지금 판으로)
+  const openStored = useCallback(
+    async (id, name) => {
+      const blob = await storeRef.current.getFile(id)
+      if (!blob) throw new Error('missing')
+      await openDoc(id, new File([blob], name, { type: 'application/pdf' }), { fromRecent: true })
+    },
+    [openDoc],
+  )
+
   const openFile = useCallback(
     async (file) => {
       if (!file) return
@@ -223,7 +234,13 @@ function Session({ store, user, onLogout, onChangePassword }) {
       try {
         if (storeRef.current.kind === 'cloud' && file.size > MAX_UPLOAD_BYTES)
           setWarning(`"${file.name}" 은(는) 50MB 가 넘어 PDF 파일은 서버에 올라가지 않아요. 측정값은 서버에 저장돼요.`)
-        const id = fileIdOf(file)
+        // 개정판으로 바꾼 도면의 새 판(또는 예전 판) PDF 면 그 도면으로
+        const { id, stale } = resolveFile(libraryRef.current, file)
+        if (stale) {
+          setWarning(`"${file.name}" 은(는) 예전 판이에요. 이 도면은 개정판으로 바뀌어 있어 지금 판으로 열었어요. 예전 판은 도면 안 '개정' 에서 볼 수 있어요.`)
+          await openStored(id, file.name)
+          return id
+        }
         await openDoc(id, file)
         return id
       } catch (e) {
@@ -234,7 +251,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
         refreshRecent()
       }
     },
-    [openDoc, refreshRecent],
+    [openDoc, openStored, refreshRecent],
   )
 
   // 탭은 열지 않고 PDF 를 저장소에 올리기 (관련 도면 연결에서 컴퓨터의 PDF 를 바로 올릴 때).
@@ -253,8 +270,9 @@ function Session({ store, user, onLogout, onChangePassword }) {
       }
       if (s.kind === 'cloud' && file.size > MAX_UPLOAD_BYTES)
         setWarning(`"${file.name}" 은(는) 50MB 가 넘어 PDF 파일은 서버에 올라가지 않아요. 이 컴퓨터에서만 미리보기·열기가 돼요.`)
-      const id = fileIdOf(file)
-      const record = await s.rememberFile(id, file)
+      // 개정판으로 바꾼 도면의 PDF 면 그 도면으로 (예전 판이면 저장된 지금 판을 그대로 둠)
+      const { id, stale } = resolveFile(libraryRef.current, file)
+      const record = stale ? await s.touchFile(id) : await s.rememberFile(id, file)
       if (record?.upload) watchUpload(record.upload, file.name)
       if (folderId) updateLibrary((lib) => (lib.folders.some((f) => f.id === folderId) ? moveDoc(lib, id, folderId) : lib))
       // 휴지통에 있던 같은 PDF 를 다시 올리면 휴지통에서 꺼냄
@@ -265,6 +283,30 @@ function Session({ store, user, onLogout, onChangePassword }) {
       return { id, name: record?.name ?? file.name, pages }
     },
     [watchUpload, updateLibrary, refreshRecent],
+  )
+
+  // 개정판으로 바꾸기 (도면 안 '개정' 창에서): PDF 만 바꾸고 측정값·마크업은 새 판에 맞춘 nextState 로 저장.
+  // keepKey: 지금 PDF 를 보관할 이름, buildState(kept): 보관 여부를 받아 저장할 state,
+  // dropRevKey: 예전 판으로 되돌릴 때 목록에서 빠지는 그 판 (보관한 PDF 도 지움)
+  const replaceDoc = useCallback(
+    async (id, { file, pdfDoc, keepKey, buildState, dropRevKey, notice }) => {
+      const s = storeRef.current
+      const { kept } = await s.replaceFile(id, file, { keepKey })
+      const state = buildState(kept)
+      await s.saveState(id, state)
+      if (dropRevKey) s.removeRevisionFile(id, dropRevKey).catch((e) => console.warn('예전 판 PDF 지우기 실패', e))
+      updateLibrary((lib) => linkRevision(lib, id, fileIdOf(file)))
+      await reindex(s, id, file.name, () => (pdfDoc.loadingTask?.destroyed ? null : pdfDoc))
+      const old = docsRef.current.find((d) => d.id === id)?.pdfDoc
+      setOpenPdf(id, pdfDoc)
+      setDocs((prev) =>
+        prev.map((d) => (d.id === id ? { ...d, name: file.name, pdfDoc, savedState: state, rev: (d.rev ?? 0) + 1, notice } : d)),
+      )
+      // 화면이 새 PDF 로 바뀐 뒤 예전 PDF 메모리 해제
+      if (old && old !== pdfDoc) setTimeout(() => old.loadingTask?.destroy(), 1000)
+      refreshRecent()
+    },
+    [updateLibrary, refreshRecent],
   )
 
   const openRecent = useCallback(
@@ -537,8 +579,9 @@ function Session({ store, user, onLogout, onChangePassword }) {
 
       {docs.map((doc) => (
         <Workspace
-          key={doc.id}
+          key={`${doc.id}:${doc.rev ?? 0}`}
           doc={doc}
+          onReplaceFile={(args) => replaceDoc(doc.id, args)}
           active={doc.id === activeId}
           onOpenFile={openFiles}
           searchJump={searchJump?.id === doc.id ? searchJump : null}
