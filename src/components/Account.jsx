@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { authErrorMessage, changePassword, sendPasswordReset, signIn } from '../lib/supabase'
 import { localStore } from '../lib/storage'
-import { mergeLibrary, moveDoc } from '../lib/library'
+import { forgetDoc, mergeLibrary } from '../lib/library'
 
 const inputCls =
   'w-full rounded-md border border-ink-300 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200'
@@ -262,11 +262,11 @@ export function MigrationCard({ store, onDone }) {
     }
     // 폴더 정리해 둔 것도 함께 옮김
     const localLib = await localStore.getLibrary()
-    if (moved.some((id) => localLib.assign[id])) {
+    if (moved.some((id) => localLib.assign[id] || localLib.aliases?.[id])) {
       try {
         await store.saveLibrary(mergeLibrary(await store.getLibrary(), localLib, moved))
         await localStore.saveLibrary(
-          moved.reduce((lib, id) => moveDoc(lib, id, null), localLib),
+          moved.reduce((lib, id) => forgetDoc(lib, id), localLib),
         )
       } catch (e) {
         console.warn('폴더 정보 옮기기 실패', e)

@@ -151,6 +151,12 @@ export function searchNotes(notes, query, limit = 200) {
 }
 
 // 검색어 부분을 강조하려고 나눔 → [앞, 찾은 부분, 뒤] (띄어쓰기·기호 무시하고 찾은 것도 처리)
+// 글에 찾는 말이 들어 있는지 (띄어쓰기·기호·대소문자 무시, 검색 색인과 같은 규칙)
+export function textHas(text, query) {
+  const q = norm(query)
+  return !!q && norm(text ?? '').includes(q)
+}
+
 export function splitMatch(text, query) {
   const q = norm(query)
   if (!q) return [text, '', '']

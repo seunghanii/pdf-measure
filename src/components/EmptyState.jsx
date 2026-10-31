@@ -19,7 +19,6 @@ export default function EmptyState({
   onRemoveRecent,
   library,
   onUpdateLibrary,
-  onRename,
   openFolderId, // 펼쳐 본 폴더. 이때 연 PDF 는 이 폴더에 들어감
   setOpenFolderId,
   cloud, // 로그인해서 서버에 저장 중
@@ -103,7 +102,6 @@ export default function EmptyState({
                 cloud={cloud}
                 onOpen={onOpenRecent}
                 onRemove={onRemoveRecent}
-                onRename={onRename}
                 onUpdateLibrary={onUpdateLibrary}
                 onEditFolder={(folder) => setFolderDialog(folder)}
                 openFolderId={openFolderId}

@@ -1,5 +1,7 @@
-// 열린 도면 탭. 맨 왼쪽 집 아이콘은 홈(최근 파일 목록)입니다.
-export default function TabBar({ docs, activeId, onSelect, onClose, onHome }) {
+import { displayName } from '../lib/library'
+
+// 열린 도면 탭. 맨 왼쪽 집 아이콘은 홈(최근 파일 목록)입니다. 별명이 있으면 별명을 보여 줌
+export default function TabBar({ docs, library, activeId, onSelect, onClose, onHome }) {
   if (docs.length === 0) return null
 
   return (
@@ -37,7 +39,7 @@ export default function TabBar({ docs, activeId, onSelect, onClose, onHome }) {
               <path d="M6 2h9l5 5v15H6z" />
               <path d="M15 2v5h5" />
             </svg>
-            <span className="truncate">{d.name.replace(/\.pdf$/i, '')}</span>
+            <span className="truncate">{displayName(library, d.id, d.name)}</span>
             <button
               onClick={(e) => {
                 e.stopPropagation()

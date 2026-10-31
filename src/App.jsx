@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { loadPdf } from './lib/pdf'
 import { fileIdOf, loadSession, localStore, saveSession } from './lib/storage'
 import { createCloudStore, MAX_UPLOAD_BYTES } from './lib/cloudStore'
-import { EMPTY_LIBRARY, loadOpenFolder, moveDoc, saveOpenFolder } from './lib/library'
+import { EMPTY_LIBRARY, forgetDoc, loadOpenFolder, moveDoc, saveOpenFolder } from './lib/library'
 import { cloudConfigured, networkHint, signOut, supabase } from './lib/supabase'
 import Workspace from './components/Workspace'
 import Toolbar from './components/Toolbar'
@@ -104,18 +104,6 @@ function Session({ store, user, onLogout, onChangePassword }) {
       return next
     })
   }, [])
-
-  // 화면에 보이는 이름만 바꿈. 파일 식별자(id)는 그대로라 측정값이 이어집니다.
-  const renameDoc = useCallback(async (item, name) => {
-    setRecent((list) => list?.map((r) => (r.id === item.id ? { ...r, name } : r)) ?? list)
-    setDocs((list) => list.map((d) => (d.id === item.id ? { ...d, name } : d)))
-    try {
-      await storeRef.current.renameFile(item.id, name)
-    } catch (e) {
-      setError(networkHint(e) ?? `"${item.name}" 의 이름을 바꾸지 못했어요.`)
-      refreshRecent()
-    }
-  }, [refreshRecent])
 
   const watchUpload = useCallback((upload, name) => {
     setUploading((u) => [...u, name])
@@ -412,7 +400,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
       }}
       onDrop={onDrop}
     >
-      <TabBar docs={docs} activeId={activeId} onSelect={setActiveId} onClose={closeTab} onHome={() => setActiveId(null)} />
+      <TabBar docs={docs} library={library} activeId={activeId} onSelect={setActiveId} onClose={closeTab} onHome={() => setActiveId(null)} />
 
       {activeId === null && (
         <Toolbar
@@ -421,7 +409,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
             <>
               <button
                 onClick={() => setSearchOpen(true)}
-                title="도면 속 글자 검색 (Ctrl+F)"
+                title="도면 이름·별명, 도면 속 글자 검색 (Ctrl+F)"
                 className="flex items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-2.5 py-1.5 text-sm text-ink-600 shadow-xs transition-colors hover:border-ink-300 hover:bg-ink-50 hover:text-ink-900"
               >
                 <SearchIcon />
@@ -482,14 +470,13 @@ function Session({ store, user, onLogout, onChangePassword }) {
           onOpenRecent={openRecent}
           library={library}
           onUpdateLibrary={updateLibrary}
-          onRename={renameDoc}
           openFolderId={openFolderId}
           setOpenFolderId={setOpenFolderId}
           onRemoveRecent={async (item) => {
             try {
               await storeRef.current.removeFile(item.id)
               forgetIndex(storeRef.current, item.id)
-              if (library.assign[item.id]) updateLibrary((lib) => moveDoc(lib, item.id, null))
+              if (library.assign[item.id] || library.aliases?.[item.id]) updateLibrary((lib) => forgetDoc(lib, item.id))
             } catch (e) {
               setError(networkHint(e) ?? `"${item.name}" 을(를) 지우지 못했어요.`)
             }
@@ -508,6 +495,10 @@ function Session({ store, user, onLogout, onChangePassword }) {
           recent={recent}
           library={library}
           onClose={() => setSearchOpen(false)}
+          onOpenDoc={(item) => {
+            setSearchOpen(false)
+            openRecent(item)
+          }}
           onOpenHit={async (item, hit) => {
             setSearchOpen(false)
             await openRecent(item)
