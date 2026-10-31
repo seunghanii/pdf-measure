@@ -871,6 +871,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
                 onOpenLink={onOpenLink}
                 onPickLink={(index) => setLinkPicking({ id: memoItem.id, index })}
                 store={store}
+                library={library}
                 docId={doc.id}
                 onNotice={setNotice}
                 kinds={instKinds}

@@ -128,7 +128,7 @@ export function StatusPicker({ value, onChange, className = '', small = false })
 
 // 관련 문서 (Hook-up, 루프도, 데이터시트 …) 여러 개. 누르면 그 페이지 미리보기가 뜨고, 거기서 파일 열기
 // onPick(index): 고르기 창 열기 (index 없으면 새로 추가)
-export function RelatedDocs({ memo, onChange, onOpen, onPick }) {
+export function RelatedDocs({ memo, library, onChange, onOpen, onPick }) {
   const links = memoLinks(memo)
   const remove = (i) => onChange(linksPatch(links.filter((_, k) => k !== i)))
   return (
@@ -143,7 +143,16 @@ export function RelatedDocs({ memo, onChange, onOpen, onPick }) {
                 title="이 도면 미리보기 (파일 열기 버튼으로 탭 열기)"
               >
                 {l.role && <span className="shrink-0 rounded bg-white px-1.5 py-px text-[11px] font-semibold text-brand-800 ring-1 ring-brand-200">{l.role}</span>}
-                <span className="truncate font-medium">{l.name}</span>
+                {library?.aliases?.[l.id] ? (
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">{library.aliases[l.id]}</span>
+                    <span className="block truncate text-[11px] text-ink-400" title={l.name}>
+                      {l.name}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="truncate font-medium">{l.name}</span>
+                )}
                 {l.page > 1 && <span className="shrink-0 text-brand-500">{l.page}쪽</span>}
                 <svg viewBox="0 0 24 24" className="ml-auto h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" />

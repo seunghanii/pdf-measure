@@ -221,19 +221,25 @@ export default function Library({ list, library, openIds, cloud, onOpen, onRemov
 
   return (
     <div className="space-y-3">
-      {openFolder && (
+      {folders.length > 0 && (
+        // 전체에서도 늘 보여서 폴더를 열어도 아래 목록이 밀리지 않음
         <div className="flex min-w-0 items-center gap-1 px-1 text-sm font-medium text-ink-500">
           <button
-            onClick={() => setOpenFolderId(openFolder.parent ?? null)}
+            onClick={() => openFolder && setOpenFolderId(openFolder.parent ?? null)}
+            disabled={!openFolder}
             title="상위 폴더로"
             aria-label="상위 폴더로"
-            className="mr-1 rounded p-1 text-ink-500 hover:bg-ink-200/60 hover:text-ink-800"
+            className="mr-1 rounded p-1 text-ink-500 hover:bg-ink-200/60 hover:text-ink-800 disabled:pointer-events-none disabled:opacity-30"
           >
             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M15 18l-6-6 6-6" />
             </svg>
           </button>
-          <Crumb label="전체" onClick={() => setOpenFolderId(null)} drop={dropProps('crumb:', null)} over={dropTarget === 'crumb:'} />
+          {openFolder ? (
+            <Crumb label="전체" onClick={() => setOpenFolderId(null)} drop={dropProps('crumb:', null)} over={dropTarget === 'crumb:'} />
+          ) : (
+            <span className="px-1 font-semibold text-ink-700">전체</span>
+          )}
           {path.map((f, i) => (
             <span key={f.id} className="flex min-w-0 items-center gap-1">
               <span className="text-ink-300">›</span>
