@@ -12,6 +12,7 @@ import { memoDrawOrder } from '../lib/memo'
 import { SNAP_KINDS, findRaySnap, findSnap, loadSnapIndex } from '../lib/snap'
 import { useSnapEnabled } from '../lib/snapSetting'
 import { MAX_ZOOM, MIN_ZOOM } from '../lib/zoom'
+import { copyText, joinPicked, pickText, textAt, tidyOcr } from '../lib/textSelect'
 
 const CLOSE_RADIUS_PX = 10 // 면적: 첫 점 / 길이: 마지막 점 근처 클릭 시 완료
 const SNAP_RADIUS_PX = 12 // 자석: 화면에서 이 거리 안이면 붙음
@@ -78,6 +79,7 @@ export default function PdfViewer({
   placeRef, // 사진 넣을 자리 계산 함수를 여기에 넣어 줌
   onOpenMemo, // (id, page, point, { force }) 메모 범위를 누름
   onDelete, // (ids) 선택 상자의 × 단추
+  textIndex, // 도면 글자 색인 (글자 복사 도구)
 }) {
   const containerRef = useRef(null)
   const pageEls = useRef([])
@@ -117,6 +119,12 @@ export default function PdfViewer({
   const snapOn = useSnapEnabled()
   const snapIndexes = useRef(new Map()) // 페이지 번호 → 도면 선 색인 (자석용, 필요할 때 한 번 읽음)
   const pointerRef = useRef(null) // 마지막 마우스 위치 { page, p } (붙여넣은 사진을 놓을 자리)
+  // 글자 복사 도구
+  const [textSel, setTextSel] = useState(null) // 끄는 중인 상자 { page, a, b }
+  const [picked, setPicked] = useState(null) // 고른 글자 { page, rects, text }
+  const [textHover, setTextHover] = useState(null) // 마우스 아래 글자 덩어리 { page, rect }
+  const [copied, setCopied] = useState(null) // 복사 알림 { text, ok, nonce }
+  const textItems = (page) => textIndex?.pages?.[page - 1]?.items
 
   // ---------- 모든 페이지 크기 불러오기 ----------
   useEffect(() => {
@@ -490,6 +498,59 @@ export default function PdfViewer({
     if (tool === 'length' && draft.points.length >= 2) finish(draft)
   }, [draft, finish, tool])
 
+  // ---------- 글자 복사 ----------
+  const copyPicked = useCallback(async (text) => {
+    const ok = await copyText(text)
+    setCopied({ text, ok, nonce: Date.now() })
+  }, [])
+
+  // 다른 도구로 바꾸면 고른 글자 지우기
+  useEffect(() => {
+    if (tool === 'textcopy') return
+    setPicked(null)
+    setTextSel(null)
+    setTextHover(null)
+  }, [tool])
+  useEffect(() => setPicked(null), [pdfDoc])
+
+  // 복사 알림은 잠깐만
+  useEffect(() => {
+    if (!copied) return
+    const t = setTimeout(() => setCopied(null), 2200)
+    return () => clearTimeout(t)
+  }, [copied])
+
+  // 끄는 중인 상자 안의 글자 (화면에 미리 보여 줌)
+  const livePicked = useMemo(() => {
+    if (!textSel) return null
+    const r = rectOf(textSel.a, textSel.b)
+    if (r.w * zoom < 3 && r.h * zoom < 3) return null
+    return pickText(textIndex?.pages?.[textSel.page - 1]?.items, r)
+  }, [textSel, textIndex, zoom])
+
+  const finishTextSel = (sel) => {
+    const items = textItems(sel.page)
+    const r = rectOf(sel.a, sel.b)
+    let parts
+    if (r.w * zoom < 3 && r.h * zoom < 3) {
+      // 누르기만 함: 그 자리 글자 덩어리 통째로
+      const hit = textAt(items, sel.a, 3 / zoom)
+      parts = hit ? [{ text: hit.text, rect: hit.rect, cy: hit.rect.y + hit.rect.h / 2, h: hit.rect.h }] : []
+    } else parts = pickText(items, r)
+    if (!textIndex) {
+      setCopied({ waiting: true, nonce: Date.now() })
+      return
+    }
+    if (!parts.length) {
+      setPicked(null)
+      return
+    }
+    const ocr = textIndex.pages[sel.page - 1]?.ocr
+    const text = joinPicked(ocr ? parts.map((q) => ({ ...q, text: tidyOcr(q.text) })) : parts)
+    setPicked({ page: sel.page, rects: parts.map((q) => q.rect), text })
+    copyPicked(text)
+  }
+
   // ---------- 키보드 ----------
   useEffect(() => {
     const down = (e) => {
@@ -499,7 +560,14 @@ export default function PdfViewer({
         e.preventDefault()
         setSpaceDown(true)
       }
-      if (e.key === 'Escape') setDraft(null)
+      if (e.key === 'Escape') {
+        setDraft(null)
+        setPicked(null)
+      }
+      if (picked && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && !window.getSelection()?.toString()) {
+        e.preventDefault()
+        copyPicked(picked.text)
+      }
       if (e.key === 'Enter') finishMulti()
       if (e.key === 'Backspace' && draft) {
         e.preventDefault()
@@ -516,7 +584,7 @@ export default function PdfViewer({
       window.removeEventListener('keydown', down)
       window.removeEventListener('keyup', up)
     }
-  }, [draft, finishMulti])
+  }, [draft, finishMulti, picked, copyPicked])
 
   // ---------- 마우스 ----------
   const panning = tool === 'pan' || spaceDown
@@ -571,6 +639,15 @@ export default function PdfViewer({
         dragRef.current = { id: item.id, resize: dir, rect: rectOf(item.points[0], item.points[1] ?? item.points[0]), moved: false }
         e.currentTarget.setPointerCapture(e.pointerId)
       }
+      return
+    }
+
+    // 글자 복사: 글자를 누르거나, 끌어서 상자 안 글자를 고름 (손을 떼면 바로 복사)
+    if (tool === 'textcopy') {
+      const p = toPage(e, e.currentTarget)
+      setTextSel({ page, a: p, b: p })
+      setTextHover(null)
+      e.currentTarget.setPointerCapture(e.pointerId)
       return
     }
 
@@ -707,6 +784,19 @@ export default function PdfViewer({
       setMarquee((mq) => (mq ? { ...mq, b: p } : mq))
       return
     }
+    if (textSel) {
+      setTextSel((ts) => (ts ? { ...ts, b: p } : ts))
+      return
+    }
+    if (tool === 'textcopy') {
+      const hit = textAt(textItems(page), p, 3 / zoom)
+      setTextHover((cur) => {
+        if (!hit) return cur ? null : cur
+        if (cur && cur.page === page && cur.rect.x === hit.rect.x && cur.rect.y === hit.rect.y && cur.rect.w === hit.rect.w) return cur
+        return { page, rect: hit.rect }
+      })
+      return
+    }
     if (draft?.dragging) {
       setDraft((dr) => {
         if (!dr) return dr
@@ -752,6 +842,10 @@ export default function PdfViewer({
     if (dr?.whole && !dr.moved && dr.clickId && measurements.find((m) => m.id === dr.clickId)?.type === 'memo') onOpenMemo(dr.clickId, dr.page, dr.start)
     if (dragRef.current && !drawing) setCursor(null) // 점 끌기 때 보이던 자석 표시 지우기
     dragRef.current = null
+    if (textSel) {
+      finishTextSel(textSel)
+      setTextSel(null)
+    }
     if (marquee) {
       const r = rectOf(marquee.a, marquee.b)
       let ids = []
@@ -901,7 +995,7 @@ export default function PdfViewer({
     ? 'grabbing'
     : panning
       ? 'grab'
-      : tool === 'text'
+      : tool === 'text' || tool === 'textcopy'
         ? 'text'
         : drawing || DRAG_TOOLS.includes(tool)
           ? 'crosshair'
@@ -1055,6 +1149,14 @@ export default function PdfViewer({
                     <circle cx={cursor.p.x * zoom} cy={cursor.p.y * zoom} r={3} fill={TYPE_INFO[tool].color} />
                   )}
                   {snapOn && cursor?.snap && cursor.page === page && <SnapMarker snap={cursor.snap} zoom={zoom} />}
+                  {tool === 'textcopy' && (
+                    <TextCopyMarks
+                      zoom={zoom}
+                      hover={textHover?.page === page && !textSel ? textHover.rect : null}
+                      sel={textSel?.page === page ? rectOf(textSel.a, textSel.b) : null}
+                      rects={textSel?.page === page ? livePicked?.map((q) => q.rect) : picked?.page === page ? picked.rects : null}
+                    />
+                  )}
                   {flash && flash.page === page && (
                     <rect
                       key={flash.nonce}
@@ -1088,6 +1190,7 @@ export default function PdfViewer({
         </div>
       )}
       {drawing && <DrawHint tool={tool} count={draftPts.length} />}
+      {tool === 'textcopy' && <TextCopyHint ready={!!textIndex} copied={copied} picked={picked} />}
     </div>
   )
 }
@@ -1166,6 +1269,42 @@ function DrawHint({ tool, count }) {
     <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-4">
       <div className="rounded-full bg-ink-900/80 px-4 py-1.5 text-center text-sm text-white shadow">
         {text} <span className="text-ink-400">· Esc 취소</span>
+      </div>
+    </div>
+  )
+}
+
+// 글자 복사 도구: 마우스 아래 글자, 끄는 상자, 고른 글자 표시
+function TextCopyMarks({ zoom, hover, sel, rects }) {
+  return (
+    <g pointerEvents="none">
+      {hover && (
+        <rect x={hover.x * zoom - 2} y={hover.y * zoom - 2} width={hover.w * zoom + 4} height={hover.h * zoom + 4} rx={2} fill="#2563eb" fillOpacity={0.06} stroke="#2563eb" strokeOpacity={0.6} strokeWidth={1} />
+      )}
+      {rects?.map((r, i) => (
+        <rect key={i} x={r.x * zoom - 1} y={r.y * zoom - 1} width={r.w * zoom + 2} height={r.h * zoom + 2} fill="#3b82f6" fillOpacity={0.28} />
+      ))}
+      {sel && <rect x={sel.x * zoom} y={sel.y * zoom} width={sel.w * zoom} height={sel.h * zoom} fill="none" stroke="#2563eb" strokeDasharray="5 3" />}
+    </g>
+  )
+}
+
+function TextCopyHint({ ready, copied, picked }) {
+  let text
+  let tone = 'bg-ink-900/80'
+  if (copied?.waiting) text = '도면 글자를 아직 읽는 중이에요. 다 읽으면 복사할 수 있어요.'
+  else if (copied && !copied.ok) text = '복사하지 못했어요. 브라우저가 클립보드를 막았을 수 있어요.'
+  else if (copied) {
+    const one = copied.text.replace(/\s+/g, ' ')
+    text = `복사했어요: ${one.length > 40 ? `${one.slice(0, 40)}…` : one}`
+    tone = 'bg-brand-700/90'
+  } else if (!ready) text = '도면 글자를 읽는 중이에요 (스캔 도면은 조금 걸려요)'
+  else if (picked) text = 'Ctrl+C 로 다시 복사 · 다른 곳을 누르거나 끌어서 새로 고르기'
+  else text = '글자를 누르면 그 줄이, 끌면 상자 안 글자가 복사돼요'
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-4">
+      <div key={copied?.nonce} className={`max-w-full truncate rounded-full px-4 py-1.5 text-center text-sm text-white shadow ${tone}`}>
+        {text} {!copied && <span className="text-ink-400">· Esc 선택 해제</span>}
       </div>
     </div>
   )

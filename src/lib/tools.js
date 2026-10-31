@@ -19,7 +19,12 @@ export const TOOLS = [
   { id: 'rect', label: '사각형', key: 'R', group: 'markup', icon: 'M4 6h16v12H4z' },
   { id: 'arrow', label: '화살표', key: 'W', group: 'markup', icon: 'M5 19L19 5M19 5h-8M19 5v8' },
   { id: 'memo', label: '메모', key: 'N', group: 'markup', icon: 'M5 4h10l4 4v12H5zM15 4v4h4M8 12h8M8 16h5' },
+  // 숫자 키 순서가 바뀌지 않게 맨 뒤에 둠 (도구 막대에서는 선택·이동 옆에 보임)
+  { id: 'textcopy', label: '글자 복사', key: 'X', group: 'basic', icon: 'M9 9h11v11H9zM5 15H4V4h11v1M12 13h5M12 16h3' },
 ]
+
+// 도구 막대 순서: 기본(선택·이동·글자 복사) → 측정
+export const VIEW_TOOLS = [...TOOLS.filter((t) => t.group === 'basic'), ...TOOLS.filter((t) => t.group === 'measure')]
 
 export const DIGIT_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
 

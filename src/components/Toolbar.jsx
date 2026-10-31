@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { TOOLS, digitForTool } from '../lib/tools'
+import { TOOLS, VIEW_TOOLS, digitForTool } from '../lib/tools'
 import { toggleSnap, useSnapEnabled } from '../lib/snapSetting'
 import { MEMO_COLORS } from '../lib/memo'
 import { MAX_ZOOM, MIN_ZOOM } from '../lib/zoom'
@@ -72,7 +72,7 @@ export default function Toolbar({
         <>
           <Divider />
           <div className="flex items-center gap-0.5 rounded-xl bg-ink-100 p-0.5" role="group" aria-label="측정 도구">
-            {TOOLS.filter((t) => t.group !== 'markup').map((t) => (
+            {VIEW_TOOLS.map((t) => (
               <ToolButton key={t.id} t={t} active={tool === t.id} needCal={!calibrated && t.id === 'calibrate'} onClick={() => setTool(t.id)} showLabel />
             ))}
             <SnapButton />
