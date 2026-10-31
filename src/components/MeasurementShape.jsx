@@ -221,7 +221,7 @@ function EndTick({ p, q, color }) {
   return <line x1={p.x - nx} y1={p.y - ny} x2={p.x + nx} y2={p.y + ny} stroke={color} strokeWidth={2} />
 }
 
-// 마크업: 형광펜, 텍스트 상자, 펜, 사각형, 화살표. 굵기와 글자 크기는 도면과 함께 확대됩니다.
+// 마크업: 형광펜, 텍스트 상자, 펜, 도형(사각형·원), 화살표. 굵기와 글자 크기는 도면과 함께 확대됩니다.
 function MarkupShape({ m, zoom, selected, showHandles, showResize, draft }) {
   const color = m.color ?? TYPE_INFO[m.type].color
   const pts = m.points.map((p) => ({ x: p.x * zoom, y: p.y * zoom }))
@@ -239,6 +239,8 @@ function MarkupShape({ m, zoom, selected, showHandles, showResize, draft }) {
     body =
       m.type === 'highlight' ? (
         <rect x={r.x} y={r.y} width={r.w} height={r.h} fill={color} fillOpacity={0.38} style={{ mixBlendMode: 'multiply' }} />
+      ) : m.shape === 'ellipse' ? (
+        <ellipse cx={r.x + r.w / 2} cy={r.y + r.h / 2} rx={r.w / 2} ry={r.h / 2} fill="transparent" stroke={color} strokeWidth={sw} />
       ) : (
         <rect x={r.x} y={r.y} width={r.w} height={r.h} fill="transparent" stroke={color} strokeWidth={sw} />
       )

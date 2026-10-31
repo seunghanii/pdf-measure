@@ -3,7 +3,7 @@ import { distance } from '../lib/geometry'
 import { PT_TO_PAPER_MM, UNITS, calibrationInput } from '../lib/units'
 import { TYPE_INFO } from '../lib/measure'
 import { canCategorize, newCategoryId, nextCategoryColor, withCategory } from '../lib/categories'
-import { DEFAULT_BOX_OPACITY, FULL_CROP, MARKUP_STROKE, STROKE_TYPES, isCropped, isMarkup, rectOf, strokeOf } from '../lib/markup'
+import { DEFAULT_BOX_OPACITY, FULL_CROP, MARKUP_STROKE, STROKE_TYPES, isCropped, isMarkup, rectOf, shapeOf, strokeOf } from '../lib/markup'
 import { ImageSource, freshImageIds, getImageBlob, isImageFile, newImageId, prepareImage, rememberImage } from '../lib/images'
 import { TOOLS, toolForDigit } from '../lib/tools'
 import { toggleSnap } from '../lib/snapSetting'
@@ -48,6 +48,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
     boxOpacity: DEFAULT_BOX_OPACITY,
     textAlign: 'left',
     strokeWidth: MARKUP_STROKE,
+    shape: 'rect', // 도형 도구: 'rect' 사각형 | 'ellipse' 원
     imageBorder: false,
     imageBorderColor: '#111827',
     imageBorderWidth: 1,
@@ -126,14 +127,17 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
         setPendingCalibration({ page, points })
         return
       }
-      counters.current[type] = (counters.current[type] ?? 0) + 1
+      const ellipse = type === 'rect' && markupStyle.shape === 'ellipse'
+      const counter = ellipse ? 'ellipse' : type // 원은 따로 번호 (원 1, 원 2 …)
+      counters.current[counter] = (counters.current[counter] ?? 0) + 1
       const m = {
         id: newId(),
         type,
         page,
         points,
-        name: `${TYPE_INFO[type].name} ${counters.current[type]}`,
+        name: `${ellipse ? '원' : TYPE_INFO[type].name} ${counters.current[counter]}`,
       }
+      if (ellipse) m.shape = 'ellipse' // 사각형은 예전처럼 shape 없이 저장
       if (isMarkup(type)) {
         m.color = type === 'highlight' ? markupStyle.highlightColor : type === 'memo' ? markupStyle.memoColor : markupStyle.color
         if (type === 'memo') m.text = ''
@@ -210,6 +214,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
   const onlyMemos = selMemos.length > 0 && selMemos.length === selectedMarkups.length
   const selHighlight = selectedMarkups.find((m) => m.type === 'highlight')
   const selStroke = selectedMarkups.find((m) => STROKE_TYPES.includes(m.type))
+  const selShape = selectedMarkups.find((m) => m.type === 'rect')
   const selImages = selectedMarkups.filter((m) => m.type === 'image')
   const selImage = selImages[0]
   const onlyImages = selImages.length > 0 && selImages.length === selectedMarkups.length
@@ -222,6 +227,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
           ...(selLine && { color: selLine.color }),
           ...(selHighlight && { highlightColor: selHighlight.color }),
           ...(selStroke && { strokeWidth: strokeOf(selStroke) }),
+          ...(selShape && { shape: shapeOf(selShape) }),
           ...(selText && { fontSize: selText.fontSize ?? 13, boxOpacity: selText.boxOpacity ?? DEFAULT_BOX_OPACITY, textAlign: selText.align ?? 'left' }),
           ...(selMemos[0] && { memoColor: selMemos[0].color ?? DEFAULT_MEMO_COLOR }),
           ...(selImage && { imageBorder: !!selImage.border, imageBorderColor: selImage.color ?? '#111827', imageBorderWidth: strokeOf(selImage) }),
@@ -243,6 +249,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
       if (patch.boxOpacity !== undefined && m.type === 'text') out.boxOpacity = patch.boxOpacity
       if (patch.textAlign && m.type === 'text') out.align = patch.textAlign
       if (patch.strokeWidth && STROKE_TYPES.includes(m.type)) out.strokeWidth = patch.strokeWidth
+      if (patch.shape && m.type === 'rect' && shapeOf(m) !== patch.shape) out.shape = patch.shape === 'ellipse' ? 'ellipse' : undefined
       if (m.type === 'image') {
         if (patch.imageBorder !== undefined) out.border = patch.imageBorder
         if (patch.imageBorderColor) out.color = patch.imageBorderColor
@@ -646,6 +653,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
         onChangeMarkupStyle={changeMarkupStyle}
         selectedMarkupType={selectedMarkupType}
         selectedHasStroke={tool === 'select' && !!selStroke}
+        selectedHasShape={tool === 'select' && !!selShape}
         onInsertImage={() => imageInputRef.current?.click()}
         memoActions={
           tool === 'select' && onlyMemos

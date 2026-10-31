@@ -1005,7 +1005,7 @@ export default function PdfViewer({
   const renderPreview = (page) => {
     if (draft?.dragging && draft.page === page) {
       const color = tool === 'highlight' ? markupStyle.highlightColor : tool === 'memo' ? markupStyle.memoColor : markupStyle.color
-      return <MeasurementShape m={{ id: 'draft', type: tool, points: draft.points, color, strokeWidth: markupStyle.strokeWidth }} zoom={zoom} draft />
+      return <MeasurementShape m={{ id: 'draft', type: tool, points: draft.points, color, strokeWidth: markupStyle.strokeWidth, shape: markupStyle.shape }} zoom={zoom} draft />
     }
     if (!drawing || !draft || draft.page !== page) return null
     const c = cursor && cursor.page === page ? cursor.p : null

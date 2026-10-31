@@ -28,6 +28,15 @@ export const STROKE_WIDTHS = [0.5, 1, 1.6, 2, 3, 4, 6, 8, 12]
 // 항목의 선 굵기 (pt). 굵기 기능 전에 저장된 항목은 예전 굵기 그대로
 export const strokeOf = (m) => m.strokeWidth ?? (m.type === 'pen' ? MARKUP_STROKE * 1.2 : MARKUP_STROKE)
 
+// 도형 도구의 모양. 'rect' 항목에 shape 가 없으면 사각형 (예전 데이터 그대로)
+export const SHAPES = [
+  ['rect', '사각형', 'M4 6h16v12H4z'],
+  ['ellipse', '원', 'M12 19c4.4 0 8-3.1 8-7s-3.6-7-8-7-8 3.1-8 7 3.6 7 8 7z'],
+]
+export const shapeOf = (m) => (m.type === 'rect' && m.shape === 'ellipse' ? 'ellipse' : 'rect')
+// 목록·엑셀에 보이는 종류 이름 (원은 '원', 나머지는 TYPE_INFO 이름)
+export const kindName = (m, typeInfo) => (m.type === 'rect' && m.shape === 'ellipse' ? '원' : typeInfo[m.type].name)
+
 // 사각형·형광펜 크기 조절 손잡이 (모서리 4개 + 변 가운데 4개)
 export const RESIZE_DIRS = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']
 

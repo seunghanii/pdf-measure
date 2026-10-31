@@ -16,7 +16,8 @@ export const TOOLS = [
   { id: 'highlight', label: '형광펜', key: 'M', group: 'markup', icon: 'M9 11l-5 5v4h4l5-5M9 11l6-6 4 4-6 6M9 11l4 4M3 21h8' },
   { id: 'text', label: '텍스트', key: 'T', group: 'markup', icon: 'M4 6V4h16v2M12 4v16M9 20h6' },
   { id: 'pen', label: '펜', key: 'P', group: 'markup', icon: 'M3 17c3-1 4-6 7-6s2 6 5 6 4-4 6-5' },
-  { id: 'rect', label: '사각형', key: 'R', group: 'markup', icon: 'M4 6h16v12H4z' },
+  // 도형: 사각형·원(타원). id 는 예전 그대로 'rect' (저장된 사각형과 호환), 모양은 항목의 shape 로 구분
+  { id: 'rect', label: '도형', key: 'R', group: 'markup', icon: 'M3 10h10v10H3zM16 14a5 5 0 100-10 5 5 0 000 10z' },
   { id: 'arrow', label: '화살표', key: 'W', group: 'markup', icon: 'M5 19L19 5M19 5h-8M19 5v8' },
   { id: 'memo', label: '메모', key: 'N', group: 'markup', icon: 'M5 4h10l4 4v12H5zM15 4v4h4M8 12h8M8 16h5' },
   // 숫자 키 순서가 바뀌지 않게 맨 뒤에 둠 (도구 막대에서는 선택·이동 옆에 보임)
@@ -28,7 +29,7 @@ export const VIEW_TOOLS = [...TOOLS.filter((t) => t.group === 'basic'), ...TOOLS
 
 export const DIGIT_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
 
-// 숫자 → 도구 (1=선택 … 9=펜, 0=사각형). 화살표는 W.
+// 숫자 → 도구 (1=선택 … 9=펜, 0=도형). 화살표는 W.
 export function toolForDigit(d) {
   const i = DIGIT_KEYS.indexOf(d)
   return i >= 0 ? TOOLS[i]?.id : undefined
