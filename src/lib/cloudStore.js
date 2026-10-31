@@ -9,6 +9,7 @@
 // 메모에 첨부한 엑셀도 같은 방식("사용자id/img/파일 id").
 // 보관함이 아직 그 종류를 받지 않게 설정돼 있으면(설정 SQL 을 다시 실행하기 전) 예전처럼 state 에 base64 로 넣고,
 // 예전에 base64 로 넣은 사진·엑셀은 열 때 보관함으로 옮겨 DB 공간을 비웁니다.
+// 개정판으로 바꾼 도면의 예전 판 PDF 는 "사용자id/rev/파일이름의 해시/판 key.pdf" (lib/revision.js).
 // 특별한 줄은 모두 size 가 0 이라 실제 도면(size > 0)과 구분됩니다.
 import { cacheDelete, cacheGet, cachePrune, cachePut, summarize, SUMMARY_VERSION } from './storage'
 import { normalizeLibrary } from './library'
@@ -52,6 +53,8 @@ export function createCloudStore(supabase, user) {
   const bucket = () => supabase.storage.from(BUCKET)
   // 한글 파일 이름은 보관함 경로에 못 쓰므로 해시로 바꿈
   const pathFor = async (id) => `${uid}/${(await sha256Hex(id)).slice(0, 40)}.pdf`
+  const revDir = async (id) => `${uid}/rev/${(await sha256Hex(id)).slice(0, 40)}`
+  const revPath = async (id, key) => `${await revDir(id)}/${key}.pdf`
 
   // 아직 끝나지 않은 서버 요청 (로그아웃 전에 기다림)
   const inflight = new Set()
@@ -219,10 +222,11 @@ export function createCloudStore(supabase, user) {
 
     // 이 기기에 받아 둔 사본이 있으면 그것을, 없으면 서버에서 받음
     async getFile(id) {
-      const rec = await findRow(id, 'file_key, storage_path, has_file')
+      const rec = await findRow(id, 'file_key, storage_path, has_file, size')
       if (!rec) return null
       const cached = await cacheGet(rec.path).catch(() => null)
-      if (cached) return cached
+      // 다른 기기에서 개정판으로 바꿨으면 받아 둔 사본은 예전 판 (크기로 알아봄)
+      if (cached && (!rec.size || cached.size === rec.size)) return cached
       if (!rec.hasFile) {
         const e = new Error('pdf not uploaded')
         e.code = 'no_file'
@@ -331,11 +335,69 @@ export function createCloudStore(supabase, user) {
       return track(upsertSpecial(LIBRARY_KEY, '폴더 정보', lib))
     },
 
+    // 개정판으로 바꾸기: 같은 자리(경로)에 새 PDF 를 덮어 올림. keepKey 가 있으면 지금 PDF 를 예전 판 자리에 복사해 둠.
+    // 돌려주는 값 { kept }: 예전 판 PDF 를 보관했는지 (서버에 없고 이 기기에도 사본이 없으면 못 함)
+    async replaceFile(id, file, { keepKey } = {}) {
+      if (file.size > MAX_UPLOAD_BYTES) {
+        const e = new Error('file too large')
+        e.code = 'too_large'
+        throw e
+      }
+      forgetRecent()
+      const rec = await findRow(id, 'file_key, storage_path, has_file')
+      if (!rec) throw new Error('missing doc')
+      let kept = false
+      if (keepKey) {
+        const dest = await revPath(id, keepKey)
+        if (rec.hasFile) {
+          const { error } = await bucket().copy(rec.path, dest)
+          if (error) console.warn('예전 판 복사 실패', error)
+          else kept = true
+        }
+        if (!kept) {
+          const old = await cacheGet(rec.path).catch(() => null)
+          if (old) {
+            const { error } = await bucket().upload(dest, old, { contentType: 'application/pdf', upsert: true })
+            if (error) console.warn('예전 판 보관 실패', error)
+            else kept = true
+          }
+        }
+      }
+      await track(
+        (async () => {
+          check(await bucket().upload(rec.path, file, { contentType: 'application/pdf', upsert: true }))
+          check(await table().update({ has_file: true, name: file.name, size: file.size }).eq('user_id', uid).eq('file_key', id))
+        })(),
+      )
+      await cachePut(rec.path, file).catch(() => {})
+      forgetRecent()
+      return { kept }
+    },
+
+    async getRevisionFile(id, key) {
+      const path = await revPath(id, key)
+      const cached = await cacheGet(path).catch(() => null)
+      if (cached) return cached
+      const blob = check(await bucket().download(path))
+      cachePut(path, blob).catch(() => {})
+      return blob
+    },
+
+    async removeRevisionFile(id, key) {
+      const path = await revPath(id, key)
+      await track(bucket().remove([path]).then(check))
+      cacheDelete(path).catch(() => {})
+    },
+
     async removeFile(id) {
       forgetRecent()
       const rec = await findRow(id)
       if (!rec) return
       check(await bucket().remove([rec.path]))
+      // 예전 판 PDF 들
+      const dir = await revDir(id)
+      const revs = (await bucket().list(dir, { limit: 1000 })).data ?? []
+      if (revs.length) await bucket().remove(revs.map((f) => `${dir}/${f.name}`))
       check(await table().delete().eq('user_id', uid).in('file_key', [id, TEXT_PREFIX + id]))
       const images = check(await table().delete().eq('user_id', uid).eq('size', 0).eq('name', id).like('file_key', `${IMAGE_PREFIX}%`).select('file_key'))
       await removeImageFiles(images.map((r) => r.file_key))
@@ -344,7 +406,8 @@ export function createCloudStore(supabase, user) {
 
     // 브라우저에만 있던 도면을 서버로 옮기기. 서버에 이미 있으면 서버 쪽 측정값을 그대로 둠.
     // images: 그 도면에 넣은 사진 [{ id, blob }]
-    async importLocal(doc, blob, images = []) {
+    // revs: 예전 판 PDF [{ key, blob }]
+    async importLocal(doc, blob, images = [], revs = []) {
       forgetRecent()
       let rec = await findRow(doc.id)
       if (!rec) {
@@ -358,6 +421,8 @@ export function createCloudStore(supabase, user) {
         })
       }
       for (const img of images) await putImage(doc.id, img.id, img.blob)
+      for (const r of revs)
+        check(await bucket().upload(await revPath(doc.id, r.key), r.blob, { contentType: 'application/pdf', upsert: true }))
       if (!rec.hasFile && blob) await upload(doc.id, rec.path, blob)
       if (blob) cachePut(rec.path, blob).catch(() => {})
     },

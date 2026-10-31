@@ -250,7 +250,13 @@ export function MigrationCard({ store, onDone }) {
       try {
         const blob = await localStore.getFile(doc.id)
         const images = await localStore.listImages(doc.id).catch(() => [])
-        await store.importLocal(doc, blob, images)
+        // 개정판으로 바꾼 도면의 예전 판 PDF 도 같이
+        const revs = []
+        for (const r of doc.state?.revisions ?? []) {
+          const b = r.file ? await localStore.getRevisionFile(doc.id, r.key).catch(() => null) : null
+          if (b) revs.push({ key: r.key, blob: b })
+        }
+        await store.importLocal(doc, blob, images, revs)
         await localStore.removeFile(doc.id) // 서버에 옮긴 뒤 브라우저 사본은 지움
         moved.push(doc.id)
         done++
@@ -262,7 +268,7 @@ export function MigrationCard({ store, onDone }) {
     }
     // 폴더 정리해 둔 것도 함께 옮김
     const localLib = await localStore.getLibrary()
-    if (moved.some((id) => localLib.assign[id] || localLib.aliases?.[id])) {
+    if (moved.some((id) => localLib.assign[id] || localLib.aliases?.[id] || localLib.revCur?.[id])) {
       try {
         await store.saveLibrary(mergeLibrary(await store.getLibrary(), localLib, moved))
         await localStore.saveLibrary(
