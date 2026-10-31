@@ -1,6 +1,6 @@
 // 홈 화면의 도면 목록: 폴더 칸, 도면 줄, 폴더 만들기·고치기 창
-import { useState } from 'react'
-import { FOLDER_COLORS, colorHex, deleteFolder, fileBase, moveDoc, setAlias } from '../lib/library'
+import { useEffect, useRef, useState } from 'react'
+import { FOLDER_COLORS, colorHex, deleteFolder, fileBase, moveDoc, moveFolder, setAlias } from '../lib/library'
 
 function timeAgo(ts) {
   const diff = Date.now() - ts
@@ -33,6 +33,116 @@ export function FolderIcon({ className, color, open, fill }) {
   )
 }
 
+// 폴더 칸 순서를 끌어서 바꾸기. 마우스는 누른 채 조금 움직이면, 터치는 꾹 누르고 있으면 시작.
+// 도면 끌어다 놓기(HTML 끌어놓기)와 섞이지 않게 포인터 이벤트로만 처리합니다.
+const LONG_PRESS_MS = 350
+function useFolderReorder(folders, onCommit) {
+  const [drag, setDrag] = useState(null) // { id, order: [폴더 id], x, y }
+  const tiles = useRef(new Map())
+  const gesture = useRef(null)
+  const swallowClick = useRef(false)
+  const folderIds = folders.map((f) => f.id)
+
+  useEffect(() => () => gesture.current?.stop(), [])
+
+  const onPointerDown = (e, id) => {
+    swallowClick.current = false
+    if ((e.pointerType === 'mouse' && e.button !== 0) || !e.isPrimary) return
+    if (e.target.closest('[data-no-reorder]')) return
+    gesture.current?.stop()
+    const touch = e.pointerType !== 'mouse'
+    const sx = e.clientX
+    const sy = e.clientY
+    const st = { active: false, order: folderIds }
+
+    const begin = (x, y) => {
+      st.active = true
+      swallowClick.current = true
+      document.body.classList.add('folder-reordering')
+      navigator.vibrate?.(10)
+      setDrag({ id, order: st.order, x, y })
+    }
+    const timer = touch ? setTimeout(() => begin(sx, sy), LONG_PRESS_MS) : null
+
+    const onMove = (ev) => {
+      if (ev.pointerId !== e.pointerId) return
+      if (!st.active) {
+        const d = Math.hypot(ev.clientX - sx, ev.clientY - sy)
+        if (touch) {
+          if (d > 8) stop() // 꾹 누르기 전에 움직이면 화면 스크롤로 둠
+          return
+        }
+        if (d < 5) return
+        begin(ev.clientX, ev.clientY)
+      }
+      let over = null
+      for (const [fid, el] of tiles.current) {
+        const r = el.getBoundingClientRect()
+        if (ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom) over = fid
+      }
+      if (over && over !== id) {
+        const to = st.order.indexOf(over)
+        const order = st.order.filter((x) => x !== id)
+        order.splice(to, 0, id)
+        st.order = order
+      }
+      setDrag({ id, order: st.order, x: ev.clientX, y: ev.clientY })
+    }
+    const onUp = (ev) => {
+      if (ev.pointerId !== e.pointerId) return
+      const index = st.order.indexOf(id)
+      const changed = st.active && index !== folderIds.indexOf(id)
+      stop()
+      if (changed) onCommit(id, index)
+    }
+    const onCancel = (ev) => ev.pointerId === e.pointerId && stop()
+    // 끄는 동안 터치 스크롤과 길게 누르기 메뉴 막기
+    const onTouchMove = (ev) => st.active && ev.cancelable && ev.preventDefault()
+    const onContextMenu = (ev) => ev.preventDefault()
+    const onKey = (ev) => ev.key === 'Escape' && stop()
+
+    function stop() {
+      clearTimeout(timer)
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onCancel)
+      window.removeEventListener('touchmove', onTouchMove)
+      window.removeEventListener('contextmenu', onContextMenu, true)
+      window.removeEventListener('keydown', onKey)
+      document.body.classList.remove('folder-reordering')
+      if (gesture.current?.stop === stop) gesture.current = null
+      setDrag(null)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onCancel)
+    window.addEventListener('touchmove', onTouchMove, { passive: false })
+    if (touch) window.addEventListener('contextmenu', onContextMenu, true)
+    window.addEventListener('keydown', onKey)
+    gesture.current = { stop }
+  }
+
+  // 끄는 중에는 미리 바뀐 순서로 보여 줌
+  const ordered = drag ? drag.order.map((fid) => folders.find((f) => f.id === fid)).filter(Boolean) : folders
+
+  const tileProps = (id) => ({
+    ref: (el) => {
+      if (el) tiles.current.set(id, el)
+      else tiles.current.delete(id)
+    },
+    onPointerDown: (e) => onPointerDown(e, id),
+    // 끌기가 끝난 뒤 따라오는 누르기(폴더 열기)는 무시
+    onClickCapture: (e) => {
+      if (!swallowClick.current) return
+      swallowClick.current = false
+      e.preventDefault()
+      e.stopPropagation()
+    },
+  })
+
+  return { drag, ordered, tileProps }
+}
+
 // 폴더별로 묶은 도면 목록
 export default function Library({ list, library, openIds, cloud, onOpen, onRemove, onUpdateLibrary, onEditFolder, openFolderId, setOpenFolderId }) {
   const [dropTarget, setDropTarget] = useState(undefined) // 폴더 id, 'none' = 폴더 밖
@@ -43,6 +153,8 @@ export default function Library({ list, library, openIds, cloud, onOpen, onRemov
   const openFolder = folders.find((f) => f.id === openFolderId) ?? null
   const shown = openFolder ? list.filter((item) => assign[item.id] === openFolder.id) : loose
   const move = (docId, folderId) => onUpdateLibrary((lib) => moveDoc(lib, docId, folderId))
+  const reorder = useFolderReorder(folders, (id, index) => onUpdateLibrary((lib) => moveFolder(lib, id, index)))
+  const dragFolder = reorder.drag && folders.find((f) => f.id === reorder.drag.id)
 
   // 도면을 끌어다 폴더(또는 폴더 밖 목록)에 놓기
   const dropProps = (key, folderId) => ({
@@ -91,31 +203,42 @@ export default function Library({ list, library, openIds, cloud, onOpen, onRemov
     <div className="space-y-3">
       {folders.length > 0 && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-          {folders.map((folder) => {
+          {reorder.ordered.map((folder) => {
             const items = list.filter((item) => assign[item.id] === folder.id)
             const isOpen = folder.id === openFolderId
             const hex = colorHex(folder.color)
+            const lifted = reorder.drag?.id === folder.id
             return (
               <div
                 key={folder.id}
                 {...dropProps(folder.id, folder.id)}
-                className={`group relative rounded-lg bg-white shadow-sm ring-2 transition ${
-                  dropTarget === folder.id ? 'ring-brand-400' : isOpen ? '' : 'ring-transparent hover:ring-ink-200'
+                {...reorder.tileProps(folder.id)}
+                className={`group relative rounded-lg bg-white shadow-sm ring-2 transition select-none [-webkit-touch-callout:none] ${
+                  lifted
+                    ? 'opacity-50 ring-brand-400'
+                    : dropTarget === folder.id
+                      ? 'ring-brand-400'
+                      : isOpen
+                        ? ''
+                        : 'ring-transparent hover:ring-ink-200'
                 }`}
-                style={isOpen && dropTarget !== folder.id ? { '--tw-ring-color': hex } : undefined}
+                style={isOpen && !lifted && dropTarget !== folder.id ? { '--tw-ring-color': hex } : undefined}
               >
                 <button
                   className="flex w-full min-w-0 items-center gap-2 px-2.5 py-2 text-left"
                   onClick={() => setOpenFolderId(isOpen ? null : folder.id)}
-                  title={isOpen ? '폴더 닫기' : '폴더 열기'}
+                  title={`${isOpen ? '폴더 닫기' : '폴더 열기'} · 끌어서 순서 바꾸기`}
                 >
                   <span style={{ color: hex }}>
                     <FolderIcon className="h-5 w-5 shrink-0" color="currentColor" open={isOpen} fill={hex} />
                   </span>
                   <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink-800">{folder.name}</span>
-                  <span className="shrink-0 text-xs text-ink-400 group-hover:hidden">{items.length}</span>
+                  <span className={`shrink-0 text-xs text-ink-400 ${reorder.drag ? '' : 'group-hover:hidden'}`}>{items.length}</span>
                 </button>
-                <div className="absolute top-1/2 right-1 hidden -translate-y-1/2 items-center rounded bg-white group-hover:flex">
+                <div
+                  data-no-reorder
+                  className={`absolute top-1/2 right-1 hidden -translate-y-1/2 items-center rounded bg-white ${reorder.drag ? '' : 'group-hover:flex'}`}
+                >
                   <button
                     onClick={() => onEditFolder(folder)}
                     title="폴더 이름·색상 바꾸기"
@@ -141,6 +264,17 @@ export default function Library({ list, library, openIds, cloud, onOpen, onRemov
               </div>
             )
           })}
+        </div>
+      )}
+      {dragFolder && (
+        <div
+          className="pointer-events-none fixed z-50 flex max-w-48 items-center gap-2 rounded-lg bg-white px-2.5 py-2 shadow-lg ring-2 ring-brand-400"
+          style={{ left: reorder.drag.x + 12, top: reorder.drag.y + 12 }}
+        >
+          <span style={{ color: colorHex(dragFolder.color) }}>
+            <FolderIcon className="h-5 w-5 shrink-0" color="currentColor" fill={colorHex(dragFolder.color)} />
+          </span>
+          <span className="truncate text-sm font-semibold text-ink-800">{dragFolder.name}</span>
         </div>
       )}
 

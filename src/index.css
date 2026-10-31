@@ -272,3 +272,11 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* 홈 폴더 칸을 끌어서 순서 바꾸는 동안 */
+body.folder-reordering,
+body.folder-reordering * {
+  cursor: grabbing !important;
+  user-select: none;
+  -webkit-user-select: none;
+}

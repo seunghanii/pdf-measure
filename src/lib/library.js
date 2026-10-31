@@ -108,3 +108,15 @@ export function mergeLibrary(target, source, docIds) {
   const kinds = [...new Set([...(target.kinds ?? []), ...(source.kinds ?? [])])]
   return { folders, assign, aliases, kinds }
 }
+
+// 폴더 순서 바꾸기: id 폴더를 index 자리로 옮김 (홈 화면 칸 순서 = folders 배열 순서)
+export function moveFolder(lib, id, index) {
+  const from = lib.folders.findIndex((f) => f.id === id)
+  if (from < 0) return lib
+  const to = Math.max(0, Math.min(lib.folders.length - 1, index))
+  if (from === to) return lib
+  const folders = [...lib.folders]
+  const [f] = folders.splice(from, 1)
+  folders.splice(to, 0, f)
+  return { ...lib, folders }
+}
