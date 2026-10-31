@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { distance, snapTo45 } from '../lib/geometry'
 import { TYPE_INFO } from '../lib/measure'
 import MeasurementShape from './MeasurementShape'
-import SelectionBox from './SelectionBox'
+import SelectionBox, { groupBox } from './SelectionBox'
 import PageCanvas from './PageCanvas'
 import TextEditor from './TextEditor'
 import { isTypingTarget } from '../lib/dom'
@@ -616,6 +616,27 @@ export default function PdfViewer({
     }
     if (e.button !== 0) return
 
+    // 여러 개를 고른 채 묶음 상자 안을 잡으면 (도형·손잡이·빈 곳 어디든) 고른 것 전부를 함께 옮김.
+    // Shift/Ctrl+클릭은 예전처럼 선택에 더하거나 빼기
+    if (tool === 'select' && selectedIds.length > 1 && !(e.shiftKey || e.ctrlKey || e.metaKey)) {
+      const start = toPage(e, e.currentTarget)
+      const box = groupBox(byPage.get(page), selectedIds, zoom, editing?.page === page ? editing.id : null)
+      const sx = start.x * zoom
+      const sy = start.y * zoom
+      if (box && sx >= box.x && sx <= box.x + box.w && sy >= box.y && sy <= box.y + box.h) {
+        e.preventDefault()
+        if (editing) commitText()
+        // 점선 상자가 도형 위를 덮고 있어서 그 아래 누른 도형을 좌표로 찾음
+        const shape = document.elementsFromPoint(e.clientX, e.clientY).map((el) => el.closest('[data-shape]')).find(Boolean)
+        const clickId = shape && selectedIds.includes(shape.dataset.shape) ? shape.dataset.shape : null
+        const orig = {}
+        for (const m of measurements) if (selectedIds.includes(m.id)) orig[m.id] = m.points
+        dragRef.current = { whole: true, group: true, start, orig, moved: false, clickId, page }
+        e.currentTarget.setPointerCapture(e.pointerId)
+        return
+      }
+    }
+
     // 크기 조절 손잡이 (선택 도구, 또는 텍스트 도구에서 선택된 텍스트 상자)
     const resizeHandle = (tool === 'select' || tool === 'text') && e.target.closest?.('[data-resize]')
     if (resizeHandle) {
@@ -839,6 +860,8 @@ export default function PdfViewer({
     }
     // 선택 도구로 메모 범위를 누르기만 하면(끌지 않으면) 메모 열기
     const dr = dragRef.current
+    // 묶음 상자 안을 끌지 않고 누르기만 하면: 누른 항목만 고르기(그 항목 크기 조절 등), 빈 곳이면 선택 해제
+    if (dr?.group && !dr.moved) onSelect(dr.clickId ? [dr.clickId] : [])
     if (dr?.whole && !dr.moved && dr.clickId && measurements.find((m) => m.id === dr.clickId)?.type === 'memo') onOpenMemo(dr.clickId, dr.page, dr.start)
     if (dragRef.current && !drawing) setCursor(null) // 점 끌기 때 보이던 자석 표시 지우기
     dragRef.current = null
@@ -1214,6 +1237,7 @@ const PageShapes = memo(function PageShapes({ items, zoom, mmPerPt, unit, select
         selected={selectedIds.includes(m.id)}
         showHandles={tool === 'select'}
         showResize={tool === 'text' && m.type === 'text'}
+        noResize={selectedIds.length > 1}
         cropping={m.id === croppingId}
       />
     ),
