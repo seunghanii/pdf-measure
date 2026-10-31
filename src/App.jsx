@@ -351,6 +351,38 @@ function Session({ store, user, onLogout, onChangePassword }) {
 
   // 창 어디에나 PDF 끌어다 놓기 (여러 개도 가능)
   const [dragOver, setDragOver] = useState(false)
+  // 안내 끄기: 창 밖으로 빼거나 Esc 로 취소하면 dragleave 가 안쪽 요소에서만 오거나
+  // 아예 안 올 때가 있어서, 창 전체에서 drop/dragend/blur 와 창 밖으로 나감을 보고,
+  // 끌고 있는 동안 계속 오는 dragover 가 잠시 끊겨도 끔.
+  useEffect(() => {
+    if (!dragOver) return
+    let timer
+    const hide = () => {
+      clearTimeout(timer)
+      setDragOver(false)
+    }
+    const alive = () => {
+      clearTimeout(timer)
+      timer = setTimeout(hide, 400)
+    }
+    const onLeave = (e) => {
+      if (!e.relatedTarget) hide() // 창 밖으로 나감
+    }
+    alive()
+    window.addEventListener('dragover', alive, true)
+    window.addEventListener('dragleave', onLeave, true)
+    window.addEventListener('drop', hide, true) // 메모장처럼 안쪽에서 drop 을 멈춰도 끔
+    window.addEventListener('dragend', hide, true)
+    window.addEventListener('blur', hide)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('dragover', alive, true)
+      window.removeEventListener('dragleave', onLeave, true)
+      window.removeEventListener('drop', hide, true)
+      window.removeEventListener('dragend', hide, true)
+      window.removeEventListener('blur', hide)
+    }
+  }, [dragOver])
   const onDrop = async (e) => {
     e.preventDefault()
     setDragOver(false)
@@ -377,9 +409,6 @@ function Session({ store, user, onLogout, onChangePassword }) {
         if (!e.dataTransfer.types.includes('Files')) return // 홈 화면에서 도면을 폴더로 끌 때
         e.preventDefault()
         setDragOver(true)
-      }}
-      onDragLeave={(e) => {
-        if (e.currentTarget === e.target) setDragOver(false)
       }}
       onDrop={onDrop}
     >
