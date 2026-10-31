@@ -1,6 +1,18 @@
 // 홈 화면의 도면 목록: 폴더 칸, 도면 줄, 폴더 만들기·고치기 창
 import { useEffect, useRef, useState } from 'react'
-import { FOLDER_COLORS, colorHex, deleteFolder, fileBase, moveDoc, moveFolder, setAlias } from '../lib/library'
+import {
+  FOLDER_COLORS,
+  childFolders,
+  colorHex,
+  deleteFolder,
+  fileBase,
+  folderPath,
+  folderSubtree,
+  folderTree,
+  moveDoc,
+  reorderSiblings,
+  setAlias,
+} from '../lib/library'
 
 function timeAgo(ts) {
   const diff = Date.now() - ts
@@ -92,8 +104,9 @@ function useFolderReorder(folders, onCommit) {
       if (ev.pointerId !== e.pointerId) return
       const index = st.order.indexOf(id)
       const changed = st.active && index !== folderIds.indexOf(id)
+      const order = st.order
       stop()
-      if (changed) onCommit(id, index)
+      if (changed) onCommit(order)
     }
     const onCancel = (ev) => ev.pointerId === e.pointerId && stop()
     // 끄는 동안 터치 스크롤과 길게 누르기 메뉴 막기
@@ -143,7 +156,7 @@ function useFolderReorder(folders, onCommit) {
   return { drag, ordered, tileProps }
 }
 
-// 폴더별로 묶은 도면 목록
+// 폴더별로 묶은 도면 목록. 폴더 안에 하위 폴더를 둘 수 있고, 연 폴더의 하위 폴더 칸과 도면이 보입니다.
 export default function Library({ list, library, openIds, cloud, onOpen, onRemove, onUpdateLibrary, onEditFolder, openFolderId, setOpenFolderId }) {
   const [dropTarget, setDropTarget] = useState(undefined) // 폴더 id, 'none' = 폴더 밖
   const [dragging, setDragging] = useState(false)
@@ -151,10 +164,17 @@ export default function Library({ list, library, openIds, cloud, onOpen, onRemov
   const { folders, assign } = library
   const loose = list.filter((item) => !assign[item.id])
   const openFolder = folders.find((f) => f.id === openFolderId) ?? null
+  const path = openFolder ? folderPath(library, openFolder.id) : []
+  const level = childFolders(library, openFolder?.id ?? null) // 지금 보이는 폴더 칸
   const shown = openFolder ? list.filter((item) => assign[item.id] === openFolder.id) : loose
   const move = (docId, folderId) => onUpdateLibrary((lib) => moveDoc(lib, docId, folderId))
-  const reorder = useFolderReorder(folders, (id, index) => onUpdateLibrary((lib) => moveFolder(lib, id, index)))
+  const reorder = useFolderReorder(level, (order) => onUpdateLibrary((lib) => reorderSiblings(lib, order)))
   const dragFolder = reorder.drag && folders.find((f) => f.id === reorder.drag.id)
+  // 폴더 칸에 보일 개수: 하위 폴더까지 모두 합친 도면 수
+  const countIn = (id) => {
+    const ids = folderSubtree(library, id)
+    return list.filter((item) => ids.has(assign[item.id])).length
+  }
 
   // 도면을 끌어다 폴더(또는 폴더 밖 목록)에 놓기
   const dropProps = (key, folderId) => ({
@@ -184,7 +204,7 @@ export default function Library({ list, library, openIds, cloud, onOpen, onRemov
       item={item}
       isOpen={openIds.includes(item.id)}
       cloud={cloud}
-      folders={folders}
+      library={library}
       folderId={assign[item.id] ?? null}
       alias={library.aliases?.[item.id] ?? ''}
       onOpen={onOpen}
@@ -201,10 +221,43 @@ export default function Library({ list, library, openIds, cloud, onOpen, onRemov
 
   return (
     <div className="space-y-3">
-      {folders.length > 0 && (
+      {openFolder && (
+        <div className="flex min-w-0 items-center gap-1 px-1 text-sm font-medium text-ink-500">
+          <button
+            onClick={() => setOpenFolderId(openFolder.parent ?? null)}
+            title="상위 폴더로"
+            aria-label="상위 폴더로"
+            className="mr-1 rounded p-1 text-ink-500 hover:bg-ink-200/60 hover:text-ink-800"
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+          </button>
+          <Crumb label="전체" onClick={() => setOpenFolderId(null)} drop={dropProps('crumb:', null)} over={dropTarget === 'crumb:'} />
+          {path.map((f, i) => (
+            <span key={f.id} className="flex min-w-0 items-center gap-1">
+              <span className="text-ink-300">›</span>
+              {i === path.length - 1 ? (
+                <span className="truncate font-semibold" style={{ color: colorHex(f.color) }}>
+                  {f.name}
+                </span>
+              ) : (
+                <Crumb
+                  label={f.name}
+                  onClick={() => setOpenFolderId(f.id)}
+                  drop={dropProps(`crumb:${f.id}`, f.id)}
+                  over={dropTarget === `crumb:${f.id}`}
+                />
+              )}
+            </span>
+          ))}
+        </div>
+      )}
+      {level.length > 0 && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
           {reorder.ordered.map((folder) => {
-            const items = list.filter((item) => assign[item.id] === folder.id)
+            const count = countIn(folder.id)
+            const subs = childFolders(library, folder.id).length
             const isOpen = folder.id === openFolderId
             const hex = colorHex(folder.color)
             const lifted = reorder.drag?.id === folder.id
@@ -226,14 +279,22 @@ export default function Library({ list, library, openIds, cloud, onOpen, onRemov
               >
                 <button
                   className="flex w-full min-w-0 items-center gap-2 px-2.5 py-2 text-left"
-                  onClick={() => setOpenFolderId(isOpen ? null : folder.id)}
-                  title={`${isOpen ? '폴더 닫기' : '폴더 열기'} · 끌어서 순서 바꾸기`}
+                  onClick={() => setOpenFolderId(folder.id)}
+                  title="폴더 열기 · 끌어서 순서 바꾸기"
                 >
                   <span style={{ color: hex }}>
                     <FolderIcon className="h-5 w-5 shrink-0" color="currentColor" open={isOpen} fill={hex} />
                   </span>
                   <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink-800">{folder.name}</span>
-                  <span className={`shrink-0 text-xs text-ink-400 ${reorder.drag ? '' : 'group-hover:hidden'}`}>{items.length}</span>
+                  <span className={`shrink-0 text-xs text-ink-400 ${reorder.drag ? '' : 'group-hover:hidden'}`} title={subs ? `하위 폴더 ${subs}개, 도면 ${count}개` : `도면 ${count}개`}>
+                    {subs > 0 && (
+                      <span className="mr-1.5 inline-flex items-center gap-0.5 align-middle">
+                        <FolderIcon className="h-3 w-3" color="currentColor" />
+                        {subs}
+                      </span>
+                    )}
+                    {count}
+                  </span>
                 </button>
                 <div
                   data-no-reorder
@@ -248,11 +309,13 @@ export default function Library({ list, library, openIds, cloud, onOpen, onRemov
                   </button>
                   <button
                     onClick={() => {
-                      const ask = items.length
-                        ? `"${folder.name}" 폴더를 지울까요? 안에 있는 도면 ${items.length}개는 지워지지 않고 폴더 밖으로 나와요.`
+                      const direct = list.filter((item) => assign[item.id] === folder.id).length
+                      const where = openFolder ? `"${openFolder.name}" 폴더로` : '폴더 밖으로'
+                      const inside = [subs && `하위 폴더 ${subs}개`, direct && `도면 ${direct}개`].filter(Boolean).join('와 ')
+                      const ask = inside
+                        ? `"${folder.name}" 폴더를 지울까요? 안에 있는 ${inside}는 지워지지 않고 ${where} 나와요.`
                         : `"${folder.name}" 폴더를 지울까요?`
                       if (!window.confirm(ask)) return
-                      if (isOpen) setOpenFolderId(null)
                       onUpdateLibrary((lib) => deleteFolder(lib, folder.id))
                     }}
                     title="폴더 지우기"
@@ -280,19 +343,14 @@ export default function Library({ list, library, openIds, cloud, onOpen, onRemov
 
       {openFolder ? (
         <div>
-          <div className="mb-1 flex items-center gap-1 px-1 text-xs font-medium text-ink-500">
-            <button onClick={() => setOpenFolderId(null)} className="hover:text-brand-600 hover:underline">
-              전체
-            </button>
-            <span>›</span>
-            <span style={{ color: colorHex(openFolder.color) }}>{openFolder.name}</span>
-          </div>
+          <div className="mb-1 px-1 text-xs font-medium text-ink-400">이 폴더의 도면</div>
           <ul className="divide-y divide-ink-100 overflow-hidden rounded-xl bg-white shadow-sm">
             {shown.length ? (
               shown.map(row)
             ) : (
               <li className="px-4 py-4 text-center text-sm text-ink-400">
-                비어 있어요. 지금 PDF 를 열면 이 폴더에 들어가요. 다른 도면은 폴더 칸에 끌어다 놓거나 도면의 폴더 버튼으로 넣어 보세요.
+                {level.length ? '이 폴더에 바로 들어 있는 도면은 없어요. ' : '비어 있어요. '}
+                지금 PDF 를 열면 이 폴더에 들어가요. 다른 도면은 폴더 칸에 끌어다 놓거나 도면의 폴더 버튼으로 넣어 보세요.
               </li>
             )}
           </ul>
@@ -308,7 +366,7 @@ export default function Library({ list, library, openIds, cloud, onOpen, onRemov
           </div>
         )
       )}
-      {folders.length > 0 && dragging && (openFolder || loose.length === 0) && (
+      {folders.length > 0 && dragging && !openFolder && loose.length === 0 && (
         <div
           {...dropProps('none', null)}
           className={`rounded-xl border-2 border-dashed px-4 py-3 text-center text-sm ${
@@ -319,6 +377,19 @@ export default function Library({ list, library, openIds, cloud, onOpen, onRemov
         </div>
       )}
     </div>
+  )
+}
+
+// 빵부스러기 한 칸: 누르면 그 폴더로, 도면을 끌어다 놓으면 그 폴더로 옮김
+function Crumb({ label, onClick, drop, over }) {
+  return (
+    <button
+      onClick={onClick}
+      {...drop}
+      className={`max-w-40 truncate rounded px-1 hover:text-brand-600 hover:underline ${over ? 'bg-brand-100 text-brand-700 ring-2 ring-brand-400' : ''}`}
+    >
+      {label}
+    </button>
   )
 }
 
@@ -339,7 +410,7 @@ function TrashIcon() {
   )
 }
 
-function FileRow({ item, isOpen, cloud, folders, folderId, alias, onOpen, onRemove, onSetAlias, onMove, onDragStart, onDragEnd }) {
+function FileRow({ item, isOpen, cloud, library, folderId, alias, onOpen, onRemove, onSetAlias, onMove, onDragStart, onDragEnd }) {
   const [editing, setEditing] = useState(false)
   const [menu, setMenu] = useState(false)
   const base = fileBase(item.name)
@@ -422,7 +493,7 @@ function FileRow({ item, isOpen, cloud, folders, folderId, alias, onOpen, onRemo
         >
           <PencilIcon />
         </button>
-        {folders.length > 0 && (
+        {library.folders.length > 0 && (
           <button
             onClick={() => setMenu((m) => !m)}
             title="폴더로 옮기기"
@@ -446,16 +517,17 @@ function FileRow({ item, isOpen, cloud, folders, folderId, alias, onOpen, onRemo
       {menu && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setMenu(false)} />
-          <div className="absolute top-full right-4 z-20 -mt-2 w-52 overflow-hidden rounded-lg bg-white py-1 text-sm shadow-lg ring-1 ring-ink-200">
+          <div className="absolute top-full right-4 z-20 -mt-2 max-h-80 w-60 overflow-y-auto rounded-lg bg-white py-1 text-sm shadow-lg ring-1 ring-ink-200">
             <div className="px-3 py-1.5 text-xs font-medium text-ink-400">폴더로 옮기기</div>
-            {folders.map((f) => (
+            {folderTree(library).map(({ folder: f, depth }) => (
               <button
                 key={f.id}
                 onClick={() => {
                   onMove(item.id, f.id)
                   setMenu(false)
                 }}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-ink-50"
+                className="flex w-full items-center gap-2 py-1.5 pr-3 text-left hover:bg-ink-50"
+                style={{ paddingLeft: 12 + depth * 16 }}
               >
                 <span style={{ color: colorHex(f.color) }}>
                   <FolderIcon className="h-4 w-4" color="currentColor" />
@@ -482,13 +554,18 @@ function FileRow({ item, isOpen, cloud, folders, folderId, alias, onOpen, onRemo
   )
 }
 
-export function FolderDialog({ folder, onClose, onSave }) {
+// folder: 고칠 폴더, 또는 새 폴더면 { parent } (만들 자리). library 가 있으면 넣을 곳(상위 폴더)을 고를 수 있음
+export function FolderDialog({ folder, library, onClose, onSave }) {
   const [name, setName] = useState(folder.name ?? '')
   const [color, setColor] = useState(folder.color ?? FOLDER_COLORS[0].id)
+  const [parent, setParent] = useState(folder.parent ?? '')
   const editing = !!folder.id
+  // 자기 자신과 자기 하위 폴더 안으로는 옮길 수 없음
+  const blocked = editing && library ? folderSubtree(library, folder.id) : new Set()
+  const places = library ? folderTree(library).filter(({ folder: f }) => !blocked.has(f.id)) : []
   const submit = (e) => {
     e.preventDefault()
-    if (name.trim()) onSave(name.trim(), color)
+    if (name.trim()) onSave(name.trim(), color, parent || null)
   }
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" onMouseDown={onClose}>
@@ -497,7 +574,7 @@ export function FolderDialog({ folder, onClose, onSave }) {
         onMouseDown={(e) => e.stopPropagation()}
         className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl"
       >
-        <h3 className="text-lg font-semibold">{editing ? '폴더 고치기' : '새 폴더'}</h3>
+        <h3 className="text-lg font-semibold">{editing ? '폴더 고치기' : parent ? '새 하위 폴더' : '새 폴더'}</h3>
         <label className="mt-4 block text-sm font-medium text-ink-600">
           폴더 이름
           <input
@@ -510,6 +587,12 @@ export function FolderDialog({ folder, onClose, onSave }) {
             className="mt-1 w-full rounded-lg border border-ink-300 px-3 py-2 text-ink-800 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
           />
         </label>
+        {library && (places.length > 0 || parent) && (
+          <label className="mt-4 block text-sm font-medium text-ink-600">
+            넣을 곳
+            <FolderSelect library={library} value={parent} onChange={setParent} exclude={blocked} />
+          </label>
+        )}
         <div className="mt-4 text-sm font-medium text-ink-600">색상</div>
         <div className="mt-2 flex flex-wrap gap-2">
           {FOLDER_COLORS.map((c) => (
@@ -543,5 +626,25 @@ export function FolderDialog({ folder, onClose, onSave }) {
         </div>
       </form>
     </div>
+  )
+}
+
+// 폴더 고르기 (나무 모양 들여쓰기). value '' = 맨 위(폴더 밖)
+export function FolderSelect({ library, value, onChange, exclude, className = '' }) {
+  return (
+    <select
+      value={value ?? ''}
+      onChange={(e) => onChange(e.target.value)}
+      className={`mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 text-sm text-ink-800 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 ${className}`}
+    >
+      <option value="">맨 위 (폴더 밖)</option>
+      {folderTree(library)
+        .filter(({ folder: f }) => !exclude?.has(f.id))
+        .map(({ folder: f, depth }) => (
+          <option key={f.id} value={f.id}>
+            {'\u00a0\u00a0\u00a0'.repeat(depth) + (depth ? '└ ' : '') + f.name}
+          </option>
+        ))}
+    </select>
   )
 }

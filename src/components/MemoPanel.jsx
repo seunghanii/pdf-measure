@@ -5,6 +5,7 @@ import { setMemoDock, useMemoDock } from '../lib/memoDock'
 import { htmlToMarkdown } from '../lib/memoMarkdown'
 import MemoEditor, { MemoHelp } from './MemoEditor'
 import PhotoViewer from './PhotoViewer'
+import DocPreview from './DocPreview'
 import { InstFields, RelatedDocs } from './InstCard'
 import ExcelFiles from './ExcelFiles'
 import { MAX_EXCEL_BYTES, XLSM_TYPE, XLSX_TYPE, excelType, isExcelFile, isOldExcel, newFileId } from '../lib/excel'
@@ -44,6 +45,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
   const [migrated] = useState(() => migrateMemo(memo))
   const [initialText] = useState(() => migrated?.text ?? memo.text ?? '')
   const [viewing, setViewing] = useState(null) // 크게 보는 사진 { ids, index }
+  const [previewing, setPreviewing] = useState(null) // 미리 보는 관련 도면 { id, name, page, role }
   const [busy, setBusy] = useState(0) // 사진 넣는 중
   const [size, setSize] = useState(loadSize) // { w, h } px, 없으면 기본 크기
   const [bottomH, setBottomH] = useState(loadBottomH) // 아래 자리 높이 px, 없으면 기본
@@ -323,7 +325,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
       {memo.inst && <InstFields memo={memo} onChange={onChange} kinds={kinds} onAddKind={onAddKind} />}
 
       {/* 관련 도면 (여러 개) */}
-      <RelatedDocs memo={memo} onChange={onChange} onOpen={onOpenLink} onPick={onPickLink} />
+      <RelatedDocs memo={memo} onChange={onChange} onOpen={setPreviewing} onPick={onPickLink} />
 
       {/* 글과 사진 (같이 스크롤) */}
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -416,6 +418,17 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
           index={Math.min(viewing.index, urls.length - 1)}
           onIndex={(index) => setViewing((v) => ({ ...v, index }))}
           onClose={() => setViewing(null)}
+        />
+      )}
+      {previewing && (
+        <DocPreview
+          store={store}
+          link={previewing}
+          onClose={() => setPreviewing(null)}
+          onOpen={(link) => {
+            setPreviewing(null)
+            onOpenLink?.(link)
+          }}
         />
       )}
     </div>

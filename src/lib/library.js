@@ -1,7 +1,8 @@
 // 홈 화면의 폴더 정보: 폴더 목록과 "어떤 도면이 어느 폴더에 있는지".
 // 도면의 측정값(state)과 따로 보관해서, 폴더를 바꿔도 측정값은 건드리지 않습니다.
-// { folders: [{ id, name, color }], assign: { [도면 id]: 폴더 id }, aliases: { [도면 id]: 별명 }, kinds: [사용자가 더한 계기 종류] }
+// { folders: [{ id, name, color, parent? }], assign: { [도면 id]: 폴더 id }, aliases: { [도면 id]: 별명 }, kinds: [사용자가 더한 계기 종류] }
 // 별명은 홈·탭에 짧게 보일 이름. 원래 파일 이름(name)은 그대로 두고 따로 둡니다.
+// parent: 하위 폴더일 때 상위 폴더 id (없으면 맨 위). 예전 폴더는 parent 가 없어 그대로 맨 위에 보입니다.
 // trash: 휴지통에 넣은 도면 { [도면 id]: { at, name } } (lib/trash.js)
 import { normalizeDocTrash } from './trash'
 
@@ -41,8 +42,22 @@ export function saveOpenFolder(id) {
 }
 
 export function normalizeLibrary(lib) {
-  const folders = Array.isArray(lib?.folders) ? lib.folders.filter((f) => f && f.id && typeof f.name === 'string') : []
-  const ids = new Set(folders.map((f) => f.id))
+  const raw = Array.isArray(lib?.folders) ? lib.folders.filter((f) => f && f.id && typeof f.name === 'string') : []
+  const ids = new Set(raw.map((f) => f.id))
+  // 없는 상위 폴더나 돌고 도는 연결(A 안에 B, B 안에 A)은 맨 위로
+  const byId = new Map(raw.map((f) => [f.id, f]))
+  const loops = (f) => {
+    const seen = new Set([f.id])
+    for (let p = f.parent; p; p = byId.get(p)?.parent) {
+      if (seen.has(p) || !ids.has(p)) return true
+      seen.add(p)
+    }
+    return false
+  }
+  const folders = raw.map((f) => {
+    if (!f.parent) return f.parent === undefined ? f : stripParent(f)
+    return loops(f) ? stripParent(f) : f
+  })
   const assign = {}
   for (const [doc, folder] of Object.entries(lib?.assign ?? {})) if (ids.has(folder)) assign[doc] = folder
   const aliases = {}
@@ -50,6 +65,58 @@ export function normalizeLibrary(lib) {
   const kinds = Array.isArray(lib?.kinds) ? [...new Set(lib.kinds.filter((k) => typeof k === 'string' && k.trim()).map((k) => k.trim().toUpperCase()))] : []
   return { folders, assign, aliases, kinds, trash: normalizeDocTrash(lib?.trash) }
 }
+
+function stripParent(f) {
+  const { parent: _parent, ...rest } = f
+  return rest
+}
+
+// 폴더 나무 다루기
+export const parentOf = (lib, id) => lib.folders.find((f) => f.id === id)?.parent ?? null
+export const childFolders = (lib, parentId) => lib.folders.filter((f) => (f.parent ?? null) === (parentId ?? null))
+
+// 맨 위부터 id 폴더까지 (빵부스러기)
+export function folderPath(lib, id) {
+  const path = []
+  const seen = new Set()
+  for (let f = lib.folders.find((x) => x.id === id); f && !seen.has(f.id); f = lib.folders.find((x) => x.id === f.parent)) {
+    seen.add(f.id)
+    path.unshift(f)
+  }
+  return path
+}
+
+// id 폴더와 그 아래 모든 하위 폴더 id
+export function folderSubtree(lib, id) {
+  const out = new Set([id])
+  let grew = true
+  while (grew) {
+    grew = false
+    for (const f of lib.folders) {
+      if (f.parent && out.has(f.parent) && !out.has(f.id)) {
+        out.add(f.id)
+        grew = true
+      }
+    }
+  }
+  return out
+}
+
+// 고르기 목록용: 나무 순서로 펼친 [{ folder, depth }]
+export function folderTree(lib) {
+  const out = []
+  const walk = (parentId, depth) => {
+    for (const f of childFolders(lib, parentId)) {
+      out.push({ folder: f, depth })
+      walk(f.id, depth + 1)
+    }
+  }
+  walk(null, 0)
+  return out
+}
+
+// "상위 › 하위" 이름
+export const folderLabel = (lib, id) => folderPath(lib, id).map((f) => f.name).join(' › ')
 
 // 홈·탭에 보일 이름: 별명이 있으면 별명, 없으면 파일 이름에서 .pdf 를 뺀 것
 export const fileBase = (name) => (name ?? '').replace(/\.pdf$/i, '')
@@ -74,18 +141,40 @@ export function forgetDoc(lib, docId) {
 
 export const newFolderId = () => `f${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
 
-export function addFolder(lib, name, color) {
-  return { ...lib, folders: [...lib.folders, { id: newFolderId(), name, color }] }
+// parent: 이 폴더 안에 만들 때 상위 폴더 id
+export function addFolder(lib, name, color, parent = null) {
+  const folder = { id: newFolderId(), name, color }
+  if (parent && lib.folders.some((f) => f.id === parent)) folder.parent = parent
+  return { ...lib, folders: [...lib.folders, folder] }
 }
 
+// changes.parent 로 다른 폴더 안으로 옮기기 (null = 맨 위). 자기 자신이나 자기 하위 폴더 안으로는 못 옮김
 export function editFolder(lib, id, changes) {
-  return { ...lib, folders: lib.folders.map((f) => (f.id === id ? { ...f, ...changes } : f)) }
+  const { parent, ...rest } = changes
+  return {
+    ...lib,
+    folders: lib.folders.map((f) => {
+      if (f.id !== id) return f
+      const next = { ...f, ...rest }
+      if (parent === undefined) return next
+      if (parent && (folderSubtree(lib, id).has(parent) || !lib.folders.some((x) => x.id === parent))) return next
+      return parent ? { ...next, parent } : stripParent(next)
+    }),
+  }
 }
 
-// 폴더를 지워도 안의 도면은 지우지 않고 폴더 밖으로 꺼냄
+// 폴더를 지워도 안의 도면과 하위 폴더는 지우지 않고 한 단계 위(지운 폴더의 상위)로 꺼냄
 export function deleteFolder(lib, id) {
-  const assign = Object.fromEntries(Object.entries(lib.assign).filter(([, f]) => f !== id))
-  return { ...lib, folders: lib.folders.filter((f) => f.id !== id), assign }
+  const up = parentOf(lib, id)
+  const assign = {}
+  for (const [doc, f] of Object.entries(lib.assign)) {
+    if (f !== id) assign[doc] = f
+    else if (up) assign[doc] = up
+  }
+  const folders = lib.folders
+    .filter((f) => f.id !== id)
+    .map((f) => (f.parent === id ? (up ? { ...f, parent: up } : stripParent(f)) : f))
+  return { ...lib, folders, assign }
 }
 
 // folderId 가 null 이면 폴더 밖으로
@@ -105,8 +194,20 @@ export function mergeLibrary(target, source, docIds) {
     if (source.aliases?.[id] && !aliases[id]) aliases[id] = source.aliases[id]
     const f = source.folders.find((x) => x.id === source.assign[id])
     if (!f || assign[id]) continue
-    let dest = folders.find((x) => x.id === f.id) ?? folders.find((x) => x.name === f.name)
-    if (!dest) folders.push((dest = { ...f }))
+    // 상위 폴더부터 차례로 맞추기 (같은 id, 아니면 같은 자리의 같은 이름)
+    let parent = null
+    let dest = null
+    for (const step of folderPath(source, f.id)) {
+      dest =
+        folders.find((x) => x.id === step.id) ??
+        folders.find((x) => x.name === step.name && (x.parent ?? null) === parent)
+      if (!dest) {
+        dest = stripParent({ ...step })
+        if (parent) dest.parent = parent
+        folders.push(dest)
+      }
+      parent = dest.id
+    }
     assign[id] = dest.id
   }
   const kinds = [...new Set([...(target.kinds ?? []), ...(source.kinds ?? [])])]
@@ -124,5 +225,15 @@ export function moveFolder(lib, id, index) {
   const folders = [...lib.folders]
   const [f] = folders.splice(from, 1)
   folders.splice(to, 0, f)
+  return { ...lib, folders }
+}
+
+// 같은 상위 폴더 안의 순서 바꾸기: order 는 그 형제 폴더 id 들의 새 순서.
+// 전체 folders 배열에서 형제들이 있던 자리에 새 순서대로 다시 채움.
+export function reorderSiblings(lib, order) {
+  const set = new Set(order)
+  const queue = order.map((id) => lib.folders.find((f) => f.id === id)).filter(Boolean)
+  if (queue.length !== set.size) return lib
+  const folders = lib.folders.map((f) => (set.has(f.id) ? queue.shift() : f))
   return { ...lib, folders }
 }
