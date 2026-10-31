@@ -504,13 +504,11 @@ function FileRow({ item, isOpen, cloud, library, folderId, alias, onOpen, onRemo
         )}
         <button
           onClick={() => {
-            const ask = cloud
-              ? `"${shown}" 을(를) 서버에서 지울까요? PDF 파일과 측정값이 서버에서 완전히 지워집니다.`
-              : `"${shown}" 을(를) 최근 목록에서 지울까요? 저장된 측정값도 함께 지워집니다.`
+            const ask = `"${shown}" 을(를) 휴지통으로 옮길까요? 홈 아래 휴지통에서 7일 안에 되살릴 수 있고, 7일이 지나면 PDF와 측정값이 ${cloud ? '서버에서 ' : ''}완전히 지워집니다.`
             if (window.confirm(ask)) onRemove(item)
           }}
           disabled={isOpen}
-          title={isOpen ? '열려 있는 탭을 먼저 닫아 주세요' : '목록에서 지우기'}
+          title={isOpen ? '열려 있는 탭을 먼저 닫아 주세요' : '휴지통으로 옮기기'}
           className="rounded p-1.5 text-ink-300 hover:bg-danger-50 hover:text-danger-500 disabled:hidden"
         >
           <TrashIcon />

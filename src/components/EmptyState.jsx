@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { AuthPanel, MigrationCard } from './Account'
 import Library, { FolderDialog, FolderIcon } from './Library'
 import { addFolder, editFolder } from '../lib/library'
+import { TRASH_DAYS, leftLabel } from '../lib/trash'
 
 const STEPS = [
   { n: 1, title: 'PDF 도면 열기', text: '버튼을 누르거나 파일을 화면에 끌어다 놓으세요.' },
@@ -17,6 +18,9 @@ export default function EmptyState({
   openIds,
   onOpenRecent,
   onRemoveRecent,
+  trashed = [], // 휴지통 도면 [{ id, name, at }]
+  onRestoreDoc,
+  onPurgeDoc,
   library,
   onUpdateLibrary,
   openFolderId, // 펼쳐 본 폴더. 이때 연 PDF 는 이 폴더에 들어감
@@ -134,6 +138,7 @@ export default function EmptyState({
             </ol>
           </>
         )}
+        {trashed.length > 0 && <DocTrash trashed={trashed} cloud={cloud} onRestore={onRestoreDoc} onPurge={onPurgeDoc} />}
       </div>
       {folderDialog && (
         <FolderDialog
@@ -149,5 +154,54 @@ export default function EmptyState({
         />
       )}
     </div>
+  )
+}
+
+// 홈 아래 휴지통: 지운 도면을 7일 동안 보관. 되살리면 원래 폴더·별명 그대로 돌아옴
+function DocTrash({ trashed, cloud, onRestore, onPurge }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <section className="mt-8">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 rounded-lg px-1 py-1 text-left text-sm text-ink-500 hover:text-ink-800"
+      >
+        <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+        </svg>
+        <span className="font-semibold">휴지통 ({trashed.length})</span>
+        <span className="text-xs text-ink-400">{TRASH_DAYS}일 뒤 완전 삭제</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true" className={`ml-auto h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+      {open && (
+        <ul className="mt-2 divide-y divide-ink-100 overflow-hidden rounded-xl bg-white shadow-xs ring-1 ring-ink-200">
+          {trashed.map((d) => (
+            <li key={d.id} className="flex items-center gap-3 px-4 py-2.5">
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium text-ink-600">{d.name || d.id.slice(0, d.id.lastIndexOf('|'))}</div>
+                <div className="text-xs text-ink-400">{leftLabel(d.at)}</div>
+              </div>
+              <button
+                onClick={() => onRestore(d.id)}
+                className="shrink-0 rounded-md px-2.5 py-1 text-xs font-medium text-brand-700 ring-1 ring-brand-200 hover:bg-brand-50"
+              >
+                되살리기
+              </button>
+              <button
+                onClick={() =>
+                  window.confirm(`"${d.name}" 을(를) 완전히 지울까요? PDF와 측정값이 ${cloud ? '서버에서 ' : ''}지워지고 되돌릴 수 없어요.`) && onPurge(d.id, d.name)
+                }
+                className="shrink-0 rounded-md px-2 py-1 text-xs text-danger-500 hover:bg-danger-50"
+              >
+                완전 삭제
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }

@@ -3,7 +3,8 @@ import { loadPdf } from './lib/pdf'
 import { fileIdOf, loadSession, localStore, saveSession } from './lib/storage'
 import { createCloudStore, MAX_UPLOAD_BYTES } from './lib/cloudStore'
 import { kindList } from './lib/instrument'
-import { EMPTY_LIBRARY, forgetDoc, loadOpenFolder, moveDoc, saveOpenFolder } from './lib/library'
+import { EMPTY_LIBRARY, displayName, forgetDoc, loadOpenFolder, moveDoc, saveOpenFolder } from './lib/library'
+import { isExpired, setTrashedDocs, trashDoc, untrashDoc } from './lib/trash'
 import { cloudConfigured, networkHint, signOut, supabase } from './lib/supabase'
 import Workspace from './components/Workspace'
 import Toolbar from './components/Toolbar'
@@ -106,6 +107,46 @@ function Session({ store, user, onLogout, onChangePassword }) {
     })
   }, [])
 
+  // ---------- 도면 휴지통 ----------
+  // 홈에서 지운 도면은 바로 지우지 않고 library.trash 에 7일 동안 둠 (홈·검색·연결 목록에서는 숨김)
+  const libraryRef = useRef(library)
+  useEffect(() => {
+    libraryRef.current = library
+    setTrashedDocs(library.trash)
+  }, [library])
+  const liveRecent = useMemo(() => (recent ? recent.filter((d) => !library.trash?.[d.id]) : recent), [recent, library.trash])
+  const trashedDocs = useMemo(
+    () =>
+      Object.entries(library.trash ?? {})
+        .map(([id, t]) => ({ id, name: t.name, at: t.at }))
+        .sort((a, b) => b.at - a.at),
+    [library.trash],
+  )
+  // 완전 삭제: 서버(또는 브라우저)에서 PDF·측정값·사진·글자 색인까지 지움
+  const purging = useRef(new Set())
+  const purgeDoc = useCallback(
+    async (id, name) => {
+      if (purging.current.has(id)) return
+      purging.current.add(id)
+      try {
+        await storeRef.current.removeFile(id)
+        forgetIndex(storeRef.current, id)
+        updateLibrary((lib) => forgetDoc(lib, id))
+      } catch (e) {
+        setError(networkHint(e) ?? `"${name}" 을(를) 지우지 못했어요.`)
+      } finally {
+        purging.current.delete(id)
+      }
+      refreshRecent()
+    },
+    [refreshRecent, updateLibrary],
+  )
+  // 7일 지난 도면은 앱을 열 때(폴더 정보를 불러올 때) 완전 삭제. 탭으로 열려 있는 도면은 건너뜀
+  useEffect(() => {
+    for (const [id, t] of Object.entries(library.trash ?? {}))
+      if (isExpired(t.at) && !docsRef.current.some((d) => d.id === id)) purgeDoc(id, t.name)
+  }, [library.trash, purgeDoc])
+
   // 계기 종류 목록: 기본 약어 + 사용자가 더한 것 (폴더 정보와 함께 저장, 모든 도면 공통)
   const instKinds = useMemo(() => kindList(library.kinds), [library.kinds])
   const addKind = useCallback(
@@ -160,6 +201,8 @@ function Session({ store, user, onLogout, onChangePassword }) {
         const doc = { id, name: record?.name ?? file.name, pdfDoc, savedState: record?.state ?? null, store: s }
         setDocs((prev) => (prev.some((d) => d.id === id) ? prev : [...prev, doc]))
         if (activate) setActiveId(id)
+        // 휴지통에 있던 도면을 다시 열면(같은 PDF 를 다시 열거나 연결로 열기) 휴지통에서 꺼냄
+        if (libraryRef.current.trash?.[id]) updateLibrary((lib) => untrashDoc(lib, id))
         // 검색용 글자 색인이 없으면 뒤에서 만들어 저장 (스캔본은 OCR)
         ensureIndexed(s, id, doc.name, () => (pdfDoc.loadingTask?.destroyed ? null : pdfDoc))
         return true
@@ -167,7 +210,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
         opening.current.delete(id)
       }
     },
-    [watchUpload],
+    [watchUpload, updateLibrary],
   )
 
   const openFile = useCallback(
@@ -212,6 +255,8 @@ function Session({ store, user, onLogout, onChangePassword }) {
       const record = await s.rememberFile(id, file)
       if (record?.upload) watchUpload(record.upload, file.name)
       if (folderId) updateLibrary((lib) => (lib.folders.some((f) => f.id === folderId) ? moveDoc(lib, id, folderId) : lib))
+      // 휴지통에 있던 같은 PDF 를 다시 올리면 휴지통에서 꺼냄
+      if (libraryRef.current.trash?.[id]) updateLibrary((lib) => untrashDoc(lib, id))
       // 검색용 글자 색인은 뒤에서 (파일은 저장소에서 다시 읽음)
       ensureIndexed(s, id, record?.name ?? file.name, () => null)
       refreshRecent()
@@ -506,22 +551,19 @@ function Session({ store, user, onLogout, onChangePassword }) {
           onOpenFile={openFiles}
           onOpenSample={openSample}
           loading={loading}
-          recent={recent}
+          recent={liveRecent}
+          trashed={trashedDocs}
+          onRestoreDoc={(id) => updateLibrary((lib) => untrashDoc(lib, id))}
+          onPurgeDoc={purgeDoc}
           openIds={docs.map((d) => d.id)}
           onOpenRecent={openRecent}
           library={library}
           onUpdateLibrary={updateLibrary}
           openFolderId={openFolderId}
           setOpenFolderId={setOpenFolderId}
-          onRemoveRecent={async (item) => {
-            try {
-              await storeRef.current.removeFile(item.id)
-              forgetIndex(storeRef.current, item.id)
-              if (library.assign[item.id] || library.aliases?.[item.id]) updateLibrary((lib) => forgetDoc(lib, item.id))
-            } catch (e) {
-              setError(networkHint(e) ?? `"${item.name}" 을(를) 지우지 못했어요.`)
-            }
-            refreshRecent()
+          onRemoveRecent={(item) => {
+            // 휴지통으로 (폴더·별명은 그대로 두어 되살리면 제자리로)
+            updateLibrary((lib) => trashDoc(lib, item.id, displayName(lib, item.id, item.name)))
           }}
           cloud={cloud}
           showLogin={cloudConfigured && !user}
@@ -533,7 +575,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
       {searchOpen && activeId === null && (
         <SearchPanel
           store={store}
-          recent={recent}
+          recent={liveRecent}
           library={library}
           onClose={() => setSearchOpen(false)}
           onOpenDoc={(item) => {

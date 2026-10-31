@@ -1,3 +1,4 @@
+import { withoutTrashed } from '../lib/trash'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { DOC_ROLES } from '../lib/instrument'
 import { EMPTY_LIBRARY, displayName, folderLabel } from '../lib/library'
@@ -21,7 +22,7 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
     let cancelled = false
     store
       .listRecent()
-      .then((rows) => !cancelled && setList(rows))
+      .then((rows) => !cancelled && setList(withoutTrashed(rows)))
       .catch(() => !cancelled && setList([]))
     return () => {
       cancelled = true

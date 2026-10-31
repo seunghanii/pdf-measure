@@ -18,7 +18,8 @@ import DocSearch from './DocSearch'
 import LinkPicker from './LinkPicker'
 import { DEFAULT_MEMO_COLOR, isLinkOnly, memoPhotoIds, memosAt } from '../lib/memo'
 import { memoFileIds } from '../lib/excel'
-import { DEFAULT_STATUS, cardBoxFor, guessKind, isInst, linksPatch, memoLinks, statusOf } from '../lib/instrument'
+import { DEFAULT_STATUS, cardBoxFor, guessKind, isInst, itemGroup, linksPatch, memoLinks, statusOf } from '../lib/instrument'
+import { liveItemTrash, pushItems } from '../lib/trash'
 import { MAX_ZOOM, MIN_ZOOM } from '../lib/zoom'
 
 // 메모장은 마크다운 읽는 도구까지 필요할 때만 불러옴
@@ -38,6 +39,8 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
   const [tool, setTool] = useState(saved?.calibration ? 'length' : 'calibrate')
   const [measurements, setMeasurements] = useState(saved?.measurements ?? [])
   const [history, setHistory] = useState([])
+  // 휴지통: 지운 항목 [{ item, at }]. 7일 지난 것은 열 때 뺌 (lib/trash.js)
+  const [trash, setTrash] = useState(() => liveItemTrash(saved?.trash))
   const [categories, setCategories] = useState(saved?.categories ?? []) // 측정 분류 [{ id, name, color }]
   const [calibration, setCalibration] = useState(saved?.calibration ?? null)
   const [pendingCalibration, setPendingCalibration] = useState(null)
@@ -96,7 +99,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
   const store = doc.store
   const cloud = store.kind === 'cloud'
   const textIndex = useDocIndex(store, doc.id) // 도면 글자 (글자 복사 도구)
-  const syncStatus = useAutosave({ store, docId: doc.id, measurements, categories, calibration, unit, markupStyle, counters, pageNum })
+  const syncStatus = useAutosave({ store, docId: doc.id, measurements, categories, calibration, unit, markupStyle, counters, pageNum, trash })
 
   // 축척: PDF 1pt 가 실제 몇 mm 인지
   const mmPerPt = useMemo(() => {
@@ -108,10 +111,19 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
 
   const measurementsRef = useRef(measurements)
   const historyRef = useRef(history)
+  const trashRef = useRef(trash)
   useLayoutEffect(() => {
     measurementsRef.current = measurements
     historyRef.current = history
+    trashRef.current = trash
   })
+
+  // 지운 뒤 Ctrl+Z 로 되살린 항목은 휴지통에서 뺌 (같은 항목이 두 곳에 있지 않게)
+  useEffect(() => {
+    if (!trash.length) return
+    const ids = new Set(measurements.map((m) => m.id))
+    if (trash.some((t) => ids.has(t.item.id))) setTrash((tr) => tr.filter((t) => !ids.has(t.item.id)))
+  }, [measurements, trash])
 
   // 되돌리기(Ctrl+Z)가 가능한 변경
   const commit = useCallback((updater) => {
@@ -403,7 +415,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
         const ids = await store.listImageIds(doc.id)
         if (!ids.length) return
         const used = new Set()
-        for (const list of [measurementsRef.current, ...historyRef.current])
+        for (const list of [measurementsRef.current, ...historyRef.current, trashRef.current.map((t) => t.item)])
           for (const m of list) {
             if (m.type === 'image') used.add(m.imageId)
             if (m.type === 'memo') {
@@ -528,16 +540,39 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
     [commit, instKinds],
   )
 
-  // ids: 지울 항목 id 배열 (기준선은 목록에서 따로 지움)
+  // ids: 지울 항목 id 배열 (기준선은 목록에서 따로 지움). 지운 항목은 휴지통으로 (keep: false 면 바로 버림)
   const deleteItems = useCallback(
-    (ids) => {
+    (ids, { keep = true } = {}) => {
       const del = new Set(ids.filter((id) => id !== 'calibration'))
       if (!del.size) return
+      const gone = measurementsRef.current.filter((m) => del.has(m.id))
+      if (keep && gone.length) setTrash((tr) => pushItems(tr, gone))
       commit((prev) => prev.filter((m) => !del.has(m.id)))
       setSelectedIds((s) => s.filter((id) => !del.has(id)))
     },
     [commit],
   )
+
+  // 휴지통에서 되살리기: 원래 자리(같은 페이지·좌표)로 돌아감
+  const restoreItems = useCallback(
+    (ids) => {
+      const set = new Set(ids)
+      const back = trashRef.current.filter((t) => set.has(t.item.id)).map((t) => t.item)
+      if (!back.length) return
+      const have = new Set(measurementsRef.current.map((m) => m.id))
+      const add = back.filter((m) => !have.has(m.id))
+      setTrash((tr) => tr.filter((t) => !set.has(t.item.id)))
+      if (add.length) commit((prev) => [...prev, ...add])
+      setNotice(`${back.length === 1 ? `"${back[0].name}"` : `${back.length}개 항목`}을(를) 되살렸어요.`)
+    },
+    [commit],
+  )
+  // 휴지통에서 완전히 지우기 (ids 가 없으면 휴지통 비우기)
+  const purgeTrash = useCallback((ids) => {
+    if (!ids) return setTrash([])
+    const set = new Set(ids)
+    setTrash((tr) => tr.filter((t) => !set.has(t.item.id)))
+  }, [])
 
   const lineCalibration = ({ value, unit: u }) => ({
     realMm: value * UNITS[u].toMm,
@@ -679,9 +714,9 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
     if (hiding) setSelectedIds((s) => s.filter((x) => x !== id))
     setMeasurements((prev) => prev.map((m) => (m.id === id ? { ...m, hidden: !m.hidden } : m)))
   }
-  // group: 'measure' | 'markup'
+  // group: 'measure' | 'markup' | 'inst'
   const setAllHidden = (hidden, group) => {
-    const inGroup = (m) => (group === 'markup') === isMarkup(m.type)
+    const inGroup = (m) => itemGroup(m) === group
     if (hidden) {
       const ids = new Set(measurementsRef.current.filter(inGroup).map((m) => m.id))
       setSelectedIds((s) => s.filter((x) => !ids.has(x)))
@@ -881,9 +916,12 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
           onDeleteCategory={deleteCategory}
           onAssignCategory={assignCategory}
           onClear={(group) => {
-            commit((prev) => prev.filter((m) => (group === 'markup') !== isMarkup(m.type)))
-            setSelectedIds([])
+            // 그 묶음만 지움 (계기 카드는 마크업 전체 삭제에 들어가지 않음). 지운 것은 휴지통으로
+            deleteItems(measurementsRef.current.filter((m) => itemGroup(m) === group).map((m) => m.id))
           }}
+          trash={trash}
+          onRestore={restoreItems}
+          onPurge={purgeTrash}
           onStartCalibrate={() => setTool('calibrate')}
           onEditCalibration={editCalibration}
           onApplyRatio={applyRatio}
@@ -914,7 +952,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
           initial={linkPicking.index != null ? memoLinks(linkItem)[linkPicking.index] : null}
           onCancel={() => {
             // 방금 그린 범위에서 연결을 취소하면 빈 범위는 남기지 않음
-            if (linkPicking.fresh && !memoLinks(linkItem).length && !linkItem.inst && !String(linkItem.text ?? '').trim()) deleteItems([linkItem.id])
+            if (linkPicking.fresh && !memoLinks(linkItem).length && !linkItem.inst && !String(linkItem.text ?? '').trim()) deleteItems([linkItem.id], { keep: false })
             setLinkPicking(null)
           }}
           onUnlink={
