@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { loadPdf } from './lib/pdf'
+import { loadPdf, setOpenPdf } from './lib/pdf'
 import { fileIdOf, loadSession, localStore, saveSession } from './lib/storage'
 import { createCloudStore, MAX_UPLOAD_BYTES } from './lib/cloudStore'
 import { kindList } from './lib/instrument'
@@ -199,6 +199,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
         }
         if (record?.upload) watchUpload(record.upload, file.name)
         const doc = { id, name: record?.name ?? file.name, pdfDoc, savedState: record?.state ?? null, store: s }
+        setOpenPdf(id, pdfDoc)
         setDocs((prev) => (prev.some((d) => d.id === id) ? prev : [...prev, doc]))
         if (activate) setActiveId(id)
         // 휴지통에 있던 도면을 다시 열면(같은 PDF 를 다시 열거나 연결로 열기) 휴지통에서 꺼냄
@@ -311,6 +312,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
       const list = docsRef.current
       const idx = list.findIndex((d) => d.id === id)
       if (idx < 0) return
+      setOpenPdf(id, null)
       list[idx].pdfDoc.loadingTask?.destroy() // 워커 메모리 해제
       const rest = list.filter((d) => d.id !== id)
       setDocs(rest)
@@ -363,7 +365,10 @@ function Session({ store, user, onLogout, onChangePassword }) {
   // 계정을 바꾸면 이 Session 이 사라지므로 열린 PDF 메모리 해제
   useEffect(
     () => () => {
-      for (const d of docsRef.current) d.pdfDoc.loadingTask?.destroy()
+      for (const d of docsRef.current) {
+        setOpenPdf(d.id, null)
+        d.pdfDoc.loadingTask?.destroy()
+      }
     },
     [],
   )

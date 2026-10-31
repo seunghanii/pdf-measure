@@ -187,7 +187,7 @@ export function createCloudStore(supabase, user) {
 
   return {
     kind: 'cloud',
-    saveDelay: 700,
+    saveDelay: 1500, // 서버 저장은 연달아 고치는 동안 모아서 한 번에 (창을 닫을 때는 바로 저장)
     user,
 
     // 파일을 열 때: 서버 목록에 올리고(처음이면 PDF 업로드), 저장된 측정값을 돌려줌.
