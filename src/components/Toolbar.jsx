@@ -3,7 +3,7 @@ import { TOOLS, VIEW_TOOLS, digitForTool } from '../lib/tools'
 import { toggleSnap, useSnapEnabled } from '../lib/snapSetting'
 import { MEMO_COLORS } from '../lib/memo'
 import { MAX_ZOOM, MIN_ZOOM } from '../lib/zoom'
-import { DEFAULT_BOX_OPACITY, HIGHLIGHT_COLORS, IMAGE_BORDER_COLORS, IMAGE_BORDER_WIDTHS, MARKUP_COLORS, STROKE_TYPES, STROKE_WIDTHS, TEXT_SIZES } from '../lib/markup'
+import { DEFAULT_BOX_OPACITY, HIGHLIGHT_COLORS, IMAGE_BORDER_COLORS, IMAGE_BORDER_WIDTHS, MARKUP_COLORS, SHAPES, STROKE_TYPES, STROKE_WIDTHS, TEXT_SIZES } from '../lib/markup'
 
 const MARKUP_TOOL_IDS = TOOLS.filter((t) => t.group === 'markup').map((t) => t.id)
 
@@ -31,7 +31,8 @@ export default function Toolbar({
   markupStyle,
   onChangeMarkupStyle,
   selectedMarkupType,
-  selectedHasStroke, // 선택한 것 중에 사각형·화살표·펜이 있으면 굵기도 보여 줌
+  selectedHasStroke, // 선택한 것 중에 도형·화살표·펜이 있으면 굵기도 보여 줌
+  selectedHasShape, // 선택한 것 중에 도형이 있으면 사각형/원 고르기도 보여 줌
   onInsertImage, // 사진 넣기 (파일 고르기)
   memoActions, // 메모 범위만 선택했을 때: { onOpen, onLink, linked }
   imageActions, // 사진만 선택했을 때: 자르기·숨기기 { cropping, cropped, onToggleCrop, onResetCrop, onHide }
@@ -158,6 +159,7 @@ export default function Toolbar({
             style={markupStyle}
             onChange={onChangeMarkupStyle}
             showStroke={selectedHasStroke}
+            showShape={selectedHasShape}
             imageActions={imageActions}
             memoActions={memoActions}
           />
@@ -263,7 +265,7 @@ const ALIGN_BUTTONS = [
 ]
 
 // 마크업 색상, 선 굵기, 글자 크기, 텍스트 상자 배경 투명도
-function MarkupStyle({ kind, title, style, onChange, showStroke, imageActions, memoActions }) {
+function MarkupStyle({ kind, title, style, onChange, showStroke, showShape, imageActions, memoActions }) {
   if (kind === 'memo') return <MemoStyle title="메모 범위" style={style} onChange={onChange} actions={memoActions} />
   if (kind === 'image') return <ImageStyle title={title === '선택한 마크업' ? '사진' : title} style={style} onChange={onChange} actions={imageActions} />
   const isHighlight = kind === 'highlight'
@@ -276,6 +278,24 @@ function MarkupStyle({ kind, title, style, onChange, showStroke, imageActions, m
   return (
     <div className="flex flex-wrap items-center gap-1 rounded-lg border border-ink-200 bg-white/95 px-2.5 py-1.5 shadow-md backdrop-blur">
       {title && <span className="mr-1.5 text-xs font-semibold whitespace-nowrap text-ink-700">{title}</span>}
+      {(kind === 'rect' || showShape) && (
+        <div className="mr-1.5 flex items-center rounded border border-ink-300 bg-white" role="group" aria-label="도형 모양">
+          {SHAPES.map(([value, label, d]) => (
+            <button
+              key={value}
+              title={label}
+              aria-pressed={(style.shape ?? 'rect') === value}
+              onClick={() => onChange({ shape: value })}
+              className={`flex h-6 items-center gap-1 px-1.5 text-xs font-medium whitespace-nowrap first:rounded-l last:rounded-r ${
+                (style.shape ?? 'rect') === value ? 'bg-ink-800 text-white' : 'text-ink-600 hover:bg-ink-100'
+              }`}
+            >
+              <Icon d={d} />
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
       {colors.map((c) => (
         <button
           key={c}

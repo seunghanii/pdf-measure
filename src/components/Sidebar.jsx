@@ -1,7 +1,7 @@
 import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { TYPE_INFO, describe } from '../lib/measure'
 import { UNITS, calibrationInput, formatArea, formatLength, parseNumber } from '../lib/units'
-import { isMarkup } from '../lib/markup'
+import { isMarkup, kindName } from '../lib/markup'
 import { CATEGORY_COLORS, CATEGORY_PRESETS, categoryTotals } from '../lib/categories'
 
 export default function Sidebar({
@@ -57,7 +57,7 @@ export default function Sidebar({
     const rows = [['이름', '분류', '종류', '페이지', '값', '둘레']]
     for (const m of measures) {
       const d = describe(m, mmPerPt, unit)
-      rows.push([m.name, catName.get(m.cat) ?? '', TYPE_INFO[m.type].name, m.page, d.main, d.sub?.replace('둘레 ', '') ?? ''])
+      rows.push([m.name, catName.get(m.cat) ?? '', kindName(m, TYPE_INFO), m.page, d.main, d.sub?.replace('둘레 ', '') ?? ''])
     }
     if (categories.length) {
       rows.push([], ['분류별 합계', '개수', '길이 합계', '면적 합계', '둘레 합계'])
