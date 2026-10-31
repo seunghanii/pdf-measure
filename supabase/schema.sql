@@ -42,7 +42,9 @@ grant select, insert, update, delete on public.documents to authenticated;
 -- 2) PDF·사진 파일 보관함 (비공개, 파일 하나 50MB 까지) -------------------------
 -- 사진은 "사용자id/img/사진id" 에 둡니다 (도면에 넣은 사진, 메모 사진)
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('pdfs', 'pdfs', false, 52428800, array['application/pdf', 'image/jpeg', 'image/png'])
+values ('pdfs', 'pdfs', false, 52428800, array['application/pdf', 'image/jpeg', 'image/png',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel.sheet.macroEnabled.12',
+  'application/vnd.ms-excel.sheet.macroenabled.12']) -- 브라우저는 파일 형식을 소문자로 보냄
 on conflict (id) do update
   set public = false,
       file_size_limit = excluded.file_size_limit,

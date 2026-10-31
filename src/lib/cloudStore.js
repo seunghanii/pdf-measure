@@ -6,8 +6,9 @@
 // 검색용 글자 색인도 도면마다 특별한 한 줄(file_key = "@text|" + 도면 id, size 0)에 보관.
 // 도면에 넣은 사진은 pdfs 보관함의 "사용자id/img/사진 id" 에 파일로 두고, 사진마다 특별한 한 줄
 // (file_key = "@img|" + 사진 id, name = 도면 id, state = { type, path })로 어느 도면 사진인지 기록.
-// 보관함이 아직 사진을 받지 않게 설정돼 있으면(설정 SQL 을 다시 실행하기 전) 예전처럼 state 에 base64 로 넣고,
-// 예전에 base64 로 넣은 사진은 열 때 보관함으로 옮겨 DB 공간을 비웁니다.
+// 메모에 첨부한 엑셀도 같은 방식("사용자id/img/파일 id").
+// 보관함이 아직 그 종류를 받지 않게 설정돼 있으면(설정 SQL 을 다시 실행하기 전) 예전처럼 state 에 base64 로 넣고,
+// 예전에 base64 로 넣은 사진·엑셀은 열 때 보관함으로 옮겨 DB 공간을 비웁니다.
 // 특별한 줄은 모두 size 가 0 이라 실제 도면(size > 0)과 구분됩니다.
 import { cacheDelete, cacheGet, cachePrune, cachePut, summarize, SUMMARY_VERSION } from './storage'
 import { normalizeLibrary } from './library'
@@ -95,30 +96,33 @@ export function createCloudStore(supabase, user) {
 
   const imagePath = (imageId) => `${uid}/img/${imageId}`
 
-  // 사진 파일을 보관함에 올림. 보관함이 사진을 받지 않으면 false (이번 창에서는 다시 시도하지 않음)
-  let bucketTakesImages = true
+  // 사진·첨부 파일(엑셀)을 보관함에 올림. 보관함이 그 종류를 받지 않으면 false
+  // (이번 창에서는 그 종류만 다시 시도하지 않음. 엑셀이 막혀도 사진은 계속 보관함에)
+  const bucketTakes = { image: true, file: true }
+  const kindOf = (blob) => (/^image\//.test(blob.type) ? 'image' : 'file')
   async function uploadImage(imageId, blob) {
-    if (!bucketTakesImages) return false
-    const { error } = await bucket().upload(imagePath(imageId), blob, { contentType: blob.type || 'image/jpeg', upsert: true })
+    const kind = kindOf(blob)
+    if (!bucketTakes[kind]) return false
+    const { error } = await bucket().upload(imagePath(imageId), blob, {
+      contentType: blob.type || 'application/octet-stream',
+      upsert: true,
+    })
     if (!error) return true
-    bucketTakesImages = false
-    console.warn('사진을 보관함에 올리지 못해 DB 에 저장합니다', error)
+    bucketTakes[kind] = false
+    console.warn('파일을 보관함에 올리지 못해 DB 에 저장합니다', error)
     return false
   }
 
-  // 메모에 첨부한 엑셀 같은 사진 아닌 파일은 보관함(사진·PDF 만 받음)에 올리지 않고 바로 DB 에 (올리다 실패하면 사진까지 보관함을 안 쓰게 되므로)
-  const isImageBlob = (blob) => /^image\//.test(blob.type)
-
   async function putImage(docId, imageId, blob) {
-    const state = isImageBlob(blob) && (await uploadImage(imageId, blob))
+    const state = (await uploadImage(imageId, blob))
       ? { type: blob.type, path: imagePath(imageId) }
       : { type: blob.type, data: await blobToBase64(blob) }
     await upsertSpecial(IMAGE_PREFIX + imageId, docId, state)
   }
 
-  // 예전에 DB 에 base64 로 넣은 사진을 보관함으로 옮김 (실패해도 그대로 둠)
+  // 예전에 DB 에 base64 로 넣은 사진·엑셀을 보관함으로 옮김 (실패해도 그대로 둠)
   async function moveImageToBucket(docId, imageId, blob) {
-    if (!isImageBlob(blob) || !(await uploadImage(imageId, blob))) return
+    if (!(await uploadImage(imageId, blob))) return
     await upsertSpecial(IMAGE_PREFIX + imageId, docId, { type: blob.type, path: imagePath(imageId) })
   }
 
@@ -133,6 +137,54 @@ export function createCloudStore(supabase, user) {
     return toRecord(check(res))
   }
 
+  // 도면 목록은 잠깐 기억해 두고 홈·계기 목록(모든 도면)·관련 도면 연결 창이 같이 씀.
+  // 이 창에서 저장·이름 바꾸기를 하면 기억한 목록도 바로 고치고, 파일을 열거나 지우면 다음에 새로 받음.
+  // 다른 기기에서 바꾼 것은 RECENT_TTL 이 지나면 반영
+  const RECENT_TTL = 60_000
+  let recent = null // { at, promise }
+  const forgetRecent = () => {
+    recent = null
+  }
+  const patchRecent = (fn) => {
+    if (recent) recent.promise = recent.promise.then(fn)
+  }
+
+  async function fetchRecent() {
+    const rows = check(
+      await table()
+        .select(LIST_COLS)
+        .eq('user_id', uid)
+        .neq('file_key', LIBRARY_KEY)
+        .gt('size', 0)
+        .order('last_opened', { ascending: false })
+        .limit(MAX_RECENT),
+    )
+    // 요약이 없거나 예전 모양(검색용 글 notes 없음, 판 v 가 낮음)인 도면만 측정값 전체를 받아 요약하고,
+    // 요약을 서버에 한 번 고쳐 써 둠 (다음부터는 요약만 받음). 그사이 다른 저장이 있었으면 쓰지 않음
+    const isOld = (r) => !Array.isArray(r.summary?.notes) || (r.summary?.v ?? 1) < SUMMARY_VERSION
+    const old = rows.filter(isOld).map((r) => r.file_key)
+    if (old.length) {
+      const full = check(await table().select('file_key, state, updated_at').eq('user_id', uid).in('file_key', old))
+      const byKey = new Map(full.map((r) => [r.file_key, r]))
+      for (const r of rows) {
+        if (!isOld(r) || !byKey.has(r.file_key)) continue
+        const { state, updated_at } = byKey.get(r.file_key)
+        r.summary = summarize(state)
+        if (state)
+          table()
+            .update({ state: { ...state, summary: r.summary } })
+            .eq('user_id', uid)
+            .eq('file_key', r.file_key)
+            .eq('updated_at', updated_at)
+            .then(check)
+            .catch((e) => console.warn(e))
+      }
+    }
+    const list = rows.map(toRecord)
+    cachePrune(new Set(list.map((r) => r.path))).catch(() => {})
+    return list
+  }
+
   return {
     kind: 'cloud',
     saveDelay: 700,
@@ -141,6 +193,7 @@ export function createCloudStore(supabase, user) {
     // 파일을 열 때: 서버 목록에 올리고(처음이면 PDF 업로드), 저장된 측정값을 돌려줌.
     // 업로드는 기다리지 않고 upload 로 진행 상황을 넘겨줍니다.
     async rememberFile(id, file) {
+      forgetRecent()
       const now = new Date().toISOString()
       let rec = await findRow(id)
       if (rec) {
@@ -150,14 +203,17 @@ export function createCloudStore(supabase, user) {
       } else {
         rec = await insertRow({ file_key: id, name: file.name, size: file.size, storage_path: await pathFor(id), last_opened: now })
       }
+      forgetRecent() // 그사이 받은 목록이 있었으면 순서가 옛것이라 버림
       cachePut(rec.path, file).catch(() => {})
       return { ...rec, upload: rec.hasFile ? null : track(upload(id, rec.path, file)) }
     },
 
     async touchFile(id) {
+      forgetRecent()
       const rows = check(
         await table().update({ last_opened: new Date().toISOString() }).eq('user_id', uid).eq('file_key', id).select(COLS),
       )
+      forgetRecent()
       return toRecord(rows[0]) ?? null
     },
 
@@ -178,52 +234,31 @@ export function createCloudStore(supabase, user) {
     },
 
     saveState(id, state) {
+      const summary = summarize(state)
+      patchRecent((list) => list.map((r) => (r.id === id ? { ...r, summary } : r)))
       return track(
         table()
-          .update({ state: { ...state, summary: summarize(state) }, updated_at: new Date().toISOString() })
+          .update({ state: { ...state, summary }, updated_at: new Date().toISOString() })
           .eq('user_id', uid)
           .eq('file_key', id)
           .then(check),
       )
     },
 
+    // 돌려주는 배열은 매번 새로 (받는 쪽이 정렬해도 기억한 목록은 그대로)
     async listRecent() {
-      const rows = check(
-        await table()
-          .select(LIST_COLS)
-          .eq('user_id', uid)
-          .neq('file_key', LIBRARY_KEY)
-          .gt('size', 0)
-          .order('last_opened', { ascending: false })
-          .limit(MAX_RECENT),
-      )
-      // 요약이 없거나 예전 모양(검색용 글 notes 없음, 판 v 가 낮음)인 도면만 측정값 전체를 받아 요약하고,
-      // 요약을 서버에 한 번 고쳐 써 둠 (다음부터는 요약만 받음). 그사이 다른 저장이 있었으면 쓰지 않음
-      const isOld = (r) => !Array.isArray(r.summary?.notes) || (r.summary?.v ?? 1) < SUMMARY_VERSION
-      const old = rows.filter(isOld).map((r) => r.file_key)
-      if (old.length) {
-        const full = check(await table().select('file_key, state, updated_at').eq('user_id', uid).in('file_key', old))
-        const byKey = new Map(full.map((r) => [r.file_key, r]))
-        for (const r of rows) {
-          if (!isOld(r) || !byKey.has(r.file_key)) continue
-          const { state, updated_at } = byKey.get(r.file_key)
-          r.summary = summarize(state)
-          if (state)
-            table()
-              .update({ state: { ...state, summary: r.summary } })
-              .eq('user_id', uid)
-              .eq('file_key', r.file_key)
-              .eq('updated_at', updated_at)
-              .then(check)
-              .catch((e) => console.warn(e))
-        }
+      if (!recent || Date.now() - recent.at > RECENT_TTL) {
+        const entry = { at: Date.now(), promise: fetchRecent() }
+        entry.promise.catch(() => {
+          if (recent === entry) recent = null
+        })
+        recent = entry
       }
-      const list = rows.map(toRecord)
-      cachePrune(new Set(list.map((r) => r.path))).catch(() => {})
-      return list
+      return [...(await recent.promise)]
     },
 
     renameFile(id, name) {
+      patchRecent((list) => list.map((r) => (r.id === id ? { ...r, name } : r)))
       return track(table().update({ name }).eq('user_id', uid).eq('file_key', id).then(check))
     },
 
@@ -297,6 +332,7 @@ export function createCloudStore(supabase, user) {
     },
 
     async removeFile(id) {
+      forgetRecent()
       const rec = await findRow(id)
       if (!rec) return
       check(await bucket().remove([rec.path]))
@@ -309,6 +345,7 @@ export function createCloudStore(supabase, user) {
     // 브라우저에만 있던 도면을 서버로 옮기기. 서버에 이미 있으면 서버 쪽 측정값을 그대로 둠.
     // images: 그 도면에 넣은 사진 [{ id, blob }]
     async importLocal(doc, blob, images = []) {
+      forgetRecent()
       let rec = await findRow(doc.id)
       if (!rec) {
         rec = await insertRow({
