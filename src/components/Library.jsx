@@ -260,7 +260,7 @@ function FileRow({ item, isOpen, cloud, folders, folderId, alias, onOpen, onRemo
                 className="w-full min-w-0 rounded border border-brand-400 px-1.5 py-0.5 font-medium text-ink-800 outline-none ring-2 ring-brand-100"
               />
             ) : (
-              <span className="truncate font-medium text-ink-800" title={alias ? `파일 이름: ${item.name}` : item.name}>
+              <span className="truncate font-medium text-ink-800" title={item.name}>
                 {shown}
               </span>
             )}
@@ -268,6 +268,11 @@ function FileRow({ item, isOpen, cloud, folders, folderId, alias, onOpen, onRemo
               <span className="shrink-0 rounded bg-brand-100 px-1.5 py-0.5 text-xs text-brand-700">열려 있음</span>
             )}
           </div>
+          {alias && !editing && (
+            <div className="truncate text-xs text-ink-400" title={item.name}>
+              {item.name}
+            </div>
+          )}
           <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-ink-500">
             <span>{timeAgo(item.lastOpened)}</span>
             <span>· {formatSize(item.size)}</span>
