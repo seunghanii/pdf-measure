@@ -280,3 +280,11 @@ body.folder-reordering * {
   user-select: none;
   -webkit-user-select: none;
 }
+
+/* 옆으로 밀어 보는 줄(폰 툴바 등): 스크롤 막대는 숨김 */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
