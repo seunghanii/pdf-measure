@@ -9,7 +9,7 @@
 // 보관함이 아직 사진을 받지 않게 설정돼 있으면(설정 SQL 을 다시 실행하기 전) 예전처럼 state 에 base64 로 넣고,
 // 예전에 base64 로 넣은 사진은 열 때 보관함으로 옮겨 DB 공간을 비웁니다.
 // 특별한 줄은 모두 size 가 0 이라 실제 도면(size > 0)과 구분됩니다.
-import { cacheDelete, cacheGet, cachePrune, cachePut, summarize } from './storage'
+import { cacheDelete, cacheGet, cachePrune, cachePut, summarize, SUMMARY_VERSION } from './storage'
 import { normalizeLibrary } from './library'
 import { base64ToBlob, blobToBase64 } from './images'
 
@@ -194,9 +194,9 @@ export function createCloudStore(supabase, user) {
           .order('last_opened', { ascending: false })
           .limit(MAX_RECENT),
       )
-      // 요약이 없거나 예전 모양(검색용 글 notes 없음)인 도면만 측정값 전체를 받아 요약하고,
+      // 요약이 없거나 예전 모양(검색용 글 notes 없음, 판 v 가 낮음)인 도면만 측정값 전체를 받아 요약하고,
       // 요약을 서버에 한 번 고쳐 써 둠 (다음부터는 요약만 받음). 그사이 다른 저장이 있었으면 쓰지 않음
-      const isOld = (r) => !Array.isArray(r.summary?.notes)
+      const isOld = (r) => !Array.isArray(r.summary?.notes) || (r.summary?.v ?? 1) < SUMMARY_VERSION
       const old = rows.filter(isOld).map((r) => r.file_key)
       if (old.length) {
         const full = check(await table().select('file_key, state, updated_at').eq('user_id', uid).in('file_key', old))

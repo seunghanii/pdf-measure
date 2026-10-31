@@ -47,5 +47,5 @@ export function categoryTotals(measures, categories) {
   return out
 }
 
-// 기본 이름("길이 3")인지: 기본 이름 항목은 분류가 없으면 검색에 넣지 않음 (검색 결과가 넘치지 않게)
-export const isDefaultName = (name) => /^(길이|면적|각도) \d+$/.test(name ?? '')
+// 기본 이름("길이 3", "메모 2")인지: 기본 이름은 검색에 넣지 않음 (검색 결과가 넘치지 않게)
+export const isDefaultName = (name) => /^(길이|면적|각도|메모) \d+$/.test(name ?? '')
