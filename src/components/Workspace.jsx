@@ -17,10 +17,12 @@ import CalibrationDialog from './CalibrationDialog'
 import DocSearch from './DocSearch'
 import LinkPicker from './LinkPicker'
 import { DEFAULT_MEMO_COLOR, isLinkOnly, memoPhotoIds, memosAt } from '../lib/memo'
+import { DEFAULT_STATUS, cardBoxFor, guessKind, isInst, linksPatch, memoLinks, statusOf } from '../lib/instrument'
 import { MAX_ZOOM, MIN_ZOOM } from '../lib/zoom'
 
 // 메모장은 마크다운 읽는 도구까지 필요할 때만 불러옴
 const MemoPanel = lazy(() => import('./MemoPanel'))
+const InstrumentPanel = lazy(() => import('./InstrumentPanel'))
 
 const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`
 
@@ -59,7 +61,8 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
   }))
   const [croppingId, setCroppingId] = useState(null) // 자르는 중인 사진
   const [memoOpen, setMemoOpen] = useState(null) // 열린 메모장 { id, others: 같은 자리에 겹친 메모 id 들 }
-  const [linkPicking, setLinkPicking] = useState(null) // 도면 연결 고르는 중인 메모 { id, fresh: 방금 그린 범위 }
+  const [linkPicking, setLinkPicking] = useState(null) // 도면 연결 고르는 중인 메모 { id, fresh: 방금 그린 범위, index: 바꿀 연결 (없으면 추가) }
+  const [instPanel, setInstPanel] = useState(null) // 계기 목록 창: 'list' | 'find' (태그 찾기)
   const placeRef = useRef(null) // 뷰어가 사진 넣을 자리를 알려 주는 함수
   const imageInputRef = useRef(null)
   const [saving, setSaving] = useState(false)
@@ -148,7 +151,14 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
       if (ellipse) m.shape = 'ellipse' // 사각형은 예전처럼 shape 없이 저장
       if (isMarkup(type)) {
         m.color = type === 'highlight' ? markupStyle.highlightColor : type === 'memo' ? markupStyle.memoColor : markupStyle.color
-        if (type === 'memo') m.text = ''
+        if (type === 'memo') {
+          m.text = ''
+          // 계기 카드로 그리기: 태그·상태 칸이 있는 메모 (상태 색)
+          if (markupStyle.memoKind === 'inst') {
+            m.inst = { tag: '', kind: '', service: '', loop: '', status: DEFAULT_STATUS }
+            m.color = statusOf(DEFAULT_STATUS).color
+          }
+        }
         if (type === 'text') {
           m.fontSize = markupStyle.fontSize
           m.boxOpacity = markupStyle.boxOpacity
@@ -472,6 +482,48 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
   const memoItem = memoOpen && measurements.find((m) => m.id === memoOpen.id && m.type === 'memo' && !m.hidden)
   const linkItem = linkPicking && measurements.find((m) => m.id === linkPicking.id)
 
+  // ---------- 계기 카드 ----------
+  const instCount = useMemo(() => measurements.filter(isInst).length, [measurements])
+  // 목록에서 이 도면 카드로: 그 자리로 이동(확대·깜빡임)하고 선택. open: 카드(메모장)도 엶 (두 번 누름)
+  const goToCard = useCallback(
+    (row, open) => {
+      const [x, y, w, h] = row.rect
+      jumpToHit({ page: row.page, rect: { x, y, w, h }, hidden: !!row.hidden, itemId: row.id })
+      if (!row.hidden) setSelectedIds([row.id])
+      if (open && !row.hidden) openMemoAt(row.id, null, null, { force: true })
+      else setMemoOpen(null) // 메모장이 그 자리를 가리지 않게
+    },
+    [jumpToHit, openMemoAt],
+  )
+  const setCardStatus = useCallback(
+    (id, status) => {
+      beginEdit()
+      updateItem(id, { inst: { ...measurementsRef.current.find((m) => m.id === id)?.inst, status }, color: statusOf(status).color })
+    },
+    [beginEdit, updateItem],
+  )
+  // 태그 찾기에서 고른 태그 자리마다 계기 카드 만들기 (되돌리기 한 번에 모두 취소)
+  const createCards = useCallback(
+    (hits) => {
+      if (!hits.length) return
+      const color = statusOf(DEFAULT_STATUS).color
+      const cards = hits.map((h, i) => ({
+        id: `${newId()}${i}`,
+        type: 'memo',
+        page: h.page,
+        points: cardBoxFor(h.rect),
+        name: h.tag,
+        text: '',
+        color,
+        inst: { tag: h.tag, kind: guessKind(h.tag), service: '', loop: '', status: DEFAULT_STATUS },
+      }))
+      commit((prev) => [...prev, ...cards])
+      setSelectedIds(cards.map((c) => c.id))
+      setNotice(`계기 카드 ${cards.length}개를 만들었어요. 잘못 만든 것은 Ctrl+Z 로 한 번에 되돌릴 수 있어요.`)
+    },
+    [commit],
+  )
+
   // ids: 지울 항목 id 배열 (기준선은 목록에서 따로 지움)
   const deleteItems = useCallback(
     (ids) => {
@@ -593,6 +645,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
         }
       }
       if (e.key === 'Escape' && memoOpen) setMemoOpen(null)
+      else if (e.key === 'Escape' && instPanel) setInstPanel(null)
       if (e.key === 'Escape' && tool === 'select') setSelectedIds([])
       if (e.key === '+' || e.key === '=') setZoom((z) => Math.min(MAX_ZOOM, z * 1.25))
       if (e.key === '-') setZoom((z) => Math.max(MIN_ZOOM, z / 1.25))
@@ -607,7 +660,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [active, cropping, deleteItems, jumpTo, memoOpen, pageNum, pdfDoc, pendingCalibration, savePdf, selectedIds, setSidebarOpen, sidebarOpen, tool, undo])
+  }, [active, cropping, deleteItems, instPanel, jumpTo, memoOpen, pageNum, pdfDoc, pendingCalibration, savePdf, selectedIds, setSidebarOpen, sidebarOpen, tool, undo])
 
   const visibleMeasurements = useMemo(() => measurements.filter((m) => !m.hidden), [measurements])
 
@@ -674,7 +727,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
                   setMemoOpen(null)
                   setLinkPicking({ id: selMemos[0].id })
                 },
-                linked: !!selMemos[0].link,
+                linked: memoLinks(selMemos[0]).length > 0,
               }
             : null
         }
@@ -740,6 +793,28 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
             onDelete={deleteItems}
             textIndex={textIndex}
           />
+          {instPanel && (
+            <Suspense fallback={null}>
+              <InstrumentPanel
+                tab={instPanel}
+                onTab={setInstPanel}
+                onClose={() => setInstPanel(null)}
+                measurements={measurements}
+                store={store}
+                docId={doc.id}
+                docName={fileName}
+                textIndex={textIndex}
+                onGoHere={goToCard}
+                onGoOther={(row) => {
+                  const [x, y, w, h] = row.rect
+                  onOpenLink?.({ id: row.docId, name: row.docName, page: row.page, rect: { x, y, w, h } })
+                }}
+                onSetStatus={setCardStatus}
+                onPreview={(hit) => jumpToHit({ page: hit.page, rect: hit.rect })}
+                onCreateCards={createCards}
+              />
+            </Suspense>
+          )}
           {memoItem && (
             <Suspense fallback={null}>
               <MemoPanel
@@ -754,7 +829,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
                   deleteItems([memoItem.id])
                 }}
                 onOpenLink={onOpenLink}
-                onPickLink={() => setLinkPicking({ id: memoItem.id })}
+                onPickLink={(index) => setLinkPicking({ id: memoItem.id, index })}
                 store={store}
                 docId={doc.id}
                 onNotice={setNotice}
@@ -807,6 +882,8 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
           onApplyRatio={applyRatio}
           onResetCalibration={() => setCalibration(null)}
           fileName={fileName}
+          instCount={instCount}
+          onOpenInstruments={setInstPanel}
           top={
             <DocSearch
               ref={searchRef}
@@ -825,22 +902,24 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
           store={store}
           currentId={doc.id}
           currentName={fileName}
-          initial={linkItem.link}
+          initial={linkPicking.index != null ? memoLinks(linkItem)[linkPicking.index] : null}
           onCancel={() => {
             // 방금 그린 범위에서 연결을 취소하면 빈 범위는 남기지 않음
-            if (linkPicking.fresh && !linkItem.link && !String(linkItem.text ?? '').trim()) deleteItems([linkItem.id])
+            if (linkPicking.fresh && !memoLinks(linkItem).length && !linkItem.inst && !String(linkItem.text ?? '').trim()) deleteItems([linkItem.id])
             setLinkPicking(null)
           }}
           onUnlink={
-            linkItem.link
+            linkPicking.index != null
               ? () => {
-                  editMemo(linkItem.id, { link: null })
+                  editMemo(linkItem.id, linksPatch(memoLinks(linkItem).filter((_, i) => i !== linkPicking.index)))
                   setLinkPicking(null)
                 }
               : null
           }
           onConfirm={(link) => {
-            editMemo(linkItem.id, { link })
+            const links = memoLinks(linkItem)
+            const next = linkPicking.index != null ? links.map((l, i) => (i === linkPicking.index ? link : l)) : [...links, link]
+            editMemo(linkItem.id, linksPatch(next))
             setLinkPicking(null)
           }}
         />

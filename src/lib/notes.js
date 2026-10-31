@@ -30,6 +30,17 @@ export function noteItems(measurements, categories) {
       // 메모 제목(이름)도 찾히게 앞에 붙임: "제목 · 글". 기본 이름("메모 3")은 넣지 않음
       const title = isDefaultName(m.name) ? '' : String(m.name ?? '').trim()
       if (title) s = s.trim() ? `${title} · ${s}` : title
+      // 계기 카드: 태그·종류·서비스·루프 번호도 찾히게 맨 앞에 (제목이 태그와 같으면 한 번만)
+      if (m.inst) {
+        const i = m.inst
+        const head = [i.tag, i.kind, i.service, i.loop && `루프 ${i.loop}`]
+          .map((v) => String(v ?? '').trim())
+          .filter(Boolean)
+        if (head.length) {
+          if (title && title === head[0]) s = s.slice(title.length).replace(/^ · /, '')
+          s = [head.join(' · '), s.trim()].filter(Boolean).join(' · ')
+        }
+      }
     }
     s = s
       .replace(/\s+/g, ' ')

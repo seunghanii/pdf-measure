@@ -4,6 +4,7 @@
 // (PR #18~#28 판은 사진을 글 아래 칸(images)에 따로 모았음. 그런 메모는 열 때 글 끝으로 옮김)
 import { rectOf } from './markup'
 import { markdownPlainLines } from './memoPlain'
+import { memoLinks } from './instrument'
 
 export const MEMO_COLORS = ['#f59e0b', '#2563eb', '#16a34a', '#db2777', '#64748b']
 export const DEFAULT_MEMO_COLOR = MEMO_COLORS[0]
@@ -29,18 +30,26 @@ export function migrateMemo(m) {
   return { text: [text, ...lines].filter((l, i) => l || i > 0).join('\n'), images: [] }
 }
 
-// 메모 내용이 비어 있고 도면만 연결된 범위는 누르면 바로 그 도면이 열림
-export const isLinkOnly = (m) => !!m.link && !String(m.text ?? '').trim() && !memoPhotoIds(m).length
+// 메모 내용이 비어 있고 도면 하나만 연결된 범위는 누르면 바로 그 도면이 열림 (계기 카드는 늘 카드가 열림)
+export const isLinkOnly = (m) => !m.inst && memoLinks(m).length === 1 && !String(m.text ?? '').trim() && !memoPhotoIds(m).length
 
 // 목록·툴팁에 보여 줄 한 줄 요약
 export function memoSummary(m) {
+  if (m.inst) {
+    const i = m.inst
+    // 이름이 태그와 같으면 (목록에서 이름 아래 줄로 보일 때) 태그는 한 번만
+    const tag = String(i.tag ?? '').trim()
+    const head = [tag !== String(m.name ?? '').trim() && tag, i.kind, i.service].map((v) => String(v || '').trim()).filter(Boolean).join(' · ')
+    if (head) return head
+  }
   const first = markdownPlainLines(String(m.text ?? '').replace(/!\[[^\]]*\]\(img:[^)]*\)/g, ''))
     .map((l) => l.trim())
     .find(Boolean)
   if (first) return first
   const photos = memoPhotoIds(m).length
   if (photos) return `사진 ${photos}장`
-  if (m.link) return `→ ${m.link.name}${m.link.page > 1 ? ` ${m.link.page}쪽` : ''}`
+  const links = memoLinks(m)
+  if (links.length) return `→ ${links[0].name}${links[0].page > 1 ? ` ${links[0].page}쪽` : ''}${links.length > 1 ? ` 외 ${links.length - 1}개` : ''}`
   return ''
 }
 

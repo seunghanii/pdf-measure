@@ -269,6 +269,23 @@ function MarkupShape({ m, zoom, selected, showHandles, showResize, draft }) {
           strokeWidth={1.2}
           strokeDasharray="5 3"
         />
+        {/* 계기 카드: 범위 위에 태그 번호 */}
+        {!draft && m.inst?.tag && (
+          <text
+            x={r.x + 1}
+            y={r.y - 4}
+            fontSize="11"
+            fontWeight="700"
+            fill={color}
+            stroke="white"
+            strokeWidth="3"
+            paintOrder="stroke"
+            strokeLinejoin="round"
+            pointerEvents="none"
+          >
+            {m.inst.tag}
+          </text>
+        )}
         {!draft && r.w > s + 6 && r.h > s + 6 && (
           <g className="memo-icon" pointerEvents="none">
             <rect x={ix} y={iy} width={s} height={s} rx={3} fill={color} />

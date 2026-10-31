@@ -207,13 +207,14 @@ function Session({ store, user, onLogout, onChangePassword }) {
     [openDoc, refreshRecent],
   )
 
-  // 메모 범위에 연결한 도면 열기 (이미 열려 있으면 그 탭으로), 고른 페이지로 이동
+  // 메모 범위에 연결한 도면 열기 (이미 열려 있으면 그 탭으로), 고른 페이지(와 자리)로 이동
   const openLinked = useCallback(
     async (link) => {
       if (!link?.id) return
       await openRecent({ id: link.id, name: link.name })
-      if (docsRef.current.some((d) => d.id === link.id) || link.page > 1)
-        setSearchJump({ id: link.id, page: Math.max(1, link.page || 1), nonce: Date.now() })
+      // rect: 계기 목록에서 다른 도면의 카드로 갈 때 그 자리 (검색 이동처럼 확대하고 깜빡임)
+      if (link.rect || docsRef.current.some((d) => d.id === link.id) || link.page > 1)
+        setSearchJump({ id: link.id, page: Math.max(1, link.page || 1), rect: link.rect, nonce: Date.now() })
     },
     [openRecent],
   )

@@ -5,6 +5,8 @@ import { setMemoDock, useMemoDock } from '../lib/memoDock'
 import { htmlToMarkdown } from '../lib/memoMarkdown'
 import MemoEditor, { MemoHelp } from './MemoEditor'
 import PhotoViewer from './PhotoViewer'
+import { InstFields, RelatedDocs } from './InstCard'
+import { DEFAULT_STATUS, statusOf } from '../lib/instrument'
 
 // 메모 사진은 자세히 볼 수 있게 도면 사진보다 크게 저장
 const MEMO_PHOTO_SIDE = 2400
@@ -181,7 +183,11 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
   }
 
   const color = memo.color ?? '#f59e0b'
-  const link = memo.link
+  // 계기 카드로 만들기 / 계기 정보 빼기 (빼도 글·사진·연결은 그대로)
+  const toggleInst = () => {
+    if (memo.inst) onChange({ inst: null })
+    else onChange({ inst: { tag: '', kind: '', service: '', loop: '', status: DEFAULT_STATUS }, color: statusOf(DEFAULT_STATUS).color })
+  }
   const urls = viewing ? viewing.ids.map((id) => cachedImageUrl(id)) : []
 
   return (
@@ -219,6 +225,17 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
           className="min-w-0 flex-1 rounded px-1 py-0.5 text-sm font-semibold text-ink-800 hover:bg-ink-50 focus:bg-white focus:outline focus:outline-brand-300"
           aria-label="메모 이름"
         />
+        <button
+          onClick={toggleInst}
+          className={`flex shrink-0 items-center gap-1 rounded px-1.5 py-1 text-xs font-medium ${memo.inst ? 'text-ink-400 hover:bg-ink-100 hover:text-ink-700' : 'text-brand-700 hover:bg-brand-50'}`}
+          title={memo.inst ? '계기 정보 칸 빼기 (글·사진·연결은 남아요)' : '태그·종류·상태 칸이 있는 계기 카드로 만들기'}
+        >
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="8" />
+            <path d="M4 12h16" />
+          </svg>
+          {memo.inst ? '' : '계기 카드'}
+        </button>
         <button
           onClick={() => setMemoDock(bottom ? 'right' : 'bottom')}
           className="rounded p-1 text-ink-400 hover:bg-ink-100 hover:text-ink-700"
@@ -266,34 +283,11 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
         </div>
       )}
 
-      {/* 연결된 도면 */}
-      <div className="flex items-center gap-2 border-b border-ink-100 px-3 py-1.5 text-xs">
-        {link ? (
-          <>
-            <button
-              onClick={() => onOpenLink(link)}
-              className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md bg-brand-50 px-2 py-1 text-left text-brand-700 hover:bg-brand-100"
-              title="연결된 도면을 새 탭으로 열기"
-            >
-              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <path d="M14 4h6v6M20 4l-9 9M18 14v5H5V6h5" />
-              </svg>
-              <span className="truncate font-medium">{link.name}</span>
-              {link.page > 1 && <span className="shrink-0 text-brand-500">{link.page}쪽</span>}
-            </button>
-            <button onClick={onPickLink} className="shrink-0 text-ink-500 hover:underline">
-              바꾸기
-            </button>
-          </>
-        ) : (
-          <button onClick={onPickLink} className="flex items-center gap-1 text-ink-500 hover:text-ink-800" title="이 메모에서 열 수 있는 도면 연결">
-            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1" />
-            </svg>
-            도면 연결
-          </button>
-        )}
-      </div>
+      {/* 계기 카드 칸 (계기 카드일 때만) */}
+      {memo.inst && <InstFields memo={memo} onChange={onChange} />}
+
+      {/* 관련 도면 (여러 개) */}
+      <RelatedDocs memo={memo} onChange={onChange} onOpen={onOpenLink} onPick={onPickLink} />
 
       {/* 글과 사진 (같이 스크롤) */}
       <div className="min-h-0 flex-1 overflow-y-auto">
