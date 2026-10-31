@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { cachedImageUrl, getImageBlob, isImageFile, newImageId, prepareImage, rememberImage } from '../lib/images'
 import { memoSummary, migrateMemo } from '../lib/memo'
 import { setMemoDock, useMemoDock } from '../lib/memoDock'
@@ -6,6 +6,8 @@ import { htmlToMarkdown } from '../lib/memoMarkdown'
 import MemoEditor, { MemoHelp } from './MemoEditor'
 import PhotoViewer from './PhotoViewer'
 import { InstFields, RelatedDocs } from './InstCard'
+import ExcelFiles from './ExcelFiles'
+import { MAX_EXCEL_BYTES, XLSX_TYPE, isExcelFile, isOldExcel, newFileId } from '../lib/excel'
 import { DEFAULT_STATUS, statusOf } from '../lib/instrument'
 
 // 메모 사진은 자세히 볼 수 있게 도면 사진보다 크게 저장
@@ -37,7 +39,7 @@ function loadBottomH() {
 
 // 메모장. 도면 오른쪽 위(또는 아래에 길게, memoDock 설정)에 떠 있고, 글을 바로 쓰고 사진을 글 사이에 넣습니다.
 // others: 같은 자리에 겹친 메모들 (누르면 그 메모로 바뀜)
-export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, onDelete, onOpenLink, onPickLink, store, docId, onNotice }) {
+export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, onDelete, onOpenLink, onPickLink, store, docId, onNotice, kinds, onAddKind }) {
   // 예전(사진을 아래 칸에 모아 둔) 메모는 처음 열 때 사진을 글 끝으로 옮김
   const [migrated] = useState(() => migrateMemo(memo))
   const [initialText] = useState(() => migrated?.text ?? memo.text ?? '')
@@ -51,6 +53,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
   const editorRef = useRef(null)
   const editorApi = useRef(null)
   const fileRef = useRef(null)
+  const excelRef = useRef(null)
   const pending = useRef(false) // 아직 저장 안 된 고침이 있음
   const saveTimer = useRef(0)
   const lastEditor = useRef(null)
@@ -116,6 +119,36 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
     // 글 사이 커서 자리에 넣음 (글과 함께 저장됨)
     if (added.length) editorApi.current?.insertPhotos(added)
   }
+
+  // 엑셀 첨부: 파일은 사진 저장소에 그대로 두고, 메모에는 보여 줄 시트·범위만 (lib/excel.js)
+  const filesRef = useRef(memo.files)
+  useLayoutEffect(() => {
+    filesRef.current = memo.files
+  })
+  const attachExcel = (list) => {
+    const added = []
+    for (const file of list) {
+      if (isOldExcel(file)) {
+        onNotice('예전 엑셀(.xls)은 읽을 수 없어요. 엑셀에서 .xlsx 로 다시 저장해서 넣어 주세요.')
+        continue
+      }
+      if (!isExcelFile(file)) continue
+      if (file.size > MAX_EXCEL_BYTES) {
+        onNotice(`"${file.name}" 은(는) 10MB 가 넘어 첨부할 수 없어요.`)
+        continue
+      }
+      const id = newFileId()
+      const blob = new Blob([file], { type: XLSX_TYPE })
+      rememberImage(id, blob) // 이번 창에서 바로 읽고, 정리 대상에서도 빠지게
+      store.saveImage(docId, id, blob).catch((e) => {
+        console.warn('엑셀 저장 실패', e)
+        onNotice('엑셀 파일을 저장하지 못했어요. 인터넷 연결을 확인하고 다시 넣어 주세요.')
+      })
+      added.push({ id, name: file.name })
+    }
+    if (added.length) onChange({ files: [...(filesRef.current ?? []), ...added] })
+  }
+  const loadBlob = useCallback((id) => getImageBlob({ store, docId }, id), [store, docId])
 
   // 왼쪽 변·아래 변·왼쪽 아래 모서리를 끌어 크기 조절 (메모장은 오른쪽 위에 붙어 있음)
   const startResize = (e, dir) => {
@@ -186,7 +219,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
   // 계기 카드로 만들기 / 계기 정보 빼기 (빼도 글·사진·연결은 그대로)
   const toggleInst = () => {
     if (memo.inst) onChange({ inst: null })
-    else onChange({ inst: { tag: '', kind: '', service: '', loop: '', status: DEFAULT_STATUS }, color: statusOf(DEFAULT_STATUS).color })
+    else onChange({ inst: { tag: '', kind: '', status: DEFAULT_STATUS }, color: statusOf(DEFAULT_STATUS).color })
   }
   const urls = viewing ? viewing.ids.map((id) => cachedImageUrl(id)) : []
 
@@ -210,11 +243,14 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
         e.stopPropagation()
       }}
       onDrop={(e) => {
-        const files = [...e.dataTransfer.files].filter(isImageFile)
+        const all = [...e.dataTransfer.files]
+        const files = all.filter(isImageFile)
+        const sheets = all.filter((f) => isExcelFile(f) || isOldExcel(f))
         e.stopPropagation()
-        if (!files.length) return
+        if (!files.length && !sheets.length) return
         e.preventDefault()
-        addImages(files)
+        if (files.length) addImages(files)
+        if (sheets.length) attachExcel(sheets)
       }}
     >
       {/* 머리: 이름, 닫기 */}
@@ -284,13 +320,14 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
       )}
 
       {/* 계기 카드 칸 (계기 카드일 때만) */}
-      {memo.inst && <InstFields memo={memo} onChange={onChange} />}
+      {memo.inst && <InstFields memo={memo} onChange={onChange} kinds={kinds} onAddKind={onAddKind} />}
 
       {/* 관련 도면 (여러 개) */}
       <RelatedDocs memo={memo} onChange={onChange} onOpen={onOpenLink} onPick={onPickLink} />
 
       {/* 글과 사진 (같이 스크롤) */}
       <div className="min-h-0 flex-1 overflow-y-auto">
+        <ExcelFiles files={memo.files} onChangeFiles={(files) => onChange({ files })} loadBlob={loadBlob} />
         <div onBlur={flush}>
           <MemoEditor
             initial={initialText}
@@ -319,7 +356,6 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
           </svg>
           사진 넣기
         </button>
-        <MemoHelp />
         <input
           ref={fileRef}
           type="file"
@@ -331,6 +367,28 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
             e.target.value = ''
           }}
         />
+        <button
+          onClick={() => excelRef.current?.click()}
+          className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-ink-600 ring-1 ring-ink-300 hover:bg-ink-100"
+          title="엑셀(.xlsx) 첨부. 시트와 행·열 범위를 정해 메모장에서 바로 볼 수 있어요 (끌어다 놓기도 돼요)"
+        >
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M6 3h8l4 4v14H6zM14 3v4h4M9 11l5 6M14 11l-5 6" />
+          </svg>
+          엑셀
+        </button>
+        <input
+          ref={excelRef}
+          type="file"
+          accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            attachExcel([...(e.target.files ?? [])])
+            e.target.value = ''
+          }}
+        />
+        <MemoHelp />
         <button onClick={onDelete} className="ml-auto rounded px-2 py-0.5 text-xs text-danger-500 hover:bg-danger-50">
           메모 지우기
         </button>

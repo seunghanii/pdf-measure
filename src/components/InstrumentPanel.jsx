@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { INST_STATUSES, compareTags, downloadInstCsv, findTags, guessKind, instRows, statusOf, tagKey } from '../lib/instrument'
+import { INST_STATUSES, compareTags, downloadInstCsv, findTags, guessKind, instRows, kindDesc, statusOf, tagKey } from '../lib/instrument'
 import { textHas } from '../lib/textIndex'
 import { useIndexerStatus } from '../lib/indexer'
 
@@ -20,6 +20,7 @@ export default function InstrumentPanel({
   onSetStatus, // (id, status)
   onPreview, // (hit) 찾은 태그 자리 보기
   onCreateCards, // (hits)
+  kinds, // 계기 종류 목록
 }) {
   return (
     <div
@@ -54,7 +55,7 @@ export default function InstrumentPanel({
       {tab === 'list' ? (
         <InstList measurements={measurements} store={store} docId={docId} docName={docName} onGoHere={onGoHere} onGoOther={onGoOther} onSetStatus={onSetStatus} onFind={() => onTab('find')} />
       ) : (
-        <TagFinder docId={docId} measurements={measurements} textIndex={textIndex} onPreview={onPreview} onCreate={onCreateCards} onDone={() => onTab('list')} />
+        <TagFinder docId={docId} kinds={kinds} measurements={measurements} textIndex={textIndex} onPreview={onPreview} onCreate={onCreateCards} onDone={() => onTab('list')} />
       )}
     </div>
   )
@@ -93,7 +94,7 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
   const matched = useMemo(() => {
     const q = query.trim()
     if (!q) return all
-    return all.filter((r) => textHas([r.tag, r.kind, r.service, r.loop, r.docName, ...r.docs.map((d) => `${d.role} ${d.name}`)].join(' '), q))
+    return all.filter((r) => textHas([r.tag, r.kind, kindDesc(r.tag), r.docName, ...r.docs.map((d) => `${d.role} ${d.name}`)].join(' '), q))
   }, [all, query])
   const counts = useMemo(() => {
     const c = new Map()
@@ -117,7 +118,7 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="태그·종류·서비스·루프 검색"
+            placeholder="태그·종류 검색 (예: FT, 1001)"
             className="min-w-0 flex-1 rounded-md border border-ink-300 px-2.5 py-1 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
             autoFocus
           />
@@ -166,7 +167,7 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
               ))}
             </div>
             <span className="shrink-0 tabular-nums">
-              루프 체크 {done}/{matched.length} ({Math.round((done / matched.length) * 100)}%)
+              Loop Check {done}/{matched.length} ({Math.round((done / matched.length) * 100)}%)
             </span>
           </div>
         )}
@@ -196,8 +197,7 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
             <thead className="sticky top-0 bg-ink-50 text-xs text-ink-500">
               <tr>
                 <th className="px-3 py-1.5 font-semibold">태그</th>
-                <th className="px-2 py-1.5 font-semibold">종류 · 서비스</th>
-                <th className="px-2 py-1.5 font-semibold">루프</th>
+                <th className="px-2 py-1.5 font-semibold">종류</th>
                 <th className="px-2 py-1.5 font-semibold">상태</th>
                 <th className="px-2 py-1.5 font-semibold">{scope === 'all' ? '도면 · 쪽' : '쪽'}</th>
               </tr>
@@ -228,10 +228,8 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
                       )}
                     </td>
                     <td className="max-w-44 px-2 py-1.5 align-top">
-                      <div className="truncate text-ink-700">{r.kind || '—'}</div>
-                      {r.service && <div className="truncate text-xs text-ink-400">{r.service}</div>}
+                      <div className="truncate font-semibold text-ink-700">{r.kind || '—'}</div>
                     </td>
-                    <td className="px-2 py-1.5 align-top text-ink-600 tabular-nums">{r.loop || '—'}</td>
                     <td className="px-2 py-1.5 align-top" onClick={(e) => here && e.stopPropagation()}>
                       {here ? (
                         <select
@@ -284,7 +282,7 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
 }
 
 // ---------- 태그 찾기 ----------
-function TagFinder({ docId, measurements, textIndex, onPreview, onCreate, onDone }) {
+function TagFinder({ docId, kinds, measurements, textIndex, onPreview, onCreate, onDone }) {
   const indexing = useIndexerStatus().running
   const found = useMemo(() => findTags(textIndex), [textIndex])
   // 이미 카드가 있는 태그 (어느 쪽이든)
@@ -302,7 +300,7 @@ function TagFinder({ docId, measurements, textIndex, onPreview, onCreate, onDone
   const list = useMemo(() => {
     const base = showExisting ? found : fresh
     const q = query.trim()
-    return q ? base.filter((h) => textHas(`${h.tag} ${guessKind(h.tag)}`, q)) : base
+    return q ? base.filter((h) => textHas(`${h.tag} ${kindDesc(h.tag)}`, q)) : base
   }, [found, fresh, showExisting, query])
   const selectable = list.filter((h) => !existing.has(tagKey(h.tag)))
   const pickedHits = fresh.filter((h) => picked.has(keyOf(h)))
@@ -378,7 +376,8 @@ function TagFinder({ docId, measurements, textIndex, onPreview, onCreate, onDone
                   <input type="checkbox" checked={!has && picked.has(k)} disabled={has} onChange={() => toggle(h)} aria-label={`${h.tag} 고르기`} />
                   <button onClick={() => onPreview(h)} className="flex min-w-0 flex-1 items-baseline gap-2 text-left" title="도면에서 이 자리 보기">
                     <span className="font-semibold text-ink-800 tabular-nums">{h.tag}</span>
-                    <span className="truncate text-xs text-ink-500">{guessKind(h.tag)}</span>
+                    <span className="shrink-0 text-xs font-semibold text-ink-600">{guessKind(h.tag, kinds)}</span>
+                    <span className="truncate text-xs text-ink-400">{kindDesc(h.tag)}</span>
                     {has && <span className="shrink-0 text-[11px] text-ok-700">카드 있음</span>}
                     <span className="ml-auto shrink-0 text-xs text-ink-400 tabular-nums">{h.page}쪽</span>
                   </button>

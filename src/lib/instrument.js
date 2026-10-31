@@ -1,5 +1,7 @@
 // 계기 카드: 메모 범위 하나를 계기(태그) 하나로 씁니다.
-// 메모 항목에 inst: { tag, kind, service, loop, status } 를 더하면 계기 카드가 됨 (없으면 예전 메모 그대로)
+// 메모 항목에 inst: { tag, kind, status } 를 더하면 계기 카드가 됨 (없으면 예전 메모 그대로)
+// kind 는 계기 종류 약어(FT, PT …). 목록은 KIND_PRESETS + 사용자가 더한 것(폴더 정보 library.kinds, 모든 도면 공통)
+// (PR #44 판에 있던 service·loop 는 화면에서 뺐고, 이미 적힌 값은 검색에만 남음)
 // 관련 문서(Hook-up, 루프도, 데이터시트 …)는 links: [{ id, name, page, role }] 로 여러 개.
 // 예전 메모의 link(도면 하나)도 그대로 읽고, 고칠 때 links 로 옮기면서 link 에는 첫 번째를 남겨 둠.
 // 상태 색은 분류처럼 항목 color 에 함께 넣어 두어 그리기 코드가 상태 목록을 몰라도 되게 함.
@@ -7,30 +9,20 @@ import { rectOf } from './markup'
 
 export const INST_STATUSES = [
   { id: 'pre', label: '설치 전', color: '#64748b' },
-  { id: 'installed', label: '설치', color: '#2563eb' },
-  { id: 'wired', label: '결선', color: '#d97706' },
-  { id: 'checked', label: '루프 체크 완료', color: '#16a34a' },
+  // id 는 PR #44 판 그대로 (설치·결선·루프 체크 완료 → 이름만 현장 용어로)
+  { id: 'installed', label: 'Cable Pulling', color: '#2563eb' },
+  { id: 'wired', label: 'Termination', color: '#d97706' },
+  { id: 'checked', label: 'Loop Check', color: '#16a34a' },
 ]
 export const DEFAULT_STATUS = 'pre'
 export const statusOf = (id) => INST_STATUSES.find((s) => s.id === id) ?? INST_STATUSES[0]
 
 export const DOC_ROLES = ['Hook-up', '루프도', '데이터시트', 'P&ID', '결선도', '기타']
 
-export const KIND_PRESETS = [
-  '유량 전송기',
-  '압력 전송기',
-  '차압 전송기',
-  '온도 전송기',
-  '레벨 전송기',
-  '압력계',
-  '온도계',
-  '레벨 게이지',
-  '조절 밸브',
-  '차단 밸브',
-  '안전 밸브',
-  '리밋 스위치',
-  '분석기',
-]
+export const KIND_PRESETS = ['FE', 'FT', 'LI', 'LS', 'LT', 'PDI', 'PDT', 'PI', 'PT', 'TI', 'TT', 'TW']
+
+// 기본 목록 + 사용자가 더한 종류 (겹치지 않게)
+export const kindList = (custom) => [...new Set([...KIND_PRESETS, ...(custom ?? [])])]
 
 export const isInst = (m) => m?.type === 'memo' && !!m.inst
 
@@ -105,7 +97,14 @@ const FUNCTION = [
 ]
 const SPECIAL = { PSV: '안전 밸브', PRV: '감압 밸브', XV: '차단 밸브', HV: '수동 밸브', ZS: '리밋 스위치', ZSO: '리밋 스위치 (열림)', ZSC: '리밋 스위치 (닫힘)', PG: '압력계', TG: '온도계', LG: '레벨 게이지', FO: '오리피스', TW: '써모웰' }
 
-export function guessKind(tag) {
+// 태그 앞 글자가 계기 종류 목록에 있으면 그 약어 ("FT-1001" → "FT"), 없으면 ''
+export function guessKind(tag, kinds = KIND_PRESETS) {
+  const letters = String(tag ?? '').toUpperCase().match(/^[A-Z]+/)?.[0]
+  return letters && kinds.includes(letters) ? letters : ''
+}
+
+// 태그 글자로 계기 이름 풀이 (ISA 5.1, 도움말용: "FT" → "유량 전송기")
+export function kindDesc(tag) {
   const letters = String(tag ?? '').toUpperCase().match(/^[A-Z]+/)?.[0]
   if (!letters || letters.length < 2) return ''
   if (SPECIAL[letters]) return SPECIAL[letters]
@@ -208,8 +207,6 @@ export function instRows(measurements) {
       rect: [r1(r.x), r1(r.y), r1(r.w), r1(r.h)],
       tag: i.tag ?? '',
       kind: i.kind ?? '',
-      service: i.service ?? '',
-      loop: i.loop ?? '',
       status: i.status ?? DEFAULT_STATUS,
       docs: memoLinks(m).map((l) => ({ id: l.id, name: l.name, page: l.page ?? 1, role: l.role ?? '' })),
       hidden: m.hidden ? 1 : 0,
@@ -226,8 +223,8 @@ export const compareTags = (a, b) => collator.compare(a.tag || '￿', b.tag || '
 const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
 
 export function downloadInstCsv(rows, fileBase) {
-  const head = ['태그', '계기 종류', '서비스', '루프 번호', '상태', '도면', '페이지', '관련 문서']
-  const lines = [head, ...rows.map((r) => [r.tag, r.kind, r.service, r.loop, statusOf(r.status).label, r.docName, r.page, r.docs.map((d) => `${d.role ? `${d.role}: ` : ''}${d.name}${d.page > 1 ? ` (${d.page}쪽)` : ''}`).join('; ')])]
+  const head = ['태그', '계기 종류', '상태', '도면', '페이지', '관련 문서']
+  const lines = [head, ...rows.map((r) => [r.tag, r.kind, statusOf(r.status).label, r.docName, r.page, r.docs.map((d) => `${d.role ? `${d.role}: ` : ''}${d.name}${d.page > 1 ? ` (${d.page}쪽)` : ''}`).join('; ')])]
   const csv = lines.map((l) => l.map(cell).join(',')).join('\r\n')
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }) // 엑셀에서 한글이 깨지지 않게 BOM
   const a = document.createElement('a')

@@ -20,6 +20,7 @@
     "pdfjs-dist": "^6.3.289",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "read-excel-file": "^9.3.14",
     "tailwindcss": "^4.3.3",
     "tesseract.js": "^7.0.0"
   },
