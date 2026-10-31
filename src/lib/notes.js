@@ -24,7 +24,12 @@ export function noteItems(measurements, categories) {
     }
     if ((m.type !== 'text' && m.type !== 'memo') || m.hidden || !m.points?.length) continue
     let s = String(m.text ?? '').replace(/!\[[^\]]*\]\(img:[^)]*\)/g, '') // 예전 메모 글 속 사진 표시
-    if (m.type === 'memo') s = markdownPlainLines(s).join(' ') // 메모는 마크다운 기호(#, |, ** 등)를 빼고
+    if (m.type === 'memo') {
+      s = markdownPlainLines(s).join(' ') // 메모는 마크다운 기호(#, |, ** 등)를 빼고
+      // 메모 제목(이름)도 찾히게 앞에 붙임: "제목 · 글". 기본 이름("메모 3")은 넣지 않음
+      const title = isDefaultName(m.name) ? '' : String(m.name ?? '').trim()
+      if (title) s = s.trim() ? `${title} · ${s}` : title
+    }
     s = s
       .replace(/\s+/g, ' ')
       .trim()

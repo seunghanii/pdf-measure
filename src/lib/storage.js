@@ -114,8 +114,11 @@ export async function listRecent() {
 }
 
 // 홈 목록에 보여 줄 요약: 측정·마크업 개수와 축척, 홈 검색용 직접 넣은 글(notes)
+// v: 요약 모양 판. 검색에 넣는 글이 바뀌면 올려서 예전 요약을 한 번 다시 쓰게 함 (2: 메모 제목 추가)
+export const SUMMARY_VERSION = 2
 export function summarize(state) {
   return {
+    v: SUMMARY_VERSION,
     count: state?.measurements?.length ?? 0,
     calibration: state?.calibration ?? null,
     notes: noteItems(state?.measurements, state?.categories),
