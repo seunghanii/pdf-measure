@@ -30,6 +30,7 @@ export default function EmptyState({
   const [folderDialog, setFolderDialog] = useState(null) // {} = 새 폴더, 폴더 객체 = 고치기
   const fetching = recent === null // 서버에서 목록을 불러오는 중
   const list = recent ?? []
+  const openFolder = library.folders.find((f) => f.id === openFolderId) ?? null
   const hasRecent = list.length > 0 || fetching || library.folders.length > 0
 
   return (
@@ -82,11 +83,12 @@ export default function EmptyState({
               <h2 className="text-xs font-semibold tracking-wide text-ink-500">{cloud ? '서버에 저장된 도면' : '최근 연 도면'}</h2>
               {!fetching && (
                 <button
-                  onClick={() => setFolderDialog({})}
+                  onClick={() => setFolderDialog({ parent: openFolder?.id ?? null })}
+                  title={openFolder ? `"${openFolder.name}" 안에 하위 폴더 만들기` : '새 폴더 만들기'}
                   className="flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-medium text-brand-600 transition-colors hover:bg-brand-50"
                 >
                   <FolderIcon className="h-4 w-4" color="currentColor" />
-                  새 폴더
+                  {openFolder ? '하위 폴더' : '새 폴더'}
                 </button>
               )}
             </div>
@@ -136,10 +138,11 @@ export default function EmptyState({
       {folderDialog && (
         <FolderDialog
           folder={folderDialog}
+          library={library}
           onClose={() => setFolderDialog(null)}
-          onSave={(name, color) => {
+          onSave={(name, color, parent) => {
             onUpdateLibrary((lib) =>
-              folderDialog.id ? editFolder(lib, folderDialog.id, { name, color }) : addFolder(lib, name, color),
+              folderDialog.id ? editFolder(lib, folderDialog.id, { name, color, parent }) : addFolder(lib, name, color, parent),
             )
             setFolderDialog(null)
           }}

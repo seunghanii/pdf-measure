@@ -5,7 +5,8 @@ const MAX_ZOOM = 8
 // 사진 크게 보기. 휠·+/− 버튼으로 확대(마우스 위치 기준), 끌어서 이동, 더블클릭으로 확대/맞춤,
 // ←/→ 로 다른 사진, Esc 로 닫기.
 // urls: 사진 주소 목록 (아직 못 불러온 것은 null)
-export default function PhotoViewer({ urls, index, onIndex, onClose }) {
+// 도면 미리보기에도 씀: title(왼쪽 위 이름), actions(오른쪽 위 더 넣을 버튼), unit('사진'/'쪽'), loadingText
+export default function PhotoViewer({ urls, index, onIndex, onClose, title, actions, unit = '사진', loadingText = '사진 불러오는 중…' }) {
   const boxRef = useRef(null)
   // { s: 맞춤 대비 배율, x, y: 왼쪽 위 위치(px), fit: 화면 맞춤 배율, w, h: 사진 원래 크기 }
   const [view, setView] = useState(null)
@@ -127,10 +128,16 @@ export default function PhotoViewer({ urls, index, onIndex, onClose }) {
           }
         />
       ) : (
-        <div className="absolute inset-0 flex items-center justify-center text-sm text-white/60">사진 불러오는 중…</div>
+        <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-white/60">{loadingText}</div>
       )}
 
+      {title && (
+        <div className="absolute top-3 left-3 max-w-[45%] truncate rounded-full bg-white/10 px-3 py-1.5 text-sm text-white/90" title={typeof title === 'string' ? title : undefined}>
+          {title}
+        </div>
+      )}
       <div className="absolute top-3 right-3 flex items-center gap-2">
+        {actions}
         <span className="mr-1 text-sm text-white/70 tabular-nums">{view ? `${Math.round(view.fit * view.s * 100)}%` : ''}</span>
         <button className={btn} title="축소 (−)" onClick={() => zoomTo((s) => s / 1.5)}>
           −
@@ -149,14 +156,14 @@ export default function PhotoViewer({ urls, index, onIndex, onClose }) {
       </div>
       {urls.length > 1 && (
         <>
-          <button className={`${btn} absolute top-1/2 left-3 -translate-y-1/2 text-xl`} disabled={index === 0} onClick={() => onIndex(index - 1)} title="이전 사진 (←)">
+          <button className={`${btn} absolute top-1/2 left-3 -translate-y-1/2 text-xl`} disabled={index === 0} onClick={() => onIndex(index - 1)} title={`이전 ${unit} (←)`}>
             ‹
           </button>
           <button
             className={`${btn} absolute top-1/2 right-3 -translate-y-1/2 text-xl`}
             disabled={index === urls.length - 1}
             onClick={() => onIndex(index + 1)}
-            title="다음 사진 (→)"
+            title={`다음 ${unit} (→)`}
           >
             ›
           </button>

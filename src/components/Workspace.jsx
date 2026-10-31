@@ -28,7 +28,7 @@ const InstrumentPanel = lazy(() => import('./InstrumentPanel'))
 const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`
 
 // 도면 하나(탭 하나)의 작업 공간. 탭을 바꿔도 마운트된 채로 남아서 상태가 유지됩니다.
-export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenLink, sidebarOpen, setSidebarOpen, instKinds, onAddKind }) {
+export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenLink, library, onImportFile, sidebarOpen, setSidebarOpen, instKinds, onAddKind }) {
   const { pdfDoc, name: fileName } = doc
   const saved = doc.savedState
   const [pageNum, setPageNum] = useState(() => Math.min(saved?.pageNum ?? 1, pdfDoc.numPages))
@@ -909,6 +909,8 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
           store={store}
           currentId={doc.id}
           currentName={fileName}
+          library={library}
+          onImportFile={onImportFile}
           initial={linkPicking.index != null ? memoLinks(linkItem)[linkPicking.index] : null}
           onCancel={() => {
             // 방금 그린 범위에서 연결을 취소하면 빈 범위는 남기지 않음

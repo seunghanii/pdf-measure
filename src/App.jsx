@@ -192,6 +192,34 @@ function Session({ store, user, onLogout, onChangePassword }) {
     [openDoc, refreshRecent],
   )
 
+  // 탭은 열지 않고 PDF 를 저장소에 올리기 (관련 도면 연결에서 컴퓨터의 PDF 를 바로 올릴 때).
+  // folderId 가 있으면 그 폴더에 넣음. 돌려주는 값: { id, name, pages }
+  const importFile = useCallback(
+    async (file, folderId) => {
+      const s = storeRef.current
+      let pages = 1
+      try {
+        const pdfDoc = await loadPdf(await file.arrayBuffer())
+        pages = pdfDoc.numPages
+        pdfDoc.loadingTask?.destroy()
+      } catch (e) {
+        console.warn(e)
+        throw Object.assign(new Error('bad pdf'), { code: 'bad_pdf' })
+      }
+      if (s.kind === 'cloud' && file.size > MAX_UPLOAD_BYTES)
+        setWarning(`"${file.name}" 은(는) 50MB 가 넘어 PDF 파일은 서버에 올라가지 않아요. 이 컴퓨터에서만 미리보기·열기가 돼요.`)
+      const id = fileIdOf(file)
+      const record = await s.rememberFile(id, file)
+      if (record?.upload) watchUpload(record.upload, file.name)
+      if (folderId) updateLibrary((lib) => (lib.folders.some((f) => f.id === folderId) ? moveDoc(lib, id, folderId) : lib))
+      // 검색용 글자 색인은 뒤에서 (파일은 저장소에서 다시 읽음)
+      ensureIndexed(s, id, record?.name ?? file.name, () => null)
+      refreshRecent()
+      return { id, name: record?.name ?? file.name, pages }
+    },
+    [watchUpload, updateLibrary, refreshRecent],
+  )
+
   const openRecent = useCallback(
     async (item) => {
       setError('')
@@ -464,6 +492,8 @@ function Session({ store, user, onLogout, onChangePassword }) {
           onOpenFile={openFiles}
           searchJump={searchJump?.id === doc.id ? searchJump : null}
           onOpenLink={openLinked}
+          library={library}
+          onImportFile={importFile}
           instKinds={instKinds}
           onAddKind={addKind}
           sidebarOpen={sidebarOpen}
