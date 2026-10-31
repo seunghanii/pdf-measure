@@ -31,6 +31,8 @@ export default function Sidebar({
   onResetCalibration,
   fileName,
   top, // 맨 위 (도면 안 검색 창)
+  instCount = 0, // 계기 카드 개수
+  onOpenInstruments, // ('list' | 'find') 계기 목록 창 열기
   collapsed, // 접힘: 숨기기만 함
 }) {
   const [ratioText, setRatioText] = useState('100')
@@ -103,6 +105,21 @@ export default function Sidebar({
   return (
     <aside className={`${collapsed ? 'hidden' : 'flex'} max-h-[35vh] w-full shrink-0 flex-col border-t border-ink-200 bg-white md:max-h-none md:w-80 md:border-t-0 md:border-l`}>
       {top}
+      {/* 계기 카드: 목록 보기, 도면 글자에서 태그 찾기 */}
+      <div className="flex items-center gap-1.5 border-b border-ink-200 px-4 py-2">
+        <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-ink-400" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="8" />
+          <path d="M4 12h16" />
+        </svg>
+        <span className="text-xs font-semibold tracking-wide text-ink-500">계기</span>
+        <span className="text-xs text-ink-400 tabular-nums">{instCount}개</span>
+        <button onClick={() => onOpenInstruments?.('list')} className="ml-auto rounded-md px-2 py-0.5 text-xs font-medium text-ink-700 ring-1 ring-ink-300 hover:bg-ink-100">
+          계기 목록
+        </button>
+        <button onClick={() => onOpenInstruments?.('find')} className="rounded-md px-2 py-0.5 text-xs font-medium text-ink-700 ring-1 ring-ink-300 hover:bg-ink-100" title="도면 글자에서 FT-1001 같은 태그를 찾아 카드 만들기">
+          태그 찾기
+        </button>
+      </div>
       {/* 축척 */}
       <section className="border-b border-ink-200 p-4">
         {mmPerPt ? (

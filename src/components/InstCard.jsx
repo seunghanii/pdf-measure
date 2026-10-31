@@ -1,0 +1,140 @@
+import { useId } from 'react'
+import { INST_STATUSES, KIND_PRESETS, DEFAULT_STATUS, guessKind, memoLinks, linksPatch, normTag, statusOf } from '../lib/instrument'
+import { isDefaultName } from '../lib/categories'
+
+// 메모장 안의 계기 카드 칸: 태그, 계기 종류, 서비스, 루프 번호, 상태
+// onChange(patch): 메모 항목에 합칠 값
+export function InstFields({ memo, onChange }) {
+  const inst = memo.inst
+  const listId = useId()
+  const set = (key, value) => onChange({ inst: { ...inst, [key]: value } })
+
+  const setTag = (raw) => {
+    const tag = raw.toUpperCase()
+    const next = { ...inst, tag }
+    // 종류를 비워 뒀거나 태그로 짐작한 값 그대로면 새 태그로 다시 짐작
+    if (!inst.kind?.trim() || inst.kind === guessKind(inst.tag)) next.kind = guessKind(tag)
+    const patch = { inst: next }
+    // 메모 이름이 기본 이름이거나 예전 태그와 같으면 이름도 태그로
+    if (isDefaultName(memo.name) || !memo.name?.trim() || memo.name === inst.tag) patch.name = tag || memo.name
+    onChange(patch)
+  }
+
+  const setStatus = (status) => onChange({ inst: { ...inst, status }, color: statusOf(status).color })
+
+  const field = 'min-w-0 rounded-md border border-ink-200 px-2 py-1 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200'
+  const label = 'text-[11px] font-semibold tracking-wide text-ink-500'
+  const status = inst.status ?? DEFAULT_STATUS
+
+  return (
+    <div className="border-b border-ink-100 px-3 py-2">
+      <div className="grid grid-cols-2 gap-x-2 gap-y-1.5">
+        <label className="flex flex-col gap-0.5">
+          <span className={label}>태그 번호</span>
+          <input
+            value={inst.tag ?? ''}
+            onChange={(e) => setTag(e.target.value)}
+            onBlur={(e) => e.target.value && setTag(normTag(e.target.value))}
+            placeholder="FT-1001"
+            className={`${field} font-semibold tabular-nums`}
+            autoFocus={!inst.tag}
+          />
+        </label>
+        <label className="flex flex-col gap-0.5">
+          <span className={label}>계기 종류</span>
+          <input value={inst.kind ?? ''} onChange={(e) => set('kind', e.target.value)} list={listId} placeholder="유량 전송기" className={field} />
+          <datalist id={listId}>
+            {KIND_PRESETS.map((k) => (
+              <option key={k} value={k} />
+            ))}
+          </datalist>
+        </label>
+        <label className="flex flex-col gap-0.5">
+          <span className={label}>서비스</span>
+          <input value={inst.service ?? ''} onChange={(e) => set('service', e.target.value)} placeholder="예: 보일러 급수" className={field} />
+        </label>
+        <label className="flex flex-col gap-0.5">
+          <span className={label}>루프 번호</span>
+          <input value={inst.loop ?? ''} onChange={(e) => set('loop', e.target.value)} placeholder="예: L-1001" className={`${field} tabular-nums`} />
+        </label>
+      </div>
+      <div className="mt-2">
+        <span className={label}>상태</span>
+        <StatusPicker value={status} onChange={setStatus} className="mt-1" />
+      </div>
+    </div>
+  )
+}
+
+// 상태 고르기 (설치 전 → 설치 → 결선 → 루프 체크 완료)
+export function StatusPicker({ value, onChange, className = '', small = false }) {
+  return (
+    <div className={`flex flex-wrap gap-1 ${className}`} role="group" aria-label="상태">
+      {INST_STATUSES.map((s) => {
+        const on = value === s.id
+        return (
+          <button
+            key={s.id}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onChange(s.id)}
+            className={`flex items-center gap-1 rounded-full font-medium whitespace-nowrap ${small ? 'px-1.5 py-0 text-[11px]' : 'px-2 py-0.5 text-xs'} ${
+              on ? 'text-white' : 'text-ink-600 ring-1 ring-ink-200 hover:bg-ink-50'
+            }`}
+            style={on ? { background: s.color } : undefined}
+          >
+            {!on && <span className="h-2 w-2 rounded-full" style={{ background: s.color }} />}
+            {s.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// 관련 문서 (Hook-up, 루프도, 데이터시트 …) 여러 개. 누르면 그 도면이 그 페이지로 열림
+// onPick(index): 고르기 창 열기 (index 없으면 새로 추가)
+export function RelatedDocs({ memo, onChange, onOpen, onPick }) {
+  const links = memoLinks(memo)
+  const remove = (i) => onChange(linksPatch(links.filter((_, k) => k !== i)))
+  return (
+    <div className="border-b border-ink-100 px-3 py-1.5 text-xs">
+      {links.length > 0 && (
+        <ul className="mb-1 flex flex-col gap-1">
+          {links.map((l, i) => (
+            <li key={`${l.id}-${i}`} className="group flex items-center gap-1.5">
+              <button
+                onClick={() => onOpen(l)}
+                className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md bg-brand-50 px-2 py-1 text-left text-brand-700 hover:bg-brand-100"
+                title="이 도면을 그 페이지로 열기"
+              >
+                {l.role && <span className="shrink-0 rounded bg-white px-1.5 py-px text-[11px] font-semibold text-brand-800 ring-1 ring-brand-200">{l.role}</span>}
+                <span className="truncate font-medium">{l.name}</span>
+                {l.page > 1 && <span className="shrink-0 text-brand-500">{l.page}쪽</span>}
+                <svg viewBox="0 0 24 24" className="ml-auto h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="M14 4h6v6M20 4l-9 9M18 14v5H5V6h5" />
+                </svg>
+              </button>
+              <button onClick={() => onPick(i)} className="shrink-0 rounded px-1 py-1 text-ink-400 hover:bg-ink-100 hover:text-ink-700" title="바꾸기" aria-label="바꾸기">
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 20h4L19 9l-4-4L4 16zM13 7l4 4" />
+                </svg>
+              </button>
+              <button onClick={() => remove(i)} className="shrink-0 rounded px-1 py-1 text-ink-400 hover:bg-danger-50 hover:text-danger-600" title="연결 빼기" aria-label="연결 빼기">
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <button onClick={() => onPick()} className="flex items-center gap-1 py-0.5 text-ink-500 hover:text-ink-800" title="Hook-up, 루프도, 데이터시트 같은 관련 도면 연결">
+        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1" />
+        </svg>
+        {links.length ? '관련 도면 더 연결' : '관련 도면 연결'}
+      </button>
+    </div>
+  )
+}

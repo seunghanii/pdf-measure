@@ -466,9 +466,9 @@ function MemoStyle({ title, style, onChange, actions }) {
             <Icon d="M5 4h10l4 4v12H5zM15 4v4h4M8 12h8M8 16h5" />
             메모 열기
           </button>
-          <button className={btn(false)} onClick={actions.onLink} title="누르면 열릴 도면을 고르기">
+          <button className={btn(false)} onClick={actions.onLink} title="관련 도면(Hook-up, 루프도 …) 연결">
             <Icon d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1" />
-            {actions.linked ? '연결 바꾸기' : '도면 연결'}
+            {actions.linked ? '도면 더 연결' : '도면 연결'}
           </button>
         </>
       ) : (
@@ -476,6 +476,7 @@ function MemoStyle({ title, style, onChange, actions }) {
           {[
             ['note', '메모장', '범위를 누르면 메모장이 열려요 (마크다운, 사진)'],
             ['link', '도면 열기', '범위를 누르면 고른 도면이 열려요'],
+            ['inst', '계기 카드', '태그·종류·서비스·루프·상태 칸이 있는 메모. 상태에 따라 범위 색이 바뀌어요'],
           ].map(([value, label, tip]) => (
             <button
               key={value}
