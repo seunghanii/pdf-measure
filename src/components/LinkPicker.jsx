@@ -16,6 +16,38 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
   const [added, setAdded] = useState([]) // 이 창에서 방금 올린 도면
   const [upload, setUpload] = useState(null) // { file, folder, busy, error } 올릴 PDF 와 저장할 폴더
   const fileRef = useRef(null)
+  const [dropping, setDropping] = useState(false) // 컴퓨터의 파일을 이 창 위로 끌고 있음
+
+  // 이 창이 떠 있는 동안 끌어 온 파일은 여기서만 받음: 앱 전체의 "PDF 열기" 끌어놓기(탭 열기)와
+  // 도면에 사진 넣기로 넘어가지 않게 전파를 멈춤. 창 바깥 어두운 곳에 놓아도 올리기로 받음.
+  const isFileDrag = (e) => [...(e.dataTransfer?.types ?? [])].includes('Files')
+  const dropProps = {
+    onDragEnter: (e) => {
+      if (!isFileDrag(e)) return
+      e.preventDefault()
+      e.stopPropagation()
+    },
+    onDragOver: (e) => {
+      if (!isFileDrag(e)) return
+      e.preventDefault()
+      e.stopPropagation()
+      const ok = onImportFile && !upload?.busy
+      e.dataTransfer.dropEffect = ok ? 'copy' : 'none'
+      if (ok) setDropping(true)
+    },
+    onDragLeave: (e) => {
+      if (!e.currentTarget.contains(e.relatedTarget)) setDropping(false)
+    },
+    onDrop: (e) => {
+      if (!isFileDrag(e)) return
+      e.preventDefault()
+      e.stopPropagation()
+      setDropping(false)
+      if (!onImportFile || upload?.busy) return
+      const files = [...e.dataTransfer.files]
+      chooseFile(files.find((f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) ?? files[0])
+    },
+  }
   const lib = library ?? EMPTY_LIBRARY
 
   useEffect(() => {
@@ -45,8 +77,8 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
       setUpload({ file: null, folder: '', error: 'PDF 파일만 올릴 수 있어요.' })
       return
     }
-    // 저장할 폴더 기본값: 지금 도면이 들어 있는 폴더
-    setUpload({ file, folder: lib.assign[currentId] ?? '', busy: false, error: '' })
+    // 저장할 폴더 기본값: 지금 도면이 들어 있는 폴더 (이미 골라 둔 폴더가 있으면 그대로)
+    setUpload((u) => ({ file, folder: u?.file ? u.folder : (lib.assign[currentId] ?? ''), busy: false, error: '' }))
   }
 
   const doUpload = async () => {
@@ -77,13 +109,22 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onMouseDown={onCancel}>
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onMouseDown={onCancel} {...dropProps}>
       <form
         onSubmit={submit}
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.key === 'Escape' && onCancel()}
-        className="flex max-h-[80vh] w-full max-w-md flex-col rounded-xl bg-white p-5 shadow-2xl"
+        className={`relative flex max-h-[80vh] w-full max-w-md flex-col rounded-xl bg-white p-5 shadow-2xl ${dropping ? 'ring-4 ring-brand-400' : ''}`}
       >
+        {dropping && (
+          <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-brand-500 bg-brand-50/90 text-brand-700">
+            <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 16V4M7 9l5-5 5 5M4 16v4h16v-4" />
+            </svg>
+            <span className="text-base font-semibold">여기에 놓으면 관련 도면으로 올려요</span>
+            <span className="text-xs text-brand-600">놓은 뒤 저장할 폴더를 고를 수 있어요</span>
+          </div>
+        )}
         <h2 className="text-lg font-bold">관련 도면 연결</h2>
         <p className="mt-1 text-sm text-ink-500">메모장에서 누르면 고른 도면의 그 페이지가 미리 보여요. 올려 둔 도면에서 고르거나, 컴퓨터의 PDF 를 바로 올려 연결할 수 있어요.</p>
         <input
@@ -146,6 +187,7 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
                     <path d="M12 16V4M7 9l5-5 5 5M4 16v4h16v-4" />
                   </svg>
                   컴퓨터에서 PDF 올리기
+                  <span className="font-normal text-ink-400">(끌어다 놓아도 돼요)</span>
                 </button>
                 {upload?.error && <div className="mt-1 text-xs text-danger-600">{upload.error}</div>}
               </>
