@@ -1,4 +1,5 @@
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { stashPage, takePage } from '../lib/pageCache'
 
 const MAX_CANVAS_PIXELS = 16_000_000 // 모바일 사파리 캔버스 한도 근처
 // 크게 확대해서 상세 캔버스가 덮을 때 밑그림 해상도. 낮을수록 확대·축소할 때 덜 버벅임
@@ -14,11 +15,25 @@ const PageCanvas = memo(function PageCanvas({ pdfDoc, page, size, zoom, visible,
   const baseScaleRef = useRef(0) // 지금 밑그림 캔버스에 그려진 배율 (0 = 비어 있음)
   const [rendering, setRendering] = useState(false)
 
+  // 없어질 때(탭 전환 등) 그려 둔 밑그림을 맡겨 둠. 돌아오면 pdf.js 로 다시 그리지 않고 바로 씀
+  const propsRef = useRef({ pdfDoc, page })
+  useLayoutEffect(() => {
+    propsRef.current = { pdfDoc, page }
+  })
+  useEffect(() => {
+    const c = canvasRef.current // 없어질 때는 ref 가 먼저 비므로 미리 잡아 둠
+    return () => {
+      if (baseScaleRef.current) stashPage(propsRef.current.pdfDoc, propsRef.current.page, baseScaleRef.current, c)
+    }
+  }, [])
+
   useEffect(() => {
     const canvas = canvasRef.current
     const detail = detailRef.current
     detail.style.display = 'none' // 이전 배율의 상세 그림은 위치가 맞지 않음
     if (!visible) {
+      // 그려 둔 밑그림은 맡겨 두고(다시 보이면 바로 씀) 화면 캔버스는 비움
+      if (baseScaleRef.current) stashPage(pdfDoc, page, baseScaleRef.current, canvas)
       canvas.width = 0
       canvas.height = 0
       detail.width = 0
@@ -40,7 +55,21 @@ const PageCanvas = memo(function PageCanvas({ pdfDoc, page, size, zoom, visible,
     // 상세 캔버스가 덮을 만큼 크면 밑그림은 낮은 해상도로 한 번만 (배율이 바뀌어도 늘려서 씀)
     const baseScale = capped ? fullScale * Math.sqrt(BASE_PIXELS_WHEN_DETAILED / fullPixels) : fullScale
     const reuseBase = capped && Math.abs(baseScaleRef.current - baseScale) < 1e-6
+    // 같은 배율로 그려 맡겨 둔 밑그림이 있으면 기다리지 않고 바로 씀 (탭 전환, 다시 스크롤해 온 페이지)
+    const kept = !reuseBase && takePage(pdfDoc, page, baseScale)
+    if (kept) {
+      canvas.width = kept.width
+      canvas.height = kept.height
+      canvas.getContext('2d').drawImage(kept, 0, 0)
+      kept.width = kept.height = 0
+      baseScaleRef.current = baseScale
+      if (!capped) {
+        canvas.style.width = `${canvas.width / dpr}px`
+        canvas.style.height = `${canvas.height / dpr}px`
+      }
+    }
     const timer = setTimeout(async () => {
+      if (kept) return capped && scheduleDetail(0)
       if (reuseBase) return scheduleDetail(0)
       const pdfPage = await pdfPagePromise
       if (cancelled) return

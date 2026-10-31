@@ -16,3 +16,14 @@ export async function loadPdf(data) {
   const pdfjs = await getPdfjs()
   return pdfjs.getDocument({ data }).promise
 }
+
+// 탭으로 열어 둔 도면의 PDF (관련 도면 미리보기가 같은 도면을 다시 열지 않고 그대로 씀)
+const openDocs = new Map() // 도면 id → PDFDocumentProxy
+export function setOpenPdf(id, pdfDoc) {
+  if (pdfDoc) openDocs.set(id, pdfDoc)
+  else openDocs.delete(id)
+}
+export function getOpenPdf(id) {
+  const doc = openDocs.get(id)
+  return doc && !doc.loadingTask?.destroyed ? doc : null
+}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { loadPdf } from '../lib/pdf'
+import { getOpenPdf, loadPdf } from '../lib/pdf'
 import PhotoViewer from './PhotoViewer'
 
 // 렌더 크기: 긴 변 기준 이 정도 픽셀이면 확대해도 글자가 읽힘 (메모리는 4M 픽셀 안쪽)
@@ -20,16 +20,19 @@ export default function DocPreview({ store, link, alias, onOpen, onClose }) {
   // PDF 불러오기
   useEffect(() => {
     let cancelled = false
-    let doc = null
+    let doc = null // 미리보기가 새로 연 PDF (탭으로 열려 있던 것은 닫지 않음)
     ;(async () => {
       try {
-        const blob = await store.getFile(link.id)
-        if (!blob) throw new Error('missing')
-        doc = await loadPdf(await blob.arrayBuffer())
-        if (cancelled) return doc.loadingTask?.destroy()
-        setPages(doc.numPages)
-        setIndex((i) => Math.min(i, doc.numPages - 1))
-        setPdf(doc)
+        let pdf = getOpenPdf(link.id)
+        if (!pdf) {
+          const blob = await store.getFile(link.id)
+          if (!blob) throw new Error('missing')
+          doc = pdf = await loadPdf(await blob.arrayBuffer())
+        }
+        if (cancelled) return doc?.loadingTask?.destroy()
+        setPages(pdf.numPages)
+        setIndex((i) => Math.min(i, pdf.numPages - 1))
+        setPdf(pdf)
       } catch (e) {
         console.warn(e)
         if (!cancelled)

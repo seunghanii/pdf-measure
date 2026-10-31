@@ -7,8 +7,13 @@ export function useAutosave({ store, docId, measurements, categories, calibratio
   const cloud = store.kind === 'cloud'
   const [syncStatus, setSyncStatus] = useState('saved')
   const queue = useRef({ busy: false, next: null })
+  // 마지막으로 보낸 내용 (바뀐 게 없으면 다시 보내지 않음. 메모를 열고 닫기만 해도 항목이 새로 만들어지는 경우 등)
+  const lastSent = useRef(null)
   const persist = useCallback(
     (state) => {
+      const json = JSON.stringify(state)
+      if (json === lastSent.current) return
+      lastSent.current = json
       const q = queue.current
       q.next = state
       if (q.busy) return
@@ -22,6 +27,7 @@ export function useAutosave({ store, docId, measurements, categories, calibratio
             await store.saveState(docId, st)
             setSyncStatus(q.next ? 'saving' : 'saved')
           } catch (e) {
+            lastSent.current = null // 실패하면 같은 내용이라도 다음에 다시 보냄
             console.warn('저장 실패', e)
             setSyncStatus('error')
           }
