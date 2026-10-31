@@ -372,7 +372,10 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
   useEffect(() => {
     if (!active) return
     const onPaste = (e) => {
-      if (isTypingTarget(e.target)) return
+      // 메모·입력칸이 이미 처리한 붙여넣기는 무시. 메모가 붙여넣으며 글자 자리(e.target)를
+      // 바꿔 끼우면 그 요소가 문서에서 떨어져 isContentEditable 이 false 가 되므로
+      // 지금 포커스된 요소와 defaultPrevented 도 함께 봄 (엑셀 표가 도면에 사진으로도 들어가던 문제)
+      if (e.defaultPrevented || isTypingTarget(e.target) || isTypingTarget(document.activeElement)) return
       const files = [...(e.clipboardData?.files ?? [])].filter(isImageFile)
       if (!files.length) return
       e.preventDefault()

@@ -524,6 +524,7 @@ export default function MemoEditor({ initial, editorRef, apiRef, onEdit, onPaste
   const onPaste = (e) => {
     const cd = e.clipboardData
     if (!cd) return
+    e.stopPropagation() // 도면의 Ctrl+V 사진 넣기까지 가지 않게
     const files = [...(cd.files ?? [])].filter((f) => f.type.startsWith('image/'))
     const html = cd.getData('text/html')
     const plain = cd.getData('text/plain')
