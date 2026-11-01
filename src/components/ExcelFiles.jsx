@@ -108,7 +108,18 @@ function ExcelFile({ file, loadBlob, onUpdate, onRemove }) {
 
       {ready && sheet && shown && (
         <>
-          <SheetTable sheet={sheet} range={shown} />
+          <SheetTable
+            sheet={sheet}
+            range={shown}
+            colWidths={file.cw?.[sheet.sheet]}
+            onColWidth={(c, w) => {
+              // 바꾼 열 너비는 시트별로 메모에 저장 (cw: { 시트: { 열: px } }), null 은 원래대로
+              const cur = { ...(file.cw?.[sheet.sheet] ?? {}) }
+              if (w == null) delete cur[c]
+              else cur[c] = w
+              onUpdate({ cw: { ...(file.cw ?? {}), [sheet.sheet]: cur } })
+            }}
+          />
           {cut && (
             <p className="border-t border-ink-100 px-2 py-1 text-[11px] text-ink-400">
               범위가 커서 앞의 {MAX_ROWS}줄 · {MAX_COLS}칸만 보여요. 범위를 좁혀 주세요.

@@ -152,6 +152,58 @@ function setGrid(table, grid, focus) {
 // 맨 끝이 표·구분선·사진이면 그 뒤에 글을 쓸 수 없어서 빈 줄이 필요
 const needsLineAfter = (n) => !!n && (n.tagName === 'TABLE' || n.tagName === 'HR' || !!n.dataset?.img)
 
+// ---------- 엑셀 양식 표 열 너비·배율 ----------
+// 병합을 고려한 칸의 오른쪽 끝 열 번호(0부터)
+function xlsColEnd(table, cell) {
+  const taken = []
+  for (const [r, tr] of [...table.rows].entries()) {
+    let c = 0
+    for (const td of tr.cells) {
+      while (taken[r]?.[c]) c++
+      const cs = td.colSpan || 1
+      const rs = td.rowSpan || 1
+      for (let i = 0; i < rs; i++) for (let j = 0; j < cs; j++) (taken[r + i] ??= [])[c + j] = true
+      if (td === cell) return c + cs - 1
+      c += cs
+    }
+  }
+  return -1
+}
+// 열 너비 칸(colgroup)이 없으면 지금 보이는 너비로 만듦
+function ensureCols(table) {
+  let group = table.querySelector(':scope > colgroup')
+  const n = Math.max(...[...table.rows].map((tr) => [...tr.cells].reduce((k, td) => k + (td.colSpan || 1), 0)), 1)
+  if (group && group.children.length >= n) return group
+  const zoom = parseFloat(table.style.zoom) || 1
+  const widths = Array(n).fill(0)
+  for (const tr of table.rows) {
+    for (const td of tr.cells) {
+      if ((td.colSpan || 1) !== 1) continue
+      const c = xlsColEnd(table, td)
+      widths[c] = Math.max(widths[c], td.getBoundingClientRect().width / zoom)
+    }
+  }
+  group?.remove()
+  group = document.createElement('colgroup')
+  for (const w of widths) {
+    const col = document.createElement('col')
+    col.style.width = `${Math.round(w || 64)}px`
+    group.appendChild(col)
+  }
+  table.prepend(group)
+  return group
+}
+const sumCols = (group) => [...group.children].reduce((n, c) => n + (parseFloat(c.style.width) || 0), 0)
+const XLS_ZOOMS = [50, 67, 75, 90, 100, 125, 150]
+// 칸 오른쪽 경계 근처(6px)인지
+function xlsEdgeCell(editor, e) {
+  const cell = e.target?.closest?.('td,th')
+  const table = cell?.closest('table')
+  if (!cell || !table?.dataset.xls || !editor.contains(table)) return null
+  const r = cell.getBoundingClientRect()
+  return e.clientX > r.right - 6 && e.clientX <= r.right + 2 ? cell : null
+}
+
 // apiRef.current.insertPhotos(ids): 커서 자리(없으면 맨 끝)에 사진 넣기
 // loadPhoto(id) → Promise<주소>, onOpenPhoto(ids, i): 사진 크게 보기
 export default function MemoEditor({ initial, editorRef, apiRef, onEdit, onPasteFiles, loadPhoto, onOpenPhoto, autoFocus }) {
@@ -440,6 +492,44 @@ export default function MemoEditor({ initial, editorRef, apiRef, onEdit, onPaste
   }
 
   // 할 일 네모 누르기, 사진 누르기(크게 보기)·빼기
+  // 엑셀 양식 표: 칸 오른쪽 경계를 끌어 열 너비 바꾸기
+  const onPointerMove = (e) => {
+    if (e.buttons) return
+    const el = editorRef.current
+    el.classList.toggle('xls-col-resize', !!xlsEdgeCell(el, e))
+  }
+  const onPointerDown = (e) => {
+    const el = editorRef.current
+    const cell = e.button === 0 ? xlsEdgeCell(el, e) : null
+    if (!cell) return
+    e.preventDefault()
+    const table = cell.closest('table')
+    record()
+    const group = ensureCols(table)
+    const col = group.children[xlsColEnd(table, cell)]
+    if (!col) return
+    table.style.tableLayout = 'fixed'
+    const zoom = parseFloat(table.style.zoom) || 1
+    const x0 = e.clientX
+    const w0 = parseFloat(col.style.width) || col.getBoundingClientRect().width / zoom
+    el.classList.add('xls-col-resize')
+    const move = (ev) => {
+      col.style.width = `${Math.max(8, Math.round(w0 + (ev.clientX - x0) / zoom))}px`
+      table.style.width = `${sumCols(group)}px`
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+      el.classList.remove('xls-col-resize')
+      history.current.typingAt = 0
+      changed()
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+  }
+
   const onClick = (e) => {
     const photo = e.target.closest?.('[data-img]')
     if (photo) {
@@ -615,7 +705,16 @@ export default function MemoEditor({ initial, editorRef, apiRef, onEdit, onPaste
     fn(table)
     changed()
   }
+  const xlsZoom = (d) =>
+    xlsTable((table) => {
+      const z = Math.round((parseFloat(table.style.zoom) || 1) * 100)
+      const i = XLS_ZOOMS.reduce((best, v, k) => (Math.abs(v - z) < Math.abs(XLS_ZOOMS[best] - z) ? k : best), 0)
+      const next = XLS_ZOOMS[Math.max(0, Math.min(XLS_ZOOMS.length - 1, i + d))]
+      table.style.zoom = next === 100 ? '' : String(next / 100)
+    })
   const xlsButtons = [
+    ['작게', () => xlsZoom(-1)],
+    ['크게', () => xlsZoom(1)],
     [
       '일반 표로',
       () =>
@@ -651,6 +750,9 @@ export default function MemoEditor({ initial, editorRef, apiRef, onEdit, onPaste
         onInput={onInput}
         onKeyDown={onKeyDown}
         onClick={onClick}
+        onPointerMove={onPointerMove}
+        onPointerDown={onPointerDown}
+        onPointerLeave={() => editorRef.current?.classList.remove('xls-col-resize')}
         onPaste={onPaste}
       />
       {inTable && (
@@ -664,7 +766,7 @@ export default function MemoEditor({ initial, editorRef, apiRef, onEdit, onPaste
                 fn()
               }}
               className="rounded-md bg-white px-2 py-0.5 text-ink-600 shadow-xs ring-1 ring-ink-200 hover:bg-ink-100"
-              title={label === '일반 표로' ? '양식을 빼고 일반 표로 바꿔요. 그러면 줄·칸을 더하고 뺄 수 있어요.' : undefined}
+              title={label === '일반 표로' ? '양식을 빼고 일반 표로 바꿔요. 그러면 줄·칸을 더하고 뺄 수 있어요.' : label === '작게' || label === '크게' ? `표를 ${label} 보기 (열 너비는 칸 오른쪽 경계를 끌어서 바꿔요)` : undefined}
             >
               {label}
             </button>

@@ -310,7 +310,7 @@ export function parseTsv(text) {
 export const tsvRows = (text) => parseTsv(text).map((r) => r.map((c) => escText(c.trim()).replace(/\|/g, '\\|').replace(/\n/g, '<br>')))
 
 // ---------- 양식 있는 표 (엑셀·구글 시트에서 붙여넣은 것) ----------
-// 저장 모양: { w: [열 너비 px, ...], rows: [{ h: 행 높이 px | 0, c: [{ t: 칸 글(줄 안 꾸밈), s: "css", cs, rs }] }] }
+// 저장 모양: { w: [열 너비 px, ...], z: 배율 %(없으면 100), f: 기본 글꼴, rows: [{ h: 행 높이 px | 0, c: [{ t: 칸 글(줄 안 꾸밈), s: "css", cs, rs }] }] }
 // 병합으로 가려진 칸은 c 에 넣지 않습니다 (HTML 표와 같음).
 
 // 칸 꾸밈으로 받아 주는 것만 (붙여넣은 HTML 의 다른 스타일·스크립트는 버림)
@@ -368,7 +368,9 @@ export function xlsTableHtml(d) {
     })
     .join('')
   const font = d.f ? cleanCss(`font-family:${d.f}`) : ''
-  const tstyle = [total ? `min-width:${total}px` : '', font].filter(Boolean).join(';')
+  const z = clampPx(d.z, 300)
+  // 열 너비가 있으면 그 너비 그대로 (줄바꿈 없는 긴 글은 엑셀처럼 칸에서 잘림)
+  const tstyle = [total ? `table-layout:fixed;width:${total}px` : '', font, z && z !== 100 ? `zoom:${z / 100}` : ''].filter(Boolean).join(';')
   return `<table class="memo-xls" data-xls="1"${font ? ` data-font="${esc(d.f)}"` : ''}${tstyle ? ` style="${esc(tstyle)}"` : ''}>${cols}<tbody>${rows}</tbody></table>`
 }
 
@@ -398,6 +400,8 @@ function xlsFromDom(table) {
   const out = { rows }
   if (w.some(Boolean)) out.w = w
   if (table.dataset.font) out.f = table.dataset.font
+  const z = Math.round(parseFloat(table.style.zoom) * 100)
+  if (z && z !== 100) out.z = z
   return out
 }
 
