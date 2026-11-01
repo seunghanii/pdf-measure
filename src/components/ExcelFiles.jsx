@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { colName, parseCol, rangeLabel, readWorkbook, sliceRange, usedRange } from '../lib/excel'
+import { colName, parseCol, rangeLabel, readWorkbook, usedRange } from '../lib/excel'
+import SheetTable from './SheetTable'
 
 const MAX_ROWS = 300 // 메모장 표에 보여 줄 줄 수 (그 이상은 범위를 줄여 달라고 안내)
 const MAX_COLS = 40
@@ -45,16 +46,17 @@ function ExcelFile({ file, loadBlob, onUpdate, onRemove }) {
   }, [file.id, loadBlob])
 
   const ready = Array.isArray(sheets)
-  const sheet = ready ? (sheets.find((s) => s.sheet === file.sheet) ?? sheets[0]) : null
+  const sheet = ready ? (sheets.find((s) => s.sheet === file.sheet) ?? sheets.find((s) => !s.hidden) ?? sheets[0]) : null
 
   // 처음 첨부했을 때: 첫 시트의 값 있는 범위 전체
   useEffect(() => {
-    if (ready && !file.sheet && sheets[0]) onUpdate({ sheet: sheets[0].sheet, ...usedRange(sheets[0].data) })
+    const first = ready ? (sheets.find((s) => !s.hidden) ?? sheets[0]) : null
+    if (first && !file.sheet) onUpdate({ sheet: first.sheet, ...usedRange(first) })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready])
 
-  const range = file.sheet ? { r1: file.r1, r2: file.r2, c1: file.c1, c2: file.c2 } : sheet ? usedRange(sheet.data) : null
-  const rows = sheet && range ? sliceRange(sheet.data, { ...range, r2: Math.min(range.r2, range.r1 + MAX_ROWS - 1), c2: Math.min(range.c2, range.c1 + MAX_COLS - 1) }) : []
+  const range = file.sheet ? { r1: file.r1, r2: file.r2, c1: file.c1, c2: file.c2 } : sheet ? usedRange(sheet) : null
+  const shown = range ? { ...range, r2: Math.min(range.r2, range.r1 + MAX_ROWS - 1), c2: Math.min(range.c2, range.c1 + MAX_COLS - 1) } : null
   const cut = range && (range.r2 - range.r1 + 1 > MAX_ROWS || range.c2 - range.c1 + 1 > MAX_COLS)
 
   const download = () => {
@@ -104,38 +106,15 @@ function ExcelFile({ file, loadBlob, onUpdate, onRemove }) {
         <RangeEditor key={`${sheet.sheet}|${rangeLabel(range)}`} sheets={sheets} sheet={sheet} range={range} onChange={onUpdate} onDone={() => setEditing(false)} />
       )}
 
-      {ready && rows.length > 0 && (
-        <div className="max-h-72 overflow-auto">
-          <table className="min-w-full border-collapse text-xs">
-            <thead className="sticky top-0 z-10">
-              <tr className="bg-ink-50 text-[10px] text-ink-400">
-                <th className="sticky left-0 bg-ink-50 px-1" />
-                {rows[0].map((_, j) => (
-                  <th key={j} className="border-l border-ink-100 px-1.5 py-0.5 font-normal">
-                    {colName(range.c1 + j)}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, i) => (
-                <tr key={i} className="border-t border-ink-100">
-                  <td className="sticky left-0 bg-ink-50 px-1 text-right text-[10px] text-ink-400 tabular-nums">{range.r1 + i}</td>
-                  {row.map((v, j) => (
-                    <td key={j} className="border-l border-ink-100 px-1.5 py-0.5 whitespace-nowrap text-ink-800">
-                      {v}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {ready && sheet && shown && (
+        <>
+          <SheetTable sheet={sheet} range={shown} />
           {cut && (
-            <p className="px-2 py-1 text-[11px] text-ink-400">
+            <p className="border-t border-ink-100 px-2 py-1 text-[11px] text-ink-400">
               범위가 커서 앞의 {MAX_ROWS}줄 · {MAX_COLS}칸만 보여요. 범위를 좁혀 주세요.
             </p>
           )}
-        </div>
+        </>
       )}
     </div>
   )
@@ -178,7 +157,7 @@ function RangeEditor({ sheets, sheet, range, onChange, onDone }) {
           value={sheet.sheet}
           onChange={(e) => {
             const s = sheets.find((x) => x.sheet === e.target.value)
-            onChange({ sheet: s.sheet, ...usedRange(s.data) })
+            onChange({ sheet: s.sheet, ...usedRange(s) })
           }}
           className="max-w-36 rounded border border-ink-300 px-1 py-0.5 text-xs"
         >
@@ -195,7 +174,7 @@ function RangeEditor({ sheets, sheet, range, onChange, onDone }) {
       <span className="flex items-center gap-1">
         열 {input('c1')} ~ {input('c2')}
       </span>
-      <button onClick={() => onChange({ sheet: sheet.sheet, ...usedRange(sheet.data) })} className="rounded px-1.5 py-0.5 text-ink-500 hover:bg-ink-100" title="값이 있는 칸 전체">
+      <button onClick={() => onChange({ sheet: sheet.sheet, ...usedRange(sheet) })} className="rounded px-1.5 py-0.5 text-ink-500 hover:bg-ink-100" title="값·양식이 있는 칸 전체">
         전체
       </button>
       <button onClick={onDone} className="ml-auto rounded bg-ink-800 px-2 py-0.5 font-medium text-white hover:bg-ink-700">

@@ -4,6 +4,8 @@
 export const RULE = /^ {0,3}([-*_])( *\1){2,} *$/
 export const TABLE_ROW = /^\s*\|.*\|\s*$/
 export const TABLE_SEP = /^\s*\|(\s*:?-+:?\s*\|)+\s*$/
+// 양식 살린 엑셀 표 한 줄 (lib/memoMarkdown.js xlsTableHtml)
+export const XLS_LINE = /^@xls (\{.*\})\s*$/
 
 // 표 한 줄 → 칸 글들 (\| 는 칸 나누기가 아님)
 export const cellsOf = (line) => {
@@ -29,7 +31,18 @@ export function markdownPlainLines(md) {
   for (const line of String(md ?? '').split('\n')) {
     if (TABLE_SEP.test(line) || RULE.test(line) || /^\s*!\[[^\]]*\]\(img:[^)]*\)\s*$/.test(line)) continue
     let s = line
-    if (TABLE_ROW.test(s))
+    const xls = XLS_LINE.exec(s)
+    if (xls) {
+      try {
+        s = JSON.parse(xls[1])
+          .rows.flatMap((r) => (r.c ?? []).map((c) => c.t))
+          .filter(Boolean)
+          .join(' ')
+      } catch {
+        s = ''
+      }
+      if (!s) continue
+    } else if (TABLE_ROW.test(s))
       s = cellsOf(s)
         .filter(Boolean)
         .join(' ')
@@ -37,7 +50,7 @@ export function markdownPlainLines(md) {
       .replace(/^(#{1,6} |[-*+] \[[ xX]\] ?|[-*+] |\d+[.)] |> ?)/, '')
       .replace(/<br>/g, ' ')
       .replace(/\*\*|~~|(?<!\\)\*/g, '')
-      .replace(/\\([\\*~`|#>\-+_[\]])/g, '$1')
+      .replace(/\\([\\*~`|#>\-+_[\]@])/g, '$1')
     out.push(s)
   }
   return out
