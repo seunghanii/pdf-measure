@@ -116,8 +116,8 @@ export async function listRecent() {
 
 // 홈 목록에 보여 줄 요약: 측정·마크업 개수와 축척, 홈 검색용 직접 넣은 글(notes)
 // v: 요약 모양 판. 검색에 넣는 글이 바뀌면 올려서 예전 요약을 한 번 다시 쓰게 함 (2: 메모 제목 추가, 3: 숨긴 항목도 넣고 항목 id·숨김 표시,
-// 4: 계기 카드 속성을 검색에 넣고 계기 목록(inst) 추가)
-export const SUMMARY_VERSION = 4
+// 4: 계기 카드 속성을 검색에 넣고 계기 목록(inst) 추가, 5: 계기 카드 Description)
+export const SUMMARY_VERSION = 5
 export function summarize(state) {
   return {
     v: SUMMARY_VERSION,
