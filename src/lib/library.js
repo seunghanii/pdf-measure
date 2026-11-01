@@ -1,6 +1,6 @@
 // 홈 화면의 폴더 정보: 폴더 목록과 "어떤 도면이 어느 폴더에 있는지".
 // 도면의 측정값(state)과 따로 보관해서, 폴더를 바꿔도 측정값은 건드리지 않습니다.
-// { folders: [{ id, name, color, parent? }], assign: { [도면 id]: 폴더 id }, aliases: { [도면 id]: 별명 }, kinds: [사용자가 더한 계기 종류] }
+// { folders: [{ id, name, color, parent? }], assign: { [도면 id]: 폴더 id }, aliases: { [도면 id]: 별명 }, kinds: [사용자가 더한 계기 종류], docRoles?: [관련 문서 종류 목록, 없으면 기본] }
 // 별명은 홈·탭에 짧게 보일 이름. 원래 파일 이름(name)은 그대로 두고 따로 둡니다.
 // parent: 하위 폴더일 때 상위 폴더 id (없으면 맨 위). 예전 폴더는 parent 가 없어 그대로 맨 위에 보입니다.
 // trash: 휴지통에 넣은 도면 { [도면 id]: { at, name } } (lib/trash.js)
@@ -65,7 +65,14 @@ export function normalizeLibrary(lib) {
   const aliases = {}
   for (const [doc, alias] of Object.entries(lib?.aliases ?? {})) if (typeof alias === 'string' && alias.trim()) aliases[doc] = alias.trim()
   const kinds = Array.isArray(lib?.kinds) ? [...new Set(lib.kinds.filter((k) => typeof k === 'string' && k.trim()).map((k) => k.trim().toUpperCase()))] : []
-  return { folders, assign, aliases, kinds, trash: normalizeDocTrash(lib?.trash), ...normalizeRevMaps(lib) }
+  const out = { folders, assign, aliases, kinds, trash: normalizeDocTrash(lib?.trash), ...normalizeRevMaps(lib) }
+  if (Array.isArray(lib?.docRoles)) out.docRoles = cleanRoles(lib.docRoles)
+  return out
+}
+
+// 관련 문서 종류 목록 다듬기: 빈 칸 빼고, 앞뒤 공백 자르고, 겹치는 이름은 하나만
+export function cleanRoles(list) {
+  return [...new Set((list ?? []).filter((r) => typeof r === 'string' && r.trim()).map((r) => r.trim().slice(0, 30)))]
 }
 
 function stripParent(f) {
@@ -221,7 +228,10 @@ export function mergeLibrary(target, source, docIds) {
   const moved = new Set(docIds)
   for (const [k, v] of Object.entries(source.revOf ?? {})) if (moved.has(v) && !revOf[k]) revOf[k] = v
   for (const id of docIds) if (source.revCur?.[id] && !revCur[id]) revCur[id] = source.revCur[id]
-  return { folders, assign, aliases, kinds, trash, revOf, revCur }
+  const merged = { folders, assign, aliases, kinds, trash, revOf, revCur }
+  const docRoles = target.docRoles ?? source.docRoles
+  if (docRoles) merged.docRoles = docRoles
+  return merged
 }
 
 // 폴더 순서 바꾸기: id 폴더를 index 자리로 옮김 (홈 화면 칸 순서 = folders 배열 순서)

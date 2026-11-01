@@ -1,13 +1,14 @@
 import { withoutTrashed } from '../lib/trash'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { DOC_ROLES } from '../lib/instrument'
+import { docRoleList } from '../lib/instrument'
 import { EMPTY_LIBRARY, displayName, folderLabel } from '../lib/library'
 import { FolderSelect } from './Library'
 
 // 메모 범위에 연결할 도면 고르기. 앱에 올려 둔 도면 중 하나와 (원하면) 페이지를 고릅니다.
-// initial: 이미 연결된 { id, name, page, role }. role: 관련 문서 종류 (Hook-up, 루프도 …, 비워도 됨)
+// initial: 이미 연결된 { id, name, page, role }. role: 관련 문서 종류 (Hook-up, 데이터시트 …, 비워도 됨)
+// onSetRoles(목록): 문서 종류 목록 고치기 (모든 도면 공통). 없으면 고치는 버튼을 숨김
 // onImportFile(file, folderId): 컴퓨터의 PDF 를 탭을 열지 않고 올림 → { id, name, pages }
-export default function LinkPicker({ store, currentId, currentName, library, onImportFile, initial, defaultRole = '', onCancel, onConfirm, onUnlink }) {
+export default function LinkPicker({ store, currentId, currentName, library, onImportFile, onSetRoles, initial, defaultRole = '', onCancel, onConfirm, onUnlink }) {
   const [list, setList] = useState(null) // null = 불러오는 중
   const [query, setQuery] = useState('')
   const [picked, setPicked] = useState(initial?.id ?? null)
@@ -233,22 +234,7 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
           />
           <span className="text-xs text-ink-400">쪽 (없는 페이지면 마지막 쪽)</span>
         </label>
-        <div className="mt-3 text-sm text-ink-600">
-          문서 종류 <span className="text-xs text-ink-400">(고르지 않아도 돼요)</span>
-          <div className="mt-1.5 flex flex-wrap gap-1" role="group" aria-label="문서 종류">
-            {DOC_ROLES.map((r) => (
-              <button
-                key={r}
-                type="button"
-                aria-pressed={role === r}
-                onClick={() => setRole((cur) => (cur === r ? '' : r))}
-                className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${role === r ? 'bg-ink-800 text-white' : 'text-ink-600 ring-1 ring-ink-300 hover:bg-ink-100'}`}
-              >
-                {r}
-              </button>
-            ))}
-          </div>
-        </div>
+        <RoleChips roles={docRoleList(lib.docRoles)} role={role} setRole={setRole} onSetRoles={onSetRoles} />
         <div className="mt-4 flex items-center gap-2">
           {onUnlink && (
             <button type="button" onClick={onUnlink} className="rounded-md px-3 py-2 text-sm text-danger-600 hover:bg-danger-50">
@@ -263,6 +249,126 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
           </button>
         </div>
       </form>
+    </div>
+  )
+}
+
+// 문서 종류 고르기 + 목록 고치기. 고치기에서는 칸마다 이름을 바꾸거나 ✕ 로 뺄 수 있고, + 로 새 종류를 더함.
+// 목록에 없는 종류(예전에 고른 '루프도' 같은 것)가 골라져 있으면 그것도 버튼으로 보여 줌
+function RoleChips({ roles, role, setRole, onSetRoles }) {
+  const [editing, setEditing] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const [draft, setDraft] = useState('')
+  const options = role && !roles.includes(role) ? [...roles, role] : roles
+  const chip = 'rounded-full px-2.5 py-0.5 text-xs font-medium'
+  const keep = (e) => {
+    // 이 창은 form 이라 Enter 가 "연결"로 넘어가지 않게
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      e.currentTarget.blur()
+    }
+  }
+  const add = () => {
+    const name = draft.trim()
+    setDraft('')
+    setAdding(false)
+    if (!name) return
+    if (!roles.includes(name)) onSetRoles([...roles, name])
+    setRole(name)
+  }
+  const rename = (i, value) => {
+    const name = value.trim()
+    if (!name || name === roles[i]) return
+    if (roles.includes(name)) return
+    onSetRoles(roles.map((r, j) => (j === i ? name : r)))
+    if (role === roles[i]) setRole(name)
+  }
+  const remove = (i) => {
+    onSetRoles(roles.filter((_, j) => j !== i))
+  }
+
+  return (
+    <div className="mt-3 text-sm text-ink-600">
+      <div className="flex items-center gap-2">
+        <span>
+          문서 종류 <span className="text-xs text-ink-400">{editing ? '(이름을 고치거나 ✕ 로 빼기, 모든 도면 공통)' : '(고르지 않아도 돼요)'}</span>
+        </span>
+        {onSetRoles && (
+          <button
+            type="button"
+            onClick={() => {
+              setEditing((v) => !v)
+              setAdding(false)
+            }}
+            className="ml-auto rounded px-1.5 py-0.5 text-xs text-ink-500 hover:bg-ink-100 hover:text-ink-800"
+          >
+            {editing ? '완료' : '종류 고치기'}
+          </button>
+        )}
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-1" role="group" aria-label="문서 종류">
+        {editing
+          ? roles.map((r, i) => (
+              <span key={r} className="flex items-center rounded-full pl-1 pr-0.5 ring-1 ring-ink-300">
+                <input
+                  defaultValue={r}
+                  aria-label={`${r} 이름`}
+                  maxLength={30}
+                  size={Math.max(3, r.length + 1)}
+                  onKeyDown={keep}
+                  onBlur={(e) => {
+                    rename(i, e.target.value)
+                    e.target.value = roles[i]
+                  }}
+                  className="min-w-0 rounded-full bg-transparent px-1.5 py-0.5 text-xs font-medium outline-none focus:bg-brand-50"
+                />
+                <button
+                  type="button"
+                  onClick={() => remove(i)}
+                  aria-label={`${r} 빼기`}
+                  title="목록에서 빼기 (이미 연결한 문서의 종류는 그대로)"
+                  className="grid h-5 w-5 place-items-center rounded-full text-ink-400 hover:bg-danger-50 hover:text-danger-600"
+                >
+                  ✕
+                </button>
+              </span>
+            ))
+          : options.map((r) => (
+              <button
+                key={r}
+                type="button"
+                aria-pressed={role === r}
+                onClick={() => setRole((cur) => (cur === r ? '' : r))}
+                className={`${chip} ${role === r ? 'bg-ink-800 text-white' : 'text-ink-600 ring-1 ring-ink-300 hover:bg-ink-100'}`}
+              >
+                {r}
+              </button>
+            ))}
+        {onSetRoles &&
+          (adding ? (
+            <input
+              autoFocus
+              value={draft}
+              maxLength={30}
+              placeholder="새 종류 이름"
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setDraft('')
+                  setAdding(false)
+                } else keep(e)
+              }}
+              onBlur={add}
+              className="w-28 rounded-full border border-brand-400 px-2.5 py-0.5 text-xs outline-none ring-2 ring-brand-200"
+            />
+          ) : (
+            <button type="button" onClick={() => setAdding(true)} className={`${chip} text-ink-500 border border-dashed border-ink-300 hover:bg-ink-100 hover:text-ink-800`} title="문서 종류 더하기 (모든 도면 공통)">
+              + 추가
+            </button>
+          ))}
+      </div>
     </div>
   )
 }
