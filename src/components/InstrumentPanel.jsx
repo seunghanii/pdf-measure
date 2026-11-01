@@ -95,7 +95,7 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
   const matched = useMemo(() => {
     const q = query.trim()
     if (!q) return all
-    return all.filter((r) => textHas([r.tag, r.kind, kindDesc(r.tag), r.docName, ...r.docs.map((d) => `${d.role} ${d.name}`)].join(' '), q))
+    return all.filter((r) => textHas([r.tag, r.desc, r.kind, kindDesc(r.tag), r.docName, ...r.docs.map((d) => `${d.role} ${d.name}`)].join(' '), q))
   }, [all, query])
   const counts = useMemo(() => {
     const c = new Map()
@@ -197,7 +197,7 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
           <table className="w-full min-w-[520px] text-left text-sm">
             <thead className="sticky top-0 bg-ink-50 text-xs text-ink-500">
               <tr>
-                <th className="px-3 py-1.5 font-semibold">태그</th>
+                <th className="px-3 py-1.5 font-semibold">Tag. No</th>
                 <th className="px-2 py-1.5 font-semibold">종류</th>
                 <th className="px-2 py-1.5 font-semibold">상태</th>
                 <th className="px-2 py-1.5 font-semibold">{scope === 'all' ? '도면 · 쪽' : '쪽'}</th>
@@ -222,6 +222,11 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
                         </span>
                       )}
                       {r.hidden ? <span className="ml-1 text-[11px] text-ink-400">· 숨김</span> : null}
+                      {r.desc && (
+                        <div className="mt-0.5 max-w-48 truncate text-[11px] text-ink-500" title={r.desc}>
+                          {r.desc}
+                        </div>
+                      )}
                       {r.docs.length > 0 && (
                         <div className="mt-0.5 truncate text-[11px] text-ink-400" title={r.docs.map((d) => `${d.role ? `${d.role}: ` : ''}${d.name}`).join('\n')}>
                           {r.docs.map((d) => d.role || '도면').join(' · ')}

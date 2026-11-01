@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { INST_STATUSES, DEFAULT_STATUS, guessKind, memoLinks, linksPatch, normTag, statusOf } from '../lib/instrument'
 import { isDefaultName } from '../lib/categories'
 
-// 메모장 안의 계기 카드 칸: 태그 번호, 계기 종류, 상태
+// 메모장 안의 계기 카드 칸: Tag. No, Description, 종류, 상태
 // onChange(patch): 메모 항목에 합칠 값. kinds: 계기 종류 목록, onAddKind(약어): 목록에 더하기 (모든 도면 공통)
 export function InstFields({ memo, onChange, kinds, onAddKind }) {
   const inst = memo.inst
@@ -19,6 +19,7 @@ export function InstFields({ memo, onChange, kinds, onAddKind }) {
     if (isDefaultName(memo.name) || !memo.name?.trim() || memo.name === inst.tag) patch.name = tag || memo.name
     onChange(patch)
   }
+  const setDesc = (desc) => onChange({ inst: { ...inst, desc } })
   const setKind = (kind) => onChange({ inst: { ...inst, kind } })
   const setStatus = (status) => onChange({ inst: { ...inst, status }, color: statusOf(status).color })
 
@@ -40,7 +41,7 @@ export function InstFields({ memo, onChange, kinds, onAddKind }) {
   return (
     <div className="flex flex-col gap-2 border-b border-ink-100 px-3 py-2">
       <label className="flex items-center gap-2">
-        <span className={`${label} w-14 shrink-0`}>태그 번호</span>
+        <span className={`${label} w-20 shrink-0`}>Tag. No</span>
         <input
           value={inst.tag ?? ''}
           onChange={(e) => setTag(e.target.value)}
@@ -50,8 +51,18 @@ export function InstFields({ memo, onChange, kinds, onAddKind }) {
           autoFocus={!inst.tag}
         />
       </label>
+      <label className="flex items-center gap-2">
+        <span className={`${label} w-20 shrink-0`}>Description</span>
+        <input
+          value={inst.desc ?? ''}
+          onChange={(e) => setDesc(e.target.value)}
+          onBlur={(e) => e.target.value !== e.target.value.trim() && setDesc(e.target.value.trim())}
+          placeholder="예: Fuel Gas Flow"
+          className="min-w-0 flex-1 rounded-md border border-ink-200 px-2 py-1 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+        />
+      </label>
       <div className="flex items-start gap-2">
-        <span className={`${label} w-14 shrink-0 pt-1`}>종류</span>
+        <span className={`${label} w-20 shrink-0 pt-1`}>종류</span>
         <div className="flex min-w-0 flex-1 flex-wrap gap-1" role="group" aria-label="종류">
           {options.map((k) => (
             <button
@@ -93,7 +104,7 @@ export function InstFields({ memo, onChange, kinds, onAddKind }) {
         </div>
       </div>
       <div className="flex items-start gap-2">
-        <span className={`${label} w-14 shrink-0 pt-1`}>상태</span>
+        <span className={`${label} w-20 shrink-0 pt-1`}>상태</span>
         <StatusPicker value={status} onChange={setStatus} className="min-w-0 flex-1" />
       </div>
     </div>

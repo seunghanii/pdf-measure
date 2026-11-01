@@ -224,7 +224,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
   const toggleInst = () => {
     if (memo.inst) onChange({ inst: null, instKept: memo.inst })
     else {
-      const inst = memo.instKept ?? { tag: '', kind: '', status: DEFAULT_STATUS }
+      const inst = memo.instKept ?? { tag: '', desc: '', kind: '', status: DEFAULT_STATUS }
       onChange({ inst, instKept: undefined, color: statusOf(inst.status ?? DEFAULT_STATUS).color })
     }
   }

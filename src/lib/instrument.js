@@ -209,6 +209,7 @@ export function instRows(measurements) {
       page: m.page ?? 1,
       rect: [r1(r.x), r1(r.y), r1(r.w), r1(r.h)],
       tag: i.tag ?? '',
+      desc: i.desc ?? '',
       kind: i.kind ?? '',
       status: i.status ?? DEFAULT_STATUS,
       docs: memoLinks(m).map((l) => ({ id: l.id, name: l.name, page: l.page ?? 1, role: l.role ?? '' })),
@@ -226,8 +227,8 @@ export const compareTags = (a, b) => collator.compare(a.tag || '￿', b.tag || '
 const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
 
 export function downloadInstCsv(rows, fileBase) {
-  const head = ['태그', '종류', '상태', '도면', '페이지', '관련 문서']
-  const lines = [head, ...rows.map((r) => [r.tag, r.kind, statusOf(r.status).label, r.docName, r.page, r.docs.map((d) => `${d.role ? `${d.role}: ` : ''}${d.name}${d.page > 1 ? ` (${d.page}쪽)` : ''}`).join('; ')])]
+  const head = ['Tag. No', 'Description', '종류', '상태', '도면', '페이지', '관련 문서']
+  const lines = [head, ...rows.map((r) => [r.tag, r.desc ?? '', r.kind, statusOf(r.status).label, r.docName, r.page, r.docs.map((d) => `${d.role ? `${d.role}: ` : ''}${d.name}${d.page > 1 ? ` (${d.page}쪽)` : ''}`).join('; ')])]
   const csv = lines.map((l) => l.map(cell).join(',')).join('\r\n')
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }) // 엑셀에서 한글이 깨지지 않게 BOM
   const a = document.createElement('a')
