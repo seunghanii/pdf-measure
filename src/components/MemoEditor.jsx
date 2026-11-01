@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { htmlToMarkdown, inlineHtml, markdownToHtml, photoHtml, rowsToMarkdown, tableRows, tsvRows } from '../lib/memoMarkdown'
+import { htmlToMarkdown, inlineHtml, isSheetHtml, markdownToHtml, photoHtml, rowsToMarkdown, tableRows, tsvRows, xlsFromPaste, xlsTableHtml } from '../lib/memoMarkdown'
 
 // 메모 글 상자. 쓰는 그 자리에서 마크다운이 바로 적용됩니다 (예: "# " 를 치면 그 줄이 제목으로).
 // 라이브러리 없이 브라우저 편집(contentEditable)에 줄 모양 바꾸기만 직접 얹었습니다.
@@ -262,7 +262,9 @@ export default function MemoEditor({ initial, editorRef, apiRef, onEdit, onPaste
     const onSel = () => {
       const el = editorRef.current
       const sel = window.getSelection()
-      const yes = !!(el && sel.focusNode && el.contains(sel.focusNode) && cellAt(el, sel.focusNode))
+      const cell = el && sel.focusNode && el.contains(sel.focusNode) ? cellAt(el, sel.focusNode) : null
+      // 'xls' = 엑셀 양식 표 (병합이 있어서 줄·칸 추가는 못 함)
+      const yes = cell ? (cell.closest('table')?.dataset.xls ? 'xls' : true) : false
       setInTable((cur) => (cur === yes ? cur : yes))
     }
     document.addEventListener('selectionchange', onSel)
@@ -380,7 +382,9 @@ export default function MemoEditor({ initial, editorRef, apiRef, onEdit, onPaste
       const table = cell.closest('table')
       const cells = [...table.querySelectorAll('th,td')]
       const i = cells.indexOf(cell) + (e.shiftKey ? -1 : 1)
-      if (i >= cells.length) editTable((g, [r]) => (g.splice(r + 1, 0, []), [r + 1, 0]))
+      if (i >= cells.length) {
+        if (!table.dataset.xls) editTable((g, [r]) => (g.splice(r + 1, 0, []), [r + 1, 0]))
+      }
       else if (i >= 0) caretInto(cells[i], true)
       return
     }
@@ -539,12 +543,15 @@ export default function MemoEditor({ initial, editorRef, apiRef, onEdit, onPaste
     const cell = cellAt(el, window.getSelection().focusNode)
     let rows = null
     let md = null
+    let xls = null
     if (/<table/i.test(html) || (html && /<(p|div|h[1-6]|li|br|strong|b|em|i)[\s>]/i.test(html))) {
       const doc = new DOMParser().parseFromString(html, 'text/html')
       const tables = doc.body.querySelectorAll('table')
       if (tables.length === 1 && !doc.body.textContent.replace(tables[0].textContent, '').trim()) {
         // 표만 복사 (엑셀, 구글 시트, 웹의 표)
         rows = tableRows(tables[0]).filter((r) => r.length)
+        // 엑셀·구글 시트 표는 양식(열 너비·병합·색·테두리·글꼴·정렬)을 살림
+        if (isSheetHtml(html) && !(rows.length === 1 && rows[0].length === 1)) xls = xlsFromPaste(tables[0], doc)
       } else md = htmlToMarkdown(doc.body)
     } else if (/\t/.test(plain)) rows = tsvRows(plain)
     else md = plain.replace(/\r\n?/g, '\n')
@@ -555,7 +562,9 @@ export default function MemoEditor({ initial, editorRef, apiRef, onEdit, onPaste
     }
     if (!rows && !md) return
     record()
-    if (rows) {
+    if (xls && !cell) insertBlocks(xlsTableHtml(xls))
+    else if (rows && cell?.closest('table')?.dataset.xls) exec('insertText', rows.map((r) => r.join(' ')).join(' ').replace(/<br>/g, ' '))
+    else if (rows) {
       if (cell) fillTable(cell, rows)
       else insertBlocks(markdownToHtml(rowsToMarkdown(rows).join('\n')))
     } else if (cell) exec('insertText', md.replace(/\n+/g, ' '))
@@ -576,6 +585,7 @@ export default function MemoEditor({ initial, editorRef, apiRef, onEdit, onPaste
     if (!cell) return
     record()
     const table = cell.closest('table')
+    if (table.dataset.xls) return
     const grid = gridOf(table)
     const focus = fn(grid, posOf(cell), table)
     if (focus !== 'removed') setGrid(table, grid, focus)
@@ -594,6 +604,32 @@ export default function MemoEditor({ initial, editorRef, apiRef, onEdit, onPaste
     ['줄 지우기', () => editTable((g, [r, c], table) => (g.length > 1 ? (g.splice(r, 1), [Math.min(r, g.length - 1), c]) : removeTable(table)))],
     ['칸 지우기', () => editTable((g, [r, c], table) => (Math.max(...g.map((row) => row.length)) > 1 ? (g.forEach((row) => row.splice(c, 1)), [r, Math.max(0, c - 1)]) : removeTable(table)))],
     ['표 지우기', () => editTable((g, p, table) => removeTable(table))],
+  ]
+  // 엑셀 양식 표: 병합 때문에 줄·칸 추가는 안 되고, 일반 표로 바꾸면 할 수 있음
+  const xlsTable = (fn) => {
+    const el = editorRef.current
+    const cell = cellAt(el, window.getSelection().focusNode)
+    const table = cell?.closest('table')
+    if (!table) return
+    record()
+    fn(table)
+    changed()
+  }
+  const xlsButtons = [
+    [
+      '일반 표로',
+      () =>
+        xlsTable((table) => {
+          const tpl = document.createElement('template')
+          tpl.innerHTML = markdownToHtml(rowsToMarkdown(tableRows(table)).join('\n'))
+          const plain = tpl.content.querySelector('table')
+          if (plain) {
+            table.replaceWith(plain)
+            caretInto(plain.querySelector('th,td'), true)
+          }
+        }),
+    ],
+    ['표 지우기', () => xlsTable(removeTable)],
   ]
 
   return (
@@ -619,7 +655,8 @@ export default function MemoEditor({ initial, editorRef, apiRef, onEdit, onPaste
       />
       {inTable && (
         <div className="sticky bottom-0 flex flex-wrap items-center gap-1 bg-white/90 px-3 py-1.5 text-xs">
-          {tableButtons.map(([label, fn]) => (
+          {inTable === 'xls' && <span className="mr-1 text-ink-400">엑셀 양식 표</span>}
+          {(inTable === 'xls' ? xlsButtons : tableButtons).map(([label, fn]) => (
             <button
               key={label}
               onMouseDown={(e) => {
@@ -627,6 +664,7 @@ export default function MemoEditor({ initial, editorRef, apiRef, onEdit, onPaste
                 fn()
               }}
               className="rounded-md bg-white px-2 py-0.5 text-ink-600 shadow-xs ring-1 ring-ink-200 hover:bg-ink-100"
+              title={label === '일반 표로' ? '양식을 빼고 일반 표로 바꿔요. 그러면 줄·칸을 더하고 뺄 수 있어요.' : undefined}
             >
               {label}
             </button>
