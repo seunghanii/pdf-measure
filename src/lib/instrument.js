@@ -2,7 +2,7 @@
 // 메모 항목에 inst: { tag, kind, status } 를 더하면 계기 카드가 됨 (없으면 예전 메모 그대로)
 // kind 는 계기 종류 약어(FT, PT …). 목록은 KIND_PRESETS + 사용자가 더한 것(폴더 정보 library.kinds, 모든 도면 공통)
 // (PR #44 판에 있던 service·loop 는 화면에서 뺐고, 이미 적힌 값은 검색에만 남음)
-// 관련 문서(Hook-up, 루프도, 데이터시트 …)는 links: [{ id, name, page, role }] 로 여러 개.
+// 관련 문서(Hook-up, 데이터시트 …)는 links: [{ id, name, page, role }] 로 여러 개.
 // 예전 메모의 link(도면 하나)도 그대로 읽고, 고칠 때 links 로 옮기면서 link 에는 첫 번째를 남겨 둠.
 // 상태 색은 분류처럼 항목 color 에 함께 넣어 두어 그리기 코드가 상태 목록을 몰라도 되게 함.
 import { isMarkup, rectOf } from './markup'
@@ -17,7 +17,10 @@ export const INST_STATUSES = [
 export const DEFAULT_STATUS = 'pre'
 export const statusOf = (id) => INST_STATUSES.find((s) => s.id === id) ?? INST_STATUSES[0]
 
-export const DOC_ROLES = ['Hook-up', '루프도', '데이터시트', 'P&ID', '결선도', '기타']
+// 관련 문서 종류 기본 목록. 사용자가 고치면 library.docRoles 에 목록 전체를 저장(모든 도면 공통)
+// 목록에서 빼거나 이름을 바꿔도 이미 연결한 문서의 role 글은 그대로 남아 보임
+export const DOC_ROLES = ['Hook-up', '데이터시트', 'P&ID', '결선도', '기타']
+export const docRoleList = (custom) => (Array.isArray(custom) ? custom : DOC_ROLES)
 
 export const KIND_PRESETS = ['FE', 'FT', 'LI', 'LS', 'LT', 'PDI', 'PDT', 'PI', 'PT', 'TI', 'TT', 'TW']
 

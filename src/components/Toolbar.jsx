@@ -488,7 +488,7 @@ function MemoStyle({ title, style, onChange, actions }) {
             <Icon d="M5 4h10l4 4v12H5zM15 4v4h4M8 12h8M8 16h5" />
             메모 열기
           </button>
-          <button className={btn(false)} onClick={actions.onLink} title="관련 도면(Hook-up, 루프도 …) 연결">
+          <button className={btn(false)} onClick={actions.onLink} title="관련 도면(Hook-up, 데이터시트 …) 연결">
             <Icon d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1" />
             {actions.linked ? '도면 더 연결' : '도면 연결'}
           </button>
