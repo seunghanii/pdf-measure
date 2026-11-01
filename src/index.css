@@ -265,7 +265,8 @@
 .memo-doc th { background: var(--color-ink-50); font-weight: 600; }
 /* 엑셀·구글 시트에서 붙여넣은 양식 표: 칸 꾸밈은 칸의 style 그대로, 없으면 엑셀 기본 모양 */
 .memo-doc table.memo-xls { font-size: 14.7px; line-height: 1.25; color: #000; background: var(--color-white); }
-.memo-doc table.memo-xls td { border: 1px solid #e2e3e5; padding: 1px 4px; min-width: 0; vertical-align: bottom; white-space: pre; }
+.memo-doc table.memo-xls td { border: 1px solid #e2e3e5; padding: 1px 4px; min-width: 0; vertical-align: bottom; white-space: pre; overflow: hidden; }
+.memo-doc.xls-col-resize, .memo-doc.xls-col-resize * { cursor: col-resize !important; }
 
 /* 움직임 줄이기 설정: 화면 전환 효과만 끔 (검색 위치 깜빡임은 위치를 알려 주는 용도라 그대로) */
 @media (prefers-reduced-motion: reduce) {

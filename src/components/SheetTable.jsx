@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react'
+import { memo, useMemo, useRef, useState } from 'react'
 import { colName } from '../lib/excel'
 import { borderCss, fontStyle, xfLook } from '../lib/xlsx'
 
@@ -7,15 +7,76 @@ const ZOOMS = [50, 67, 75, 90, 100, 125, 150]
 
 // 엑셀 시트의 한 범위를 엑셀 화면처럼 그림: 열 너비·행 높이·병합·테두리·채우기·글꼴·정렬 그대로
 // sheet: lib/xlsx.js parseXlsx 의 시트 하나, range: { r1, r2, c1, c2 }
-function SheetTable({ sheet, range }) {
+// colWidths: 사용자가 바꾼 열 너비 { 열 번호: px }, onColWidth(열 번호, px): 열 머리 경계를 끌어 바꾼 뒤
+const HEIGHT_KEY = 'pdf-measure:sheet-h'
+const loadHeight = () => {
+  try {
+    return Number(localStorage.getItem(HEIGHT_KEY)) || 384
+  } catch {
+    return 384
+  }
+}
+
+function SheetTable({ sheet, range, colWidths, onColWidth }) {
   const [zoom, setZoom] = useState(100)
-  const model = useMemo(() => buildModel(sheet, range), [sheet, range])
+  const [height, setHeight] = useState(loadHeight)
+  const [live, setLive] = useState(null) // 끄는 중인 열 { c, w }
+  const scroller = useRef(null)
+  const widths = useMemo(() => (live ? { ...colWidths, [live.c]: live.w } : colWidths), [colWidths, live])
+  const model = useMemo(() => buildModel(sheet, range, widths), [sheet, range, widths])
   const { cols, rows, width } = model
   const step = (d) => setZoom((z) => ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, ZOOMS.indexOf(z) + d))])
 
+  // 열 머리 오른쪽 경계 끌기 → 열 너비
+  const startCol = (e, c, w0) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const x0 = e.clientX
+    const scale = zoom / 100
+    let w = w0
+    const move = (ev) => {
+      w = Math.max(8, Math.round(w0 + (ev.clientX - x0) / scale))
+      setLive({ c, w })
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+      setLive(null)
+      if (w !== w0) onColWidth?.(c, w)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+  }
+  // 아래 손잡이 끌기 → 보이는 영역 높이 (모든 첨부 공통으로 기억)
+  const startHeight = (e) => {
+    e.preventDefault()
+    const y0 = e.clientY
+    const h0 = scroller.current?.getBoundingClientRect().height ?? height
+    let h = h0
+    const move = (ev) => {
+      h = Math.max(80, Math.min(2000, Math.round(h0 + ev.clientY - y0)))
+      setHeight(h)
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+      try {
+        localStorage.setItem(HEIGHT_KEY, String(h))
+      } catch {
+        /* 저장 못 해도 지금 화면은 그대로 */
+      }
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+  }
+
   return (
     <div className="relative">
-      <div className="max-h-96 overflow-auto bg-white">
+      <div ref={scroller} className="overflow-auto bg-white" style={{ maxHeight: height }}>
         <table className="border-separate border-spacing-0 text-ink-900" style={{ tableLayout: 'fixed', width: width + 32, zoom: zoom / 100, fontFamily: '"Malgun Gothic", "Apple SD Gothic Neo", sans-serif', fontSize: '14.7px', lineHeight: 1.2 }}>
           <colgroup>
             <col style={{ width: 32 }} />
@@ -29,6 +90,14 @@ function SheetTable({ sheet, range }) {
               {cols.map((c) => (
                 <th key={c.c} className="sticky top-0 z-10 border-r border-b border-ink-200 bg-ink-100 text-center text-[11px] font-normal text-ink-500">
                   {colName(c.c)}
+                  {onColWidth && (
+                    <span
+                      onPointerDown={(e) => startCol(e, c.c, c.w)}
+                      onDoubleClick={() => onColWidth(c.c, null)}
+                      className="absolute top-0 -right-1 bottom-0 z-10 w-2 cursor-col-resize touch-none hover:bg-brand-400/50"
+                      title="끌어서 열 너비 바꾸기 (두 번 누르면 원래대로)"
+                    />
+                  )}
                 </th>
               ))}
             </tr>
@@ -47,7 +116,17 @@ function SheetTable({ sheet, range }) {
           </tbody>
         </table>
       </div>
-      <div className="absolute right-3 bottom-2 flex items-center rounded-md bg-white/90 text-[11px] text-ink-600 shadow-xs ring-1 ring-ink-200">
+      <div
+        onPointerDown={startHeight}
+        className="group flex h-2.5 cursor-row-resize touch-none items-center justify-center border-t border-ink-100 bg-ink-50 hover:bg-ink-100"
+        title="끌어서 보이는 높이 바꾸기"
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="표 높이 조절"
+      >
+        <span className="h-0.5 w-8 rounded-full bg-ink-300 group-hover:bg-ink-500" />
+      </div>
+      <div className="absolute right-3 bottom-4.5 flex items-center rounded-md bg-white/90 text-[11px] text-ink-600 shadow-xs ring-1 ring-ink-200">
         <button onClick={() => step(-1)} disabled={zoom === ZOOMS[0]} className="px-1.5 py-0.5 hover:bg-ink-100 disabled:opacity-30" aria-label="작게 보기" title="작게 보기">
           −
         </button>
@@ -65,11 +144,11 @@ function SheetTable({ sheet, range }) {
 export default memo(SheetTable)
 
 // 칸 하나 하나의 꾸밈을 미리 계산
-function buildModel(sheet, { r1, r2, c1, c2 }) {
+function buildModel(sheet, { r1, r2, c1, c2 }, custom) {
   const { cells, styles, colW, colStyle, rowStyles, rowH, defColPx, defRowPx, merges, grid } = sheet
   const cols = []
   for (let c = c1; c <= c2; c++) {
-    const w = colW[c] ?? defColPx
+    const w = custom?.[c] ?? colW[c] ?? defColPx
     if (w > 0) cols.push({ c, w })
   }
   const rowList = []
