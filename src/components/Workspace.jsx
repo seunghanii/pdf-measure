@@ -10,6 +10,7 @@ import { toggleSnap } from '../lib/snapSetting'
 import { useAutosave } from '../lib/autosave'
 import { useDocIndex } from '../lib/indexer'
 import { isTypingTarget } from '../lib/dom'
+import { clipFor, clipboardMarker, copyItems, currentClip, pasteItems } from '../lib/itemClipboard'
 import PdfViewer from './PdfViewer'
 import Toolbar from './Toolbar'
 import Sidebar from './Sidebar'
@@ -201,8 +202,8 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
   )
 
   // ---------- 측정 분류 ----------
-  const addCategory = (name) => {
-    const cat = { id: newCategoryId(), name, color: nextCategoryColor(categories) }
+  const addCategory = (name, color) => {
+    const cat = { id: newCategoryId(), name, color: color ?? nextCategoryColor(categories) }
     setCategories((list) => [...list, cat])
     return cat
   }
@@ -397,23 +398,6 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
     [commit, doc.id, markupStyle, store],
   )
 
-  // Ctrl+V: 복사해 둔 사진을 바로 넣기 (마우스가 도면 위에 있으면 그 자리에)
-  useEffect(() => {
-    if (!active) return
-    const onPaste = (e) => {
-      // 메모·입력칸이 이미 처리한 붙여넣기는 무시. 메모가 붙여넣으며 글자 자리(e.target)를
-      // 바꿔 끼우면 그 요소가 문서에서 떨어져 isContentEditable 이 false 가 되므로
-      // 지금 포커스된 요소와 defaultPrevented 도 함께 봄 (엑셀 표가 도면에 사진으로도 들어가던 문제)
-      if (e.defaultPrevented || isTypingTarget(e.target) || isTypingTarget(document.activeElement)) return
-      const files = [...(e.clipboardData?.files ?? [])].filter(isImageFile)
-      if (!files.length) return
-      e.preventDefault()
-      insertImages(files)
-    }
-    window.addEventListener('paste', onPaste)
-    return () => window.removeEventListener('paste', onPaste)
-  }, [active, insertImages])
-
   // 지운 사진 정리: 도면을 열 때 어디에도 쓰이지 않는 사진(지운 뒤 저장된 것)을 저장소에서 지움
   useEffect(() => {
     const t = setTimeout(async () => {
@@ -558,6 +542,129 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
     },
     [commit],
   )
+
+  // ---------- 항목 복사·붙여넣기 (Ctrl/Cmd+C, X, V) — lib/itemClipboard.js ----------
+  const categoriesRef = useRef(categories)
+  categoriesRef.current = categories
+  const addCategoryRef = useRef(addCategory)
+  addCategoryRef.current = addCategory
+  const copySelected = useCallback(
+    ({ cut = false } = {}) => {
+      const set = new Set(selectedIds)
+      const items = measurementsRef.current.filter((m) => set.has(m.id) && !m.hidden)
+      if (!items.length) return null
+      const c = copyItems(items, { categories: categoriesRef.current, store, docId: doc.id, spot: placeRef.current?.() })
+      if (cut) deleteItems(items.map((m) => m.id))
+      setNotice(
+        `${items.length === 1 ? `"${items[0].name}"` : `${items.length}개 항목`}을(를) ${cut ? '잘라' : '복사해'} 뒀어요. 이 도면이나 다른 도면에서 Ctrl+V 로 붙여넣으세요.`,
+      )
+      return c
+    },
+    [deleteItems, doc.id, selectedIds, store],
+  )
+  const pasting = useRef(false)
+  const pasteClip = useCallback(
+    async (c) => {
+      if (pasting.current) return
+      pasting.current = true
+      try {
+        const { items, failed } = await pasteItems(c, {
+          docId: doc.id,
+          store,
+          spot: placeRef.current?.(),
+          numPages: pdfDoc.numPages,
+          counters: counters.current,
+          categories: categoriesRef.current,
+          addCategory: (name, color) => addCategoryRef.current(name, color),
+          newId,
+        })
+        if (!items.length) return
+        commit((prev) => [...prev, ...items])
+        setTool('select')
+        setSelectedIds(items.map((m) => m.id))
+        if (failed) setNotice(`사진·엑셀 파일 ${failed}개는 복사하지 못했어요. 인터넷 연결을 확인해 주세요.`)
+        else if (items[0].page !== pageNum && new Set(items.map((m) => m.page)).size === 1) jumpTo(items[0].page)
+      } catch (e) {
+        console.error(e)
+        setNotice('붙여넣기에 실패했어요. 다시 시도해 주세요.')
+      } finally {
+        pasting.current = false
+      }
+    },
+    [commit, doc.id, jumpTo, pageNum, pdfDoc, store],
+  )
+
+  // 키보드 자리: 글 입력 중이거나 화면 글자를 드래그로 골라 둔 경우는 브라우저 기본 복사·붙여넣기
+  const itemKeysOff = (e) =>
+    isTypingTarget(e.target) || isTypingTarget(document.activeElement) || !!pendingCalibration
+  const textSelected = () => !!window.getSelection?.()?.toString()
+  const lastCopy = useRef(null) // 키를 누를 때 만든 복사본 (곧 이어 오는 copy 이벤트가 같은 것을 씀)
+  const lastPasteEvent = useRef(0)
+
+  // Ctrl+C/X: 고른 항목 복사 → 시스템 클립보드에는 표시 글. Ctrl+V: 복사한 항목, 아니면 사진 넣기
+  useEffect(() => {
+    if (!active) return
+    const onCopy = (e) => {
+      if (e.defaultPrevented || itemKeysOff(e) || textSelected()) return
+      const recent = lastCopy.current && Date.now() - lastCopy.current.at < 400 ? lastCopy.current.clip : null
+      const c = recent ?? copySelected({ cut: e.type === 'cut' })
+      if (!c) return
+      e.preventDefault()
+      e.clipboardData?.setData('text/plain', clipboardMarker(c))
+    }
+    const onPaste = (e) => {
+      lastPasteEvent.current = Date.now()
+      // 메모·입력칸이 이미 처리한 붙여넣기는 무시. 메모가 붙여넣으며 글자 자리(e.target)를
+      // 바꿔 끼우면 그 요소가 문서에서 떨어져 isContentEditable 이 false 가 되므로
+      // 지금 포커스된 요소와 defaultPrevented 도 함께 봄 (엑셀 표가 도면에 사진으로도 들어가던 문제)
+      if (e.defaultPrevented || isTypingTarget(e.target) || isTypingTarget(document.activeElement)) return
+      // 복사해 둔 항목: 시스템 클립보드 글이 그때 넣은 표시 그대로일 때만 (그 뒤 다른 걸 복사했으면 그것이 우선)
+      const c = clipFor(e.clipboardData?.getData('text/plain'))
+      if (c) {
+        e.preventDefault()
+        pasteClip(c)
+        return
+      }
+      const files = [...(e.clipboardData?.files ?? [])].filter(isImageFile)
+      if (!files.length) return
+      e.preventDefault()
+      insertImages(files)
+    }
+    // 사파리처럼 글자를 고르지 않으면 copy/paste 이벤트를 안 보내는 브라우저용: 키로 직접
+    const onKey = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.repeat) return
+      if (itemKeysOff(e) || textSelected()) return
+      if (e.code === 'KeyC' || e.code === 'KeyX') {
+        const c = copySelected({ cut: e.code === 'KeyX' })
+        if (!c) return
+        lastCopy.current = { clip: c, at: Date.now() }
+        navigator.clipboard?.writeText(clipboardMarker(c)).catch(() => {})
+      } else if (e.code === 'KeyV' && currentClip()) {
+        const at = Date.now()
+        setTimeout(() => {
+          if (lastPasteEvent.current >= at) return // 붙여넣기 이벤트가 왔으면 거기서 처리
+          navigator.clipboard
+            ?.readText()
+            .then((t) => {
+              const c = clipFor(t)
+              if (c) pasteClip(c)
+            })
+            .catch(() => {})
+        }, 80)
+      }
+    }
+    window.addEventListener('copy', onCopy)
+    window.addEventListener('cut', onCopy)
+    window.addEventListener('paste', onPaste)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('copy', onCopy)
+      window.removeEventListener('cut', onCopy)
+      window.removeEventListener('paste', onPaste)
+      window.removeEventListener('keydown', onKey)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, copySelected, insertImages, pasteClip, pendingCalibration])
 
   // 휴지통에서 되살리기: 원래 자리(같은 페이지·좌표)로 돌아감
   const restoreItems = useCallback(
