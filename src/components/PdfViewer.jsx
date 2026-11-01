@@ -188,7 +188,7 @@ export default function PdfViewer({
   }, [])
 
   // ---------- 사진 넣을 자리: 끌어다 놓은 곳 → 도면 위 마우스 위치 → 화면 가운데 ----------
-  // { page, x, y (가운데, pt), maxW, maxH (화면에 보이는 크기, pt) }
+  // { page, x, y (가운데, pt), maxW, maxH (화면에 보이는 크기, pt), pointer, pageW, pageH }
   useLayoutEffect(() => {
     if (!placeRef) return
     placeRef.current = (clientX, clientY) => {
@@ -197,6 +197,7 @@ export default function PdfViewer({
       let page
       let x
       let y
+      let pointer = false
       if (clientX != null) {
         const a = anchorAt(clientX, clientY)
         if (!a) return null
@@ -204,6 +205,7 @@ export default function PdfViewer({
       } else if (pointerRef.current) {
         page = pointerRef.current.page - 1
         ;({ x, y } = pointerRef.current.p)
+        pointer = true
       } else {
         const a = anchorAt()
         if (!a) return null
@@ -216,6 +218,9 @@ export default function PdfViewer({
         y: Math.min(s.height, Math.max(0, y)),
         maxW: Math.min(s.width, el.clientWidth / zoom),
         maxH: Math.min(s.height, el.clientHeight / zoom),
+        pointer, // 마우스가 도면 위에 있어서 그 자리 (붙여넣기: 아니면 원래 자리 옆)
+        pageW: s.width,
+        pageH: s.height,
       }
     }
   })
