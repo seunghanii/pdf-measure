@@ -14,7 +14,7 @@ import {
   setAlias,
 } from '../lib/library'
 
-function timeAgo(ts) {
+export function timeAgo(ts) {
   const diff = Date.now() - ts
   const min = Math.floor(diff / 60000)
   if (min < 1) return '방금 전'

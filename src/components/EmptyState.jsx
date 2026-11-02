@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { AuthPanel, MigrationCard } from './Account'
 import Library, { FolderDialog, FolderIcon } from './Library'
+import RecentDocs from './RecentDocs'
 import { addFolder, editFolder } from '../lib/library'
 import { TRASH_DAYS, leftLabel } from '../lib/trash'
 
@@ -81,10 +82,13 @@ export default function EmptyState({
           />
         </div>
 
+        {/* 최근 연 도면 10개: 폴더 밖 '전체' 에서만 (폴더를 열면 그 폴더 목록에 집중) */}
+        {!fetching && !openFolder && <RecentDocs list={list} library={library} openIds={openIds} onOpen={onOpenRecent} />}
+
         {hasRecent ? (
           <section className="mt-8">
             <div className="mb-2 flex items-center justify-between px-1">
-              <h2 className="text-xs font-semibold tracking-wide text-ink-500">{cloud ? '서버에 저장된 도면' : '최근 연 도면'}</h2>
+              <h2 className="text-xs font-semibold tracking-wide text-ink-500">{cloud ? '서버에 저장된 도면' : '내 도면'}</h2>
               {!fetching && (
                 <button
                   onClick={() => setFolderDialog({ parent: openFolder?.id ?? null })}
