@@ -25,7 +25,6 @@ export default function Toolbar({
   onFit,
   tool,
   setTool,
-  calibrated,
   canUndo,
   onUndo,
   markupStyle,
@@ -84,8 +83,9 @@ export default function Toolbar({
         <>
           <Divider />
           <div className="flex items-center gap-0.5 rounded-xl bg-ink-100 p-0.5" role="group" aria-label="측정 도구">
-            {VIEW_TOOLS.map((t) => (
-              <ToolButton key={t.id} t={t} active={tool === t.id} needCal={!calibrated && t.id === 'calibrate'} onClick={() => setTool(t.id)} showLabel />
+            {/* 기준 길이는 오른쪽 목록 축척 칸에서만 (C·3 키는 그대로) */}
+            {VIEW_TOOLS.filter((t) => t.id !== 'calibrate').map((t) => (
+              <ToolButton key={t.id} t={t} active={tool === t.id} onClick={() => setTool(t.id)} showLabel />
             ))}
             <SnapButton />
           </div>
@@ -254,7 +254,7 @@ function SnapButton() {
   )
 }
 
-function ToolButton({ t, active, needCal, onClick, showLabel }) {
+function ToolButton({ t, active, onClick, showLabel }) {
   const digit = digitForTool(t.id)
   return (
     <button
@@ -268,9 +268,7 @@ function ToolButton({ t, active, needCal, onClick, showLabel }) {
           ? t.accent === 'orange'
             ? 'bg-ref-500 text-white shadow-xs'
             : 'bg-brand-600 text-white shadow-xs'
-          : needCal
-            ? 'bg-ref-50 text-ref-700 ring-1 ring-ref-300 hover:bg-ref-100'
-            : 'text-ink-600 hover:bg-white hover:text-ink-900',
+          : 'text-ink-600 hover:bg-white hover:text-ink-900',
       ].join(' ')}
     >
       <Icon d={t.icon} />
