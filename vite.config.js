@@ -1,11 +1,38 @@
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
+
+// 앱으로 설치(PWA): scripts/sw.js 를 dist/sw.js 로 내보내며 이번 빌드의 파일 목록과 판 번호를 채워 넣음.
+// 파일 이름에 해시가 붙어 있어서 목록이 바뀌면 판 번호도 바뀌고, 브라우저가 새 서비스 워커를 깔아 새 판을 받음.
+function pwaServiceWorker() {
+  const PUBLIC_FILES = ['manifest.webmanifest', 'favicon.svg', 'icons/icon-192.png', 'icons/icon-512.png']
+  return {
+    name: 'pwa-service-worker',
+    apply: 'build',
+    generateBundle(_, bundle) {
+      const files = Object.keys(bundle)
+        .filter((f) => f.startsWith('assets/') && !f.endsWith('.map'))
+        .sort()
+      const precache = ['./', ...PUBLIC_FILES, ...files]
+      const template = readFileSync(new URL('./scripts/sw.js', import.meta.url), 'utf8')
+      const version = createHash('sha256').update(template).update(precache.join('\n')).digest('hex').slice(0, 12)
+      this.emitFile({
+        type: 'asset',
+        fileName: 'sw.js',
+        source: template
+          .replace("const VERSION = '__VERSION__'", `const VERSION = '${version}'`)
+          .replace('const PRECACHE = __PRECACHE__', `const PRECACHE = ${JSON.stringify(precache)}`),
+      })
+    },
+  }
+}
 
 // base: './' 로 두면 Vercel, GitHub Pages(하위 경로) 어디에 올려도 동작합니다.
 export default defineConfig({
   base: './',
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), pwaServiceWorker()],
   build: {
     chunkSizeWarningLimit: 1500, // pdf.js 가 커서 경고 기준만 올림
     rolldownOptions: {
