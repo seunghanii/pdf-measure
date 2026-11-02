@@ -3,6 +3,7 @@ import { AuthPanel, MigrationCard } from './Account'
 import Library, { FolderDialog, FolderIcon } from './Library'
 import RecentDocs from './RecentDocs'
 import RecentActivity from './RecentActivity'
+import HomeCalendar from './Calendar'
 import { addFolder, editFolder } from '../lib/library'
 import { TRASH_DAYS, leftLabel } from '../lib/trash'
 
@@ -50,121 +51,127 @@ export default function EmptyState({
           {cloud && <MigrationCard store={store} onDone={onMigrated} />}
         </div>
       )}
-      <div
-        className={
-          side
-            ? 'mx-auto grid w-full max-w-6xl gap-x-6 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] lg:grid-rows-[auto_1fr]'
-            : 'mx-auto w-full max-w-2xl'
-        }
-      >
-        <div className="min-w-0">
-          <div
-            className={`group cursor-pointer rounded-2xl border border-dashed border-ink-300 bg-surface/90 px-6 text-center shadow-sm transition-colors hover:border-brand-400 hover:bg-brand-50/60 ${
-              hasRecent ? 'py-6' : 'py-12'
-            }`}
-            onClick={() => inputRef.current?.click()}
-          >
-            <svg
-              viewBox="0 0 48 48"
-              aria-hidden="true"
-              className={`mx-auto rounded-2xl bg-brand-50 p-2 text-brand-600 ring-1 ring-brand-100 transition-colors group-hover:bg-brand-100 ${hasRecent ? 'h-11 w-11' : 'h-16 w-16'}`}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
+      {/* 왼쪽 칸(넓은 화면): 위 달력, 아래 메모장 자리. 좁은 화면은 맨 아래로 */}
+      <div className="mx-auto flex w-full max-w-[100rem] flex-col lg:flex-row lg:items-start lg:gap-6">
+        <aside className="order-last mt-8 min-w-0 space-y-8 lg:order-first lg:mt-0 lg:w-64 lg:shrink-0 xl:w-72">
+          <HomeCalendar />
+        </aside>
+        <div
+          className={
+            side
+              ? 'mx-auto grid w-full min-w-0 max-w-6xl gap-x-6 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)] xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] lg:grid-rows-[auto_1fr]'
+              : 'mx-auto w-full min-w-0 max-w-2xl'
+          }
+        >
+          <div className="min-w-0">
+            <div
+              className={`group cursor-pointer rounded-2xl border border-dashed border-ink-300 bg-surface/90 px-6 text-center shadow-sm transition-colors hover:border-brand-400 hover:bg-brand-50/60 ${
+                hasRecent ? 'py-6' : 'py-12'
+              }`}
+              onClick={() => inputRef.current?.click()}
             >
-              <path d="M12 4h17l9 9v31H12z" strokeLinejoin="round" />
-              <path d="M29 4v9h9" strokeLinejoin="round" />
-              <path d="M18 34h14M18 34v-4M32 34v-4" strokeLinecap="round" />
-            </svg>
-            <p className="mt-4 text-lg font-semibold tracking-tight text-balance text-ink-900">
-              {loading ? 'PDF 여는 중…' : 'PDF 도면을 여기에 끌어다 놓거나 클릭해서 여세요'}
-            </p>
-            <p className="mx-auto mt-1 max-w-lg text-sm text-pretty text-ink-500">
-              {cloud
-                ? '여러 개를 한 번에 열 수 있어요. PDF와 측정값은 내 계정의 서버 저장소에 저장되고, 나만 볼 수 있어요.'
-                : '여러 개를 한 번에 열 수 있어요. 파일은 서버로 전송되지 않고 내 브라우저에만 저장됩니다.'}
-            </p>
-            <input
-              ref={inputRef}
-              type="file"
-              accept="application/pdf,.pdf"
-              multiple
-              className="hidden"
-              onChange={(e) => {
-                onOpenFile([...(e.target.files ?? [])])
-                e.target.value = ''
-              }}
-            />
+              <svg
+                viewBox="0 0 48 48"
+                aria-hidden="true"
+                className={`mx-auto rounded-2xl bg-brand-50 p-2 text-brand-600 ring-1 ring-brand-100 transition-colors group-hover:bg-brand-100 ${hasRecent ? 'h-11 w-11' : 'h-16 w-16'}`}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+              >
+                <path d="M12 4h17l9 9v31H12z" strokeLinejoin="round" />
+                <path d="M29 4v9h9" strokeLinejoin="round" />
+                <path d="M18 34h14M18 34v-4M32 34v-4" strokeLinecap="round" />
+              </svg>
+              <p className="mt-4 text-lg font-semibold tracking-tight text-balance text-ink-900">
+                {loading ? 'PDF 여는 중…' : 'PDF 도면을 여기에 끌어다 놓거나 클릭해서 여세요'}
+              </p>
+              <p className="mx-auto mt-1 max-w-lg text-sm text-pretty text-ink-500">
+                {cloud
+                  ? '여러 개를 한 번에 열 수 있어요. PDF와 측정값은 내 계정의 서버 저장소에 저장되고, 나만 볼 수 있어요.'
+                  : '여러 개를 한 번에 열 수 있어요. 파일은 서버로 전송되지 않고 내 브라우저에만 저장됩니다.'}
+              </p>
+              <input
+                ref={inputRef}
+                type="file"
+                accept="application/pdf,.pdf"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  onOpenFile([...(e.target.files ?? [])])
+                  e.target.value = ''
+                }}
+              />
+            </div>
           </div>
-        </div>
 
-        {/* 오른쪽 칸: 위 최근 수정, 아래 최근 연 도면 10개 */}
-        {side && (
-          <aside className="mt-8 min-w-0 space-y-8 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mt-0">
-            <RecentActivity list={list} library={library} onGo={onOpenActivity} />
-            <RecentDocs list={list} library={library} openIds={openIds} onOpen={onOpenRecent} />
-          </aside>
-        )}
-
-        <div className="min-w-0">
-          {hasRecent ? (
-            <section className="mt-8">
-              <div className="mb-2 flex items-center justify-between px-1">
-                <h2 className="text-xs font-semibold tracking-wide text-ink-500">{cloud ? '서버에 저장된 도면' : '내 도면'}</h2>
-                {!fetching && (
-                  <button
-                    onClick={() => setFolderDialog({ parent: openFolder?.id ?? null })}
-                    title={openFolder ? `"${openFolder.name}" 안에 하위 폴더 만들기` : '새 폴더 만들기'}
-                    className="flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-medium text-brand-600 transition-colors hover:bg-brand-50"
-                  >
-                    <FolderIcon className="h-4 w-4" color="currentColor" />
-                    {openFolder ? '하위 폴더' : '새 폴더'}
-                  </button>
-                )}
-              </div>
-              {fetching ? (
-                <div className="rounded-xl bg-surface px-4 py-6 text-center text-sm text-ink-400 shadow-xs ring-1 ring-ink-200">
-                  서버에서 도면 목록을 불러오는 중…
-                </div>
-              ) : (
-                <Library
-                  list={list}
-                  library={library}
-                  openIds={openIds}
-                  cloud={cloud}
-                  onOpen={onOpenRecent}
-                  onRemove={onRemoveRecent}
-                  onUpdateLibrary={onUpdateLibrary}
-                  onEditFolder={(folder) => setFolderDialog(folder)}
-                  openFolderId={openFolderId}
-                  setOpenFolderId={setOpenFolderId}
-                />
-              )}
-              <button onClick={onOpenSample} className="mt-3 px-1 text-sm text-brand-600 hover:underline">
-                샘플 평면도 열기
-              </button>
-            </section>
-          ) : (
-            <>
-              <div className="text-center">
-                <button onClick={onOpenSample} className="mt-4 text-sm font-medium text-brand-600 hover:underline">
-                  도면이 없다면? 샘플 평면도로 체험해 보기 →
-                </button>
-              </div>
-              <ol className="mt-10 grid gap-3 text-left sm:grid-cols-3">
-                {STEPS.map((s) => (
-                  <li key={s.n} className="rounded-xl bg-surface p-4 shadow-xs ring-1 ring-ink-200">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-50 text-sm font-bold text-brand-700 tabular-nums ring-1 ring-brand-100">
-                      {s.n}
-                    </div>
-                    <div className="mt-3 font-semibold text-ink-900">{s.title}</div>
-                    <div className="mt-1 text-sm text-pretty text-ink-500">{s.text}</div>
-                  </li>
-                ))}
-              </ol>
-            </>
+          {/* 오른쪽 칸: 위 최근 수정, 아래 최근 연 도면 10개 */}
+          {side && (
+            <aside className="mt-8 min-w-0 space-y-8 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mt-0">
+              <RecentActivity list={list} library={library} onGo={onOpenActivity} />
+              <RecentDocs list={list} library={library} openIds={openIds} onOpen={onOpenRecent} />
+            </aside>
           )}
-          {trashed.length > 0 && <DocTrash trashed={trashed} cloud={cloud} onRestore={onRestoreDoc} onPurge={onPurgeDoc} />}
+
+          <div className="min-w-0">
+            {hasRecent ? (
+              <section className="mt-8">
+                <div className="mb-2 flex items-center justify-between px-1">
+                  <h2 className="text-xs font-semibold tracking-wide text-ink-500">{cloud ? '서버에 저장된 도면' : '내 도면'}</h2>
+                  {!fetching && (
+                    <button
+                      onClick={() => setFolderDialog({ parent: openFolder?.id ?? null })}
+                      title={openFolder ? `"${openFolder.name}" 안에 하위 폴더 만들기` : '새 폴더 만들기'}
+                      className="flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-medium text-brand-600 transition-colors hover:bg-brand-50"
+                    >
+                      <FolderIcon className="h-4 w-4" color="currentColor" />
+                      {openFolder ? '하위 폴더' : '새 폴더'}
+                    </button>
+                  )}
+                </div>
+                {fetching ? (
+                  <div className="rounded-xl bg-surface px-4 py-6 text-center text-sm text-ink-400 shadow-xs ring-1 ring-ink-200">
+                    서버에서 도면 목록을 불러오는 중…
+                  </div>
+                ) : (
+                  <Library
+                    list={list}
+                    library={library}
+                    openIds={openIds}
+                    cloud={cloud}
+                    onOpen={onOpenRecent}
+                    onRemove={onRemoveRecent}
+                    onUpdateLibrary={onUpdateLibrary}
+                    onEditFolder={(folder) => setFolderDialog(folder)}
+                    openFolderId={openFolderId}
+                    setOpenFolderId={setOpenFolderId}
+                  />
+                )}
+                <button onClick={onOpenSample} className="mt-3 px-1 text-sm text-brand-600 hover:underline">
+                  샘플 평면도 열기
+                </button>
+              </section>
+            ) : (
+              <>
+                <div className="text-center">
+                  <button onClick={onOpenSample} className="mt-4 text-sm font-medium text-brand-600 hover:underline">
+                    도면이 없다면? 샘플 평면도로 체험해 보기 →
+                  </button>
+                </div>
+                <ol className="mt-10 grid gap-3 text-left sm:grid-cols-3">
+                  {STEPS.map((s) => (
+                    <li key={s.n} className="rounded-xl bg-surface p-4 shadow-xs ring-1 ring-ink-200">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-50 text-sm font-bold text-brand-700 tabular-nums ring-1 ring-brand-100">
+                        {s.n}
+                      </div>
+                      <div className="mt-3 font-semibold text-ink-900">{s.title}</div>
+                      <div className="mt-1 text-sm text-pretty text-ink-500">{s.text}</div>
+                    </li>
+                  ))}
+                </ol>
+              </>
+            )}
+            {trashed.length > 0 && <DocTrash trashed={trashed} cloud={cloud} onRestore={onRestoreDoc} onPurge={onPurgeDoc} />}
+          </div>
         </div>
       </div>
       {folderDialog && (
