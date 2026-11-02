@@ -23,6 +23,7 @@ import { DEFAULT_STATUS, cardBoxFor, guessKind, isInst, itemGroup, linksPatch, m
 import { liveItemTrash, pushItems } from '../lib/trash'
 import { MAX_ZOOM, MIN_ZOOM } from '../lib/zoom'
 import { adaptState, newRevKey } from '../lib/revision'
+import { loadUncalHidden } from '../lib/scalePanel'
 import RevisionDialog from './RevisionDialog'
 
 // 메모장은 마크다운 읽는 도구까지 필요할 때만 불러옴
@@ -39,7 +40,8 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
   const [zoom, setZoom] = useState(1)
   const [fitKey, setFitKey] = useState(1)
   const [fittedKey, setFittedKey] = useState(0)
-  const [tool, setTool] = useState(saved?.calibration ? 'length' : 'calibrate')
+  // 기준 길이 없는 도면은 기준선 긋기로 시작 (오른쪽 축척 칸을 접어 두었으면 선택 도구로)
+  const [tool, setTool] = useState(() => (saved?.calibration ? 'length' : loadUncalHidden() ? 'select' : 'calibrate'))
   const [measurements, setMeasurements] = useState(saved?.measurements ?? [])
   const [history, setHistory] = useState([])
   // 휴지통: 지운 항목 [{ item, at }]. 7일 지난 것은 열 때 뺌 (lib/trash.js)
@@ -901,7 +903,6 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
         onFit={() => setFitKey((k) => k + 1)}
         tool={tool}
         setTool={setTool}
-        calibrated={!!mmPerPt}
         canUndo={history.length > 0}
         onUndo={undo}
         markupStyle={shownStyle}
@@ -1078,7 +1079,8 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
           trash={trash}
           onRestore={restoreItems}
           onPurge={purgeTrash}
-          onStartCalibrate={() => setTool('calibrate')}
+          calibrating={tool === 'calibrate'}
+          onStartCalibrate={() => setTool((t) => (t === 'calibrate' ? 'select' : 'calibrate'))}
           onEditCalibration={editCalibration}
           onApplyRatio={applyRatio}
           onResetCalibration={() => setCalibration(null)}

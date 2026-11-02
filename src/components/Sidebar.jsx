@@ -5,6 +5,7 @@ import { isMarkup, kindName } from '../lib/markup'
 import { CATEGORY_COLORS, CATEGORY_PRESETS, categoryTotals } from '../lib/categories'
 import { itemGroup } from '../lib/instrument'
 import { TRASH_DAYS, leftLabel } from '../lib/trash'
+import { loadUncalHidden, saveUncalHidden } from '../lib/scalePanel'
 
 export default function Sidebar({
   calibration,
@@ -28,6 +29,7 @@ export default function Sidebar({
   onDeleteCategory,
   onAssignCategory,
   onClear,
+  calibrating, // 지금 기준선 긋는 중 (기준 길이 도구)
   onStartCalibrate,
   onEditCalibration,
   onApplyRatio,
@@ -45,7 +47,19 @@ export default function Sidebar({
   const [showRatio, setShowRatio] = useState(false)
   // 축척 설정 창: 축척이 정해져 있으면 기본으로 접어 두고, 머리줄 버튼으로 열고 닫음
   const [scaleOpen, setScaleOpen] = useState(false)
-  const scaleShown = !mmPerPt || scaleOpen
+  // 축척이 없을 때도 접을 수 있음 (접은 상태는 이 브라우저에 기억)
+  const [uncalHidden, setUncalHidden] = useState(loadUncalHidden)
+  const scaleShown = mmPerPt ? scaleOpen : !uncalHidden
+  const toggleScale = () => {
+    if (mmPerPt) setScaleOpen((v) => !v)
+    else {
+      const hide = !uncalHidden
+      saveUncalHidden(hide)
+      setUncalHidden(hide)
+      // 긋는 중에 접으면 기준선 긋기도 그만 (선택 도구로)
+      if (hide && calibrating) onStartCalibrate()
+    }
+  }
 
   const measures = useMemo(() => measurements.filter((m) => !isMarkup(m.type)), [measurements])
   const markups = useMemo(() => measurements.filter((m) => itemGroup(m) === 'markup'), [measurements])
@@ -129,36 +143,36 @@ export default function Sidebar({
       </div>
       {/* 축척 */}
       <section className="border-b border-ink-200 p-4">
-        {mmPerPt ? (
-          <button
-            onClick={() => setScaleOpen((v) => !v)}
-            aria-expanded={scaleOpen}
-            title={scaleOpen ? '축척 설정 접기' : '축척 설정 펼치기'}
-            className="-mx-2 -my-1 flex w-[calc(100%+1rem)] items-center gap-2 rounded-lg px-2 py-1 text-left transition-colors hover:bg-ink-50"
-          >
-            <h3 className="text-xs font-semibold tracking-wide text-ink-500">축척</h3>
+        <button
+          onClick={toggleScale}
+          aria-expanded={scaleShown}
+          title={scaleShown ? '축척 설정 접기' : '축척 설정 펼치기'}
+          className="-mx-2 -my-1 flex w-[calc(100%+1rem)] items-center gap-2 rounded-lg px-2 py-1 text-left transition-colors hover:bg-ink-50"
+        >
+          <h3 className="text-xs font-semibold tracking-wide text-ink-500">축척</h3>
+          {mmPerPt ? (
             <span className="min-w-0 flex-1 truncate text-sm font-medium text-ref-700 tabular-nums">
               {calibration.mode === 'ratio'
                 ? `1 : ${calibration.ratio}`
                 : `기준 ${calibrationInput(calibration).value} ${calibrationInput(calibration).unit}`}
               <span className="ml-1.5 font-normal text-ink-400">· {unit}</span>
             </span>
-            <svg
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-              className={`h-4 w-4 shrink-0 text-ink-400 transition-transform ${scaleOpen ? 'rotate-180' : ''}`}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M6 9l6 6 6-6" />
-            </svg>
-          </button>
-        ) : (
-          <h3 className="text-xs font-semibold tracking-wide text-ink-500">축척</h3>
-        )}
+          ) : (
+            <span className="min-w-0 flex-1 truncate text-sm text-ink-400">{calibrating ? '기준선 긋는 중…' : '기준 길이 없음'}</span>
+          )}
+          <svg
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            className={`h-4 w-4 shrink-0 text-ink-400 transition-transform ${scaleShown ? 'rotate-180' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </button>
         {!scaleShown ? null : mmPerPt ? (
           <div className="mt-2 rounded-lg bg-ref-50 p-3 ring-1 ring-ref-200">
             <div className="flex items-center justify-between gap-2">
@@ -189,7 +203,7 @@ export default function Sidebar({
             </div>
             <div className="mt-2 flex gap-3 text-xs">
               <button className="font-medium text-ref-700 hover:underline" onClick={onStartCalibrate}>
-                선 다시 긋기
+                {calibrating ? '선을 그어 주세요 · 다시 누르면 취소' : '선 다시 긋기'}
               </button>
               <button className="text-ink-500 hover:underline" onClick={onResetCalibration}>
                 해제
@@ -199,13 +213,14 @@ export default function Sidebar({
         ) : (
           <div className="mt-2 rounded-lg bg-ink-50 p-3 text-sm">
             <p className="text-ink-600">
-              먼저 <b className="text-ref-600">기준 길이</b> 도구로 치수를 아는 선을 그어 주세요.
+              먼저 <b className="text-ref-600">기준선 긋기</b>(C 키)로 치수를 아는 선을 그어 주세요.
             </p>
             <button
-              className="mt-2 w-full rounded-md bg-ref-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-ref-600"
+              className={`mt-2 w-full rounded-md px-3 py-1.5 text-sm font-semibold ${calibrating ? 'bg-ref-600 text-white ring-2 ring-ref-300' : 'bg-ref-500 text-white hover:bg-ref-600'}`}
               onClick={onStartCalibrate}
+              aria-pressed={!!calibrating}
             >
-              기준선 긋기
+              {calibrating ? '선을 그어 주세요 · 다시 누르면 취소' : '기준선 긋기'}
             </button>
             <button className="mt-2 text-xs text-ink-500 hover:underline" onClick={() => setShowRatio((v) => !v)}>
               또는 도면 축척(1:N)을 알고 있다면 →
@@ -915,3 +930,4 @@ function TrashCan({ className }) {
     </svg>
   )
 }
+
