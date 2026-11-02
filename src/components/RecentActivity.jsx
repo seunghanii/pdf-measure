@@ -5,8 +5,8 @@ import { timeAgo } from './Library'
 import { displayName } from '../lib/library'
 import { ACTION_LABEL } from '../lib/activity'
 
-const SHOW_COUNT = 12
-const MORE_COUNT = 40
+// 상자 높이는 화면의 절반 정도(최근 열어본 도면과 반씩), 넘치는 기록은 상자 안에서 스크롤
+const SHOW_COUNT = 40
 const HIDDEN_KEY = 'pdf-measure:activity-hidden'
 
 function loadHidden() {
@@ -41,7 +41,6 @@ function collectActivity(list) {
 
 export default function RecentActivity({ list, library, onGo }) {
   const [hidden, setHidden] = useState(loadHidden)
-  const [more, setMore] = useState(false)
   const rows = useMemo(() => collectActivity(list), [list])
 
   const toggle = () => {
@@ -50,7 +49,7 @@ export default function RecentActivity({ list, library, onGo }) {
       return !v
     })
   }
-  const shown = rows.slice(0, more ? MORE_COUNT : SHOW_COUNT)
+  const shown = rows.slice(0, SHOW_COUNT)
 
   return (
     <section>
@@ -75,7 +74,7 @@ export default function RecentActivity({ list, library, onGo }) {
           </div>
         ) : (
           <>
-            <ul className="divide-y divide-ink-100 overflow-hidden rounded-xl bg-surface shadow-sm">
+            <ul className="divide-y divide-ink-100 rounded-xl bg-surface shadow-sm max-h-80 overflow-y-auto overscroll-contain lg:max-h-[max(12rem,calc((100dvh-15rem)/2))]">
               {shown.map(({ doc, ev: raw }, i) => {
                 const ev = raw.w === '계기 카드' ? { ...raw, w: 'Equipment' } : raw // 예전 기록의 종류 이름도 새 이름으로
                 const title = ev.cnt ? `${ev.w} ${ev.cnt}개` : ev.n || ev.w
@@ -107,11 +106,6 @@ export default function RecentActivity({ list, library, onGo }) {
                 )
               })}
             </ul>
-            {rows.length > SHOW_COUNT && (
-              <button onClick={() => setMore((v) => !v)} className="mt-1.5 px-1 text-xs font-medium text-brand-600 hover:underline">
-                {more ? '접기' : `더 보기 (${Math.min(rows.length, MORE_COUNT) - SHOW_COUNT})`}
-              </button>
-            )}
           </>
         ))}
     </section>
