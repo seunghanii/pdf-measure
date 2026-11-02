@@ -15,12 +15,17 @@ export function SearchIcon({ className = 'h-4 w-4' }) {
 }
 
 export function Highlighted({ text, query }) {
-  const [a, b, c] = splitMatch(text, query)
   return (
     <>
-      {a}
-      {b && <mark className="rounded-sm bg-warn-200 px-0.5 text-ink-900">{b}</mark>}
-      {c}
+      {splitMatch(text, query).map(([s, hit], i) =>
+        hit ? (
+          <mark key={i} className="rounded-sm bg-warn-200 px-0.5 text-ink-900">
+            {s}
+          </mark>
+        ) : (
+          s
+        ),
+      )}
     </>
   )
 }
@@ -112,7 +117,7 @@ export default function SearchPanel({ store, recent, library, onOpenHit, onOpenD
   // 별명·파일 이름으로 도면 찾기 (색인 없이도 바로)
   const nameHits = useMemo(() => {
     if (!query.trim()) return []
-    return docs.filter((d) => textHas(library.aliases?.[d.id], query) || textHas(fileBase(d.name), query))
+    return docs.filter((d) => textHas(`${library.aliases?.[d.id] ?? ''} ${fileBase(d.name)}`, query))
   }, [docs, library, query])
 
   const missing = indexes ? docs.filter((d) => !indexes.has(d.id)).length : 0
@@ -130,7 +135,7 @@ export default function SearchPanel({ store, recent, library, onOpenHit, onOpenD
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="도면 이름·별명이나 도면 속 글자 찾기 (예: 1층, P-101, 거실)"
+            placeholder="도면 이름·별명이나 도면 속 글자 찾기 (예: P-101, flo pu — 낱말 일부만 띄어 써도 돼요)"
             className="min-w-0 flex-1 text-base outline-none placeholder:text-ink-400"
           />
           <button onClick={onClose} className="rounded-md px-2 py-1 text-sm text-ink-500 hover:bg-ink-100">
