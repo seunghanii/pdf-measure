@@ -229,7 +229,7 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
                       )}
                       {r.docs.length > 0 && (
                         <div className="mt-0.5 truncate text-[11px] text-ink-400" title={r.docs.map((d) => `${d.role ? `${d.role}: ` : ''}${d.name}`).join('\n')}>
-                          {r.docs.map((d) => d.role || '도면').join(' · ')}
+                          {r.docs.map((d) => d.role || (d.photo ? '사진' : '도면')).join(' · ')}
                         </div>
                       )}
                     </td>

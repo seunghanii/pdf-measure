@@ -46,6 +46,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
   const [initialText] = useState(() => migrated?.text ?? memo.text ?? '')
   const [viewing, setViewing] = useState(null) // 크게 보는 사진 { ids, index }
   const [previewing, setPreviewing] = useState(null) // 미리 보는 관련 도면 { id, name, page, role }
+  const [photoLink, setPhotoLink] = useState(null) // 크게 보는 연결 사진 { photo, name, role }
   const [busy, setBusy] = useState(0) // 사진 넣는 중
   const [size, setSize] = useState(loadSize) // { w, h } px, 없으면 기본 크기
   const [bottomH, setBottomH] = useState(loadBottomH) // 아래 자리 높이 px, 없으면 기본
@@ -229,6 +230,13 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
     }
   }
   const urls = viewing ? viewing.ids.map((id) => cachedImageUrl(id)) : []
+  const [photoLinkUrl, setPhotoLinkUrl] = useState(null)
+  function openPhotoLink(l) {
+    setPhotoLink(l)
+    setPhotoLinkUrl(cachedImageUrl(l.photo))
+    if (!cachedImageUrl(l.photo))
+      getImageBlob({ store, docId }, l.photo).then(() => setPhotoLinkUrl(cachedImageUrl(l.photo)))
+  }
 
   return (
     <div
@@ -330,7 +338,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
       {memo.inst && <InstFields memo={memo} onChange={onChange} kinds={kinds} onAddKind={onAddKind} />}
 
       {/* 관련 도면 (여러 개) */}
-      <RelatedDocs memo={memo} library={library} onChange={onChange} onOpen={setPreviewing} onPick={onPickLink} />
+      <RelatedDocs memo={memo} library={library} onChange={onChange} onOpen={(l) => (l.photo ? openPhotoLink(l) : setPreviewing(l))} onPick={onPickLink} />
 
       {/* 글과 사진 (같이 스크롤) */}
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -423,6 +431,20 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
           index={Math.min(viewing.index, urls.length - 1)}
           onIndex={(index) => setViewing((v) => ({ ...v, index }))}
           onClose={() => setViewing(null)}
+        />
+      )}
+      {photoLink && (
+        <PhotoViewer
+          urls={[photoLinkUrl]}
+          index={0}
+          onIndex={() => {}}
+          onClose={() => setPhotoLink(null)}
+          title={
+            <span>
+              {photoLink.role && <span className="mr-1.5 rounded bg-white/20 px-1.5 py-px text-xs font-semibold">{photoLink.role}</span>}
+              {photoLink.name || '사진'}
+            </span>
+          }
         />
       )}
       {previewing && (

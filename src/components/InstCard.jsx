@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { INST_STATUSES, DEFAULT_STATUS, guessKind, memoLinks, linksPatch, normTag, statusOf } from '../lib/instrument'
 import { isDefaultName } from '../lib/categories'
 import { convertTyped, hasHangul } from '../lib/hangulKeys'
+import { useImageUrl } from '../lib/images'
 
 // 메모장 안의 계기 카드 칸: Tag. No, Description, 종류, 상태
 // onChange(patch): 메모 항목에 합칠 값. kinds: 계기 종류 목록, onAddKind(약어): 목록에 더하기 (모든 도면 공통)
@@ -240,7 +241,18 @@ export function RelatedDocs({ memo, library, onChange, onOpen, onPick }) {
       {links.length > 0 && (
         <ul className="mb-1 flex flex-col gap-1">
           {links.map((l, i) => (
-            <li key={`${l.id}-${i}`} className="group flex items-center gap-1.5">
+            <li key={`${l.photo ?? l.id}-${i}`} className="group flex items-center gap-1.5">
+              {l.photo ? (
+                <button
+                  onClick={() => onOpen(l)}
+                  className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md bg-brand-50 px-2 py-1 text-left text-brand-700 hover:bg-brand-100"
+                  title="이 사진 크게 보기"
+                >
+                  {l.role && <span className="shrink-0 rounded bg-white px-1.5 py-px text-[11px] font-semibold text-brand-800 ring-1 ring-brand-200">{l.role}</span>}
+                  <LinkThumb id={l.photo} />
+                  <span className="truncate font-medium">{l.name || '사진'}</span>
+                </button>
+              ) : (
               <button
                 onClick={() => onOpen(l)}
                 className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md bg-brand-50 px-2 py-1 text-left text-brand-700 hover:bg-brand-100"
@@ -263,6 +275,7 @@ export function RelatedDocs({ memo, library, onChange, onOpen, onPick }) {
                   <circle cx="12" cy="12" r="3" />
                 </svg>
               </button>
+              )}
               <button onClick={() => onPick(i)} className="shrink-0 rounded px-1 py-1 text-ink-400 hover:bg-ink-100 hover:text-ink-700" title="바꾸기" aria-label="바꾸기">
                 <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M4 20h4L19 9l-4-4L4 16zM13 7l4 4" />
@@ -277,12 +290,29 @@ export function RelatedDocs({ memo, library, onChange, onOpen, onPick }) {
           ))}
         </ul>
       )}
-      <button onClick={() => onPick()} className="flex items-center gap-1 py-0.5 text-ink-500 hover:text-ink-800" title="Hook-up, 데이터시트 같은 관련 도면 연결">
+      <button onClick={() => onPick()} className="flex items-center gap-1 py-0.5 text-ink-500 hover:text-ink-800" title="Hook-up, 데이터시트 같은 관련 도면이나 사진 연결">
         <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
           <path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1" />
         </svg>
         {links.length ? '관련 도면 더 연결' : '관련 도면 연결'}
       </button>
     </div>
+  )
+}
+
+// 사진 연결의 작은 그림
+function LinkThumb({ id }) {
+  const url = useImageUrl(id)
+  return (
+    <span className="grid h-6 w-8 shrink-0 place-items-center overflow-hidden rounded bg-white ring-1 ring-brand-200">
+      {url ? (
+        <img src={url} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-brand-400" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <path d="M3 16l5-5 4 4 3-3 6 6" />
+        </svg>
+      )}
+    </span>
   )
 }

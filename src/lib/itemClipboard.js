@@ -9,6 +9,7 @@ import { TYPE_INFO } from './measure'
 import { getImageBlob, newImageId, rememberImage } from './images'
 import { memoPhotoIds } from './memo'
 import { memoFileIds, newFileId } from './excel'
+import { memoLinkPhotoIds } from './instrument'
 import { withCategory } from './categories'
 
 export const PASTE_STEP = 12 // 제자리에 붙여넣을 때마다 비켜 놓는 거리 (pt)
@@ -110,6 +111,7 @@ async function copyAssets(items, source, store, docId) {
     if (m.type === 'memo') {
       memoPhotoIds(m).forEach((id) => ids.add(id))
       memoFileIds(m).forEach((id) => ids.add(id))
+      memoLinkPhotoIds(m).forEach((id) => ids.add(id))
     }
   }
   const map = new Map()
@@ -145,6 +147,7 @@ function withAssets(m, map) {
     text,
     ...(m.images ? { images: m.images.map(swap) } : {}),
     ...(Array.isArray(m.files) ? { files: m.files.map((f) => ({ ...f, id: swap(f.id) })) } : {}),
+    ...(Array.isArray(m.links) ? { links: m.links.map((l) => (l.photo ? { ...l, photo: swap(l.photo) } : l)) } : {}),
   }
 }
 
