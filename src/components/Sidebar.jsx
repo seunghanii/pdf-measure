@@ -7,6 +7,7 @@ import { itemGroup } from '../lib/instrument'
 import { TRASH_DAYS, leftLabel } from '../lib/trash'
 import { loadUncalHidden, saveUncalHidden } from '../lib/scalePanel'
 import { useInstLabelsOff } from '../lib/instLabels'
+import { SIDEBAR_DEFAULT_W, clampSidebarWidth, setSidebarWidth, useSidebarWidth } from '../lib/sidebarWidth'
 
 export default function Sidebar({
   calibration,
@@ -123,10 +124,15 @@ export default function Sidebar({
     }),
     [],
   )
+  const sidebarW = useSidebarWidth()
   const rowProps = { mmPerPt, unit, pageNum, numPages, selectedIds, onSetAllHidden, rowActions, categories }
 
   return (
-    <aside className={`${collapsed ? 'hidden' : 'flex'} max-h-[35vh] w-full shrink-0 flex-col border-t border-ink-200 bg-surface md:max-h-none md:w-80 md:border-t-0 md:border-l`}>
+    <aside
+      className={`${collapsed ? 'hidden' : 'flex'} relative max-h-[35vh] w-full shrink-0 flex-col border-t border-ink-200 bg-surface md:max-h-none md:w-(--sb-w) md:border-t-0 md:border-l`}
+      style={{ '--sb-w': `${clampSidebarWidth(sidebarW)}px` }}
+    >
+      {!collapsed && <ResizeHandle width={sidebarW} />}
       {top}
       {/* 계기 카드: 목록 보기, 도면 글자에서 태그 찾기 */}
       <div className="flex items-center gap-1.5 border-b border-ink-200 px-4 py-2">
@@ -938,3 +944,58 @@ function TrashCan({ className }) {
   )
 }
 
+
+// 오른쪽 목록 왼쪽 가장자리: 끌어서 넓이 조절 (넓은 화면만). 두 번 누르면 기본 넓이
+function ResizeHandle({ width }) {
+  const onPointerDown = (e) => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    const el = e.currentTarget
+    el.setPointerCapture?.(e.pointerId)
+    const startX = e.clientX
+    const startW = clampSidebarWidth(width)
+    let last = startW
+    let raf = 0
+    document.documentElement.classList.add('sidebar-resizing')
+    const move = (ev) => {
+      last = clampSidebarWidth(startW + (startX - ev.clientX))
+      if (!raf)
+        raf = requestAnimationFrame(() => {
+          raf = 0
+          setSidebarWidth(last, false)
+        })
+    }
+    const up = () => {
+      cancelAnimationFrame(raf)
+      el.removeEventListener('pointermove', move)
+      el.removeEventListener('pointerup', up)
+      el.removeEventListener('pointercancel', up)
+      document.documentElement.classList.remove('sidebar-resizing')
+      setSidebarWidth(last)
+    }
+    el.addEventListener('pointermove', move)
+    el.addEventListener('pointerup', up)
+    el.addEventListener('pointercancel', up)
+  }
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="오른쪽 목록 넓이"
+      aria-valuenow={clampSidebarWidth(width)}
+      tabIndex={0}
+      title="끌어서 넓이 조절 · 두 번 누르면 기본 넓이"
+      onPointerDown={onPointerDown}
+      onDoubleClick={() => setSidebarWidth(SIDEBAR_DEFAULT_W)}
+      onKeyDown={(e) => {
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+        e.preventDefault()
+        e.stopPropagation()
+        setSidebarWidth(clampSidebarWidth(clampSidebarWidth(width) + (e.key === 'ArrowLeft' ? 20 : -20)))
+      }}
+      className="group absolute inset-y-0 -left-1.5 z-10 hidden w-3 cursor-col-resize touch-none md:block"
+    >
+      <div className="mx-auto h-full w-0.5 bg-transparent transition-colors group-hover:bg-brand-400 group-focus-visible:bg-brand-500 group-active:bg-brand-500" />
+    </div>
+  )
+}

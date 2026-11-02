@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { TOOLS, VIEW_TOOLS, digitForTool } from '../lib/tools'
 import { toggleSnap, useSnapEnabled } from '../lib/snapSetting'
 import { MEMO_COLORS } from '../lib/memo'
@@ -84,9 +84,11 @@ export default function Toolbar({
           <Divider />
           <div className="flex items-center gap-0.5 rounded-xl bg-ink-100 p-0.5" role="group" aria-label="측정 도구">
             {/* 기준 길이는 오른쪽 목록 축척 칸에서만 (C·3 키는 그대로) */}
-            {VIEW_TOOLS.filter((t) => t.id !== 'calibrate').map((t) => (
+            {/* 면적·각도(more)는 + 버튼 안에. 고른 동안에는 막대에도 보여 줌 */}
+            {VIEW_TOOLS.filter((t) => t.id !== 'calibrate' && (!t.more || tool === t.id)).map((t) => (
               <ToolButton key={t.id} t={t} active={tool === t.id} onClick={() => setTool(t.id)} showLabel />
             ))}
+            <MoreTools tools={VIEW_TOOLS.filter((t) => t.more)} tool={tool} setTool={setTool} />
             <SnapButton />
           </div>
           <Divider />
@@ -251,6 +253,100 @@ function SnapButton() {
       <Icon d={on ? 'M6 4v8a6 6 0 0012 0V4h-4v8a2 2 0 01-4 0V4zM6 8h4M14 8h4' : 'M6 4v8a6 6 0 0012 0V4h-4v8a2 2 0 01-4 0V4zM3 3l18 18'} />
       <span className="hidden min-[1600px]:inline">자석</span>
     </button>
+  )
+}
+
+// 자주 안 쓰는 도구(면적·각도) 펼침 메뉴. 툴바가 좁은 화면에서 옆으로 밀리며 잘리지 않게 fixed 로 띄움
+function MoreTools({ tools, tool, setTool }) {
+  const btnRef = useRef(null)
+  const menuRef = useRef(null)
+  const [pos, setPos] = useState(null) // 열렸을 때 {left, top}
+  const open = !!pos
+
+  useEffect(() => {
+    if (!open) return
+    const close = () => setPos(null)
+    const onDown = (e) => {
+      if (menuRef.current?.contains(e.target) || btnRef.current?.contains(e.target)) return
+      close()
+    }
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        close()
+      }
+    }
+    window.addEventListener('pointerdown', onDown, true)
+    window.addEventListener('keydown', onKey, true)
+    window.addEventListener('resize', close)
+    window.addEventListener('blur', close)
+    return () => {
+      window.removeEventListener('pointerdown', onDown, true)
+      window.removeEventListener('keydown', onKey, true)
+      window.removeEventListener('resize', close)
+      window.removeEventListener('blur', close)
+    }
+  }, [open])
+
+  const toggle = () => {
+    if (open) return setPos(null)
+    const r = btnRef.current.getBoundingClientRect()
+    setPos({ left: Math.max(8, Math.min(r.left, window.innerWidth - 200)), top: r.bottom + 6 })
+  }
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onClick={toggle}
+        aria-label="도구 더 보기"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={`도구 더 보기: ${tools.map((t) => `${t.label}(${t.key})`).join(' · ')}`}
+        className={[
+          'flex items-center rounded-[10px] px-2 py-1.5 text-ink-600 transition-colors pointer-coarse:px-3 pointer-coarse:py-2.5',
+          open ? 'bg-surface text-ink-900 shadow-xs' : 'hover:bg-surface hover:text-ink-900',
+        ].join(' ')}
+      >
+        <Icon d="M12 5v14M5 12h14" />
+      </button>
+      {open && (
+        <div
+          ref={menuRef}
+          role="menu"
+          aria-label="더 많은 측정 도구"
+          className="fixed z-50 min-w-44 rounded-lg border border-ink-200 bg-surface p-1 shadow-lg"
+          style={{ left: pos.left, top: pos.top }}
+        >
+          {tools.map((t) => {
+            const digit = digitForTool(t.id)
+            const active = tool === t.id
+            return (
+              <button
+                key={t.id}
+                role="menuitemradio"
+                aria-checked={active}
+                onClick={() => {
+                  setTool(t.id)
+                  setPos(null)
+                }}
+                className={[
+                  'flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm font-medium pointer-coarse:py-2.5',
+                  active ? 'bg-brand-600 text-white' : 'text-ink-700 hover:bg-ink-100',
+                ].join(' ')}
+              >
+                <Icon d={t.icon} />
+                <span className="flex-1">{t.label}</span>
+                <kbd className={`font-sans text-xs ${active ? 'text-white/80' : 'text-ink-400'}`}>
+                  {digit ? `${digit} · ` : ''}
+                  {t.key}
+                </kbd>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </>
   )
 }
 

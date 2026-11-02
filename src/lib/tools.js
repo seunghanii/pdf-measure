@@ -11,8 +11,8 @@ export const TOOLS = [
   },
   { id: 'calibrate', label: '기준 길이', key: 'C', group: 'measure', icon: 'M3 17L17 3M3 17l3 0M3 17l0-3M17 3l-3 0M17 3l0 3', accent: 'orange' },
   { id: 'length', label: '길이', key: 'L', group: 'measure', icon: 'M3 12h18M3 8v8M21 8v8' },
-  { id: 'area', label: '면적', key: 'A', group: 'measure', icon: 'M4 6l8-3 8 5-2 11H6z' },
-  { id: 'angle', label: '각도', key: 'G', group: 'measure', icon: 'M4 20h16M4 20L16 5M10 20a6 6 0 00-2-4.5' },
+  { id: 'area', label: '면적', key: 'A', group: 'measure', more: true, icon: 'M4 6l8-3 8 5-2 11H6z' },
+  { id: 'angle', label: '각도', key: 'G', group: 'measure', more: true, icon: 'M4 20h16M4 20L16 5M10 20a6 6 0 00-2-4.5' },
   { id: 'highlight', label: '형광펜', key: 'M', group: 'markup', icon: 'M9 11l-5 5v4h4l5-5M9 11l6-6 4 4-6 6M9 11l4 4M3 21h8' },
   { id: 'text', label: '텍스트', key: 'T', group: 'markup', icon: 'M4 6V4h16v2M12 4v16M9 20h6' },
   { id: 'pen', label: '펜', key: 'P', group: 'markup', icon: 'M3 17c3-1 4-6 7-6s2 6 5 6 4-4 6-5' },
@@ -25,6 +25,7 @@ export const TOOLS = [
 ]
 
 // 도구 막대 순서: 기본(선택·이동·글자 복사) → 측정
+// more: 자주 안 쓰는 도구(면적·각도). 도구 막대의 + 버튼 안에 들어가고, 단축키는 그대로
 export const VIEW_TOOLS = [...TOOLS.filter((t) => t.group === 'basic'), ...TOOLS.filter((t) => t.group === 'measure')]
 
 export const DIGIT_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
