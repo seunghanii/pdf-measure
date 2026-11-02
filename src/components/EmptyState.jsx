@@ -57,7 +57,12 @@ export default function EmptyState({
       {/* 왼쪽 칸(넓은 화면): 위 달력, 아래 메모장 자리. 좁은 화면은 맨 아래로 */}
       <div className="mx-auto flex w-full max-w-[100rem] flex-col lg:flex-row lg:items-start lg:gap-6">
         <aside className="order-last mt-8 min-w-0 space-y-8 lg:order-first lg:mt-0 lg:w-64 lg:shrink-0 xl:w-72">
-          <HomeCalendar />
+          <HomeCalendar
+            store={store}
+            list={list}
+            library={library}
+            onOpenEquip={(doc, row) => onOpenActivity(doc, { a: 'edit', id: row.id, p: row.page, r: row.rect })}
+          />
           <Suspense fallback={<div className="h-[28rem] rounded-xl bg-surface ring-1 ring-ink-200" />}>
             <HomeNotepad store={store} className="h-[28rem]" />
           </Suspense>

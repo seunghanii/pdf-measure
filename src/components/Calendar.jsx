@@ -1,12 +1,14 @@
 // 홈 왼쪽 위 작은 달력 + 크게 보기 Calendar 창.
 // 오늘은 파랗게, 주말(기본 금요일)은 빨갛게. 주말 요일은 Calendar 창에서 바꿈 (lib/calendar.js, 이 브라우저에 저장).
-// 일정 기능은 아직 없음: 나중에 events = { 'YYYY-MM-DD': [...] } 를 DayCell 에 넘겨 표시하고,
-// 창 오른쪽 '선택한 날' 칸에 목록·등록 단추를 넣으면 됩니다.
-import { useEffect, useState } from 'react'
+// 일정: 등록·수정·삭제 (lib/calEvents.js, 로그인했으면 서버에 저장).
+// Equipment 작업 완료 날짜(inst.done)는 그날 칸에 "Tag. No - 작업" 으로 표시, 칸에 다 안 들어가면 +N.
+// 마우스 휠(트랙패드 위아래)로 이전 달·다음 달.
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   WEEKDAYS,
   WEEKDAYS_LONG,
   addMonths,
+  dayKey,
   hijriLabel,
   loadWeekend,
   monthGrid,
@@ -16,6 +18,8 @@ import {
   startOfMonth,
   weekdayOrder,
 } from '../lib/calendar'
+import { EMPTY_CAL, EVENT_COLORS, equipByDay, eventOn, eventsByDay, newEventId } from '../lib/calEvents'
+import { displayName } from '../lib/library'
 
 // 오늘 날짜: 자정이 지나거나 창으로 돌아오면 새로 고침
 function useToday() {
@@ -36,6 +40,54 @@ function useToday() {
   return today
 }
 
+// 마우스 휠로 달 넘기기. 페이지가 같이 스크롤되지 않게 막고(passive: false),
+// 트랙패드의 잔 움직임·관성은 모아서 한 번에 한 달씩만 넘김
+function useWheelMonth(ref, onStep) {
+  const stepRef = useRef(onStep)
+  useLayoutEffect(() => {
+    stepRef.current = onStep
+  })
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    let acc = 0
+    let last = 0
+    const onWheel = (e) => {
+      if (e.ctrlKey) return // 핀치 확대는 그대로
+      let d = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX
+      if (!d) return
+      e.preventDefault()
+      if (e.deltaMode === 1) d *= 40
+      const now = performance.now()
+      if (now - last < 350) {
+        last = now // 넘긴 직후 관성은 버림
+        acc = 0
+        return
+      }
+      acc += d
+      if (Math.abs(acc) >= 40) {
+        stepRef.current(acc > 0 ? 1 : -1)
+        acc = 0
+        last = now
+      }
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [ref])
+}
+
+// 큰 달 칸 한 칸에 보일 줄 수 (화면 너비에 따라)
+function useCellLines() {
+  const get = () => (window.matchMedia?.('(min-width: 1024px)').matches ? 3 : window.matchMedia?.('(min-width: 640px)').matches ? 2 : 1)
+  const [n, setN] = useState(get)
+  useEffect(() => {
+    const on = () => setN(get())
+    window.addEventListener('resize', on)
+    return () => window.removeEventListener('resize', on)
+  }, [])
+  return n
+}
+
 function Chevron({ dir, className = 'h-4 w-4' }) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -46,12 +98,40 @@ function Chevron({ dir, className = 'h-4 w-4' }) {
 
 const navBtn = 'flex h-7 w-7 items-center justify-center rounded-md text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-800'
 
-export default function HomeCalendar() {
+export default function HomeCalendar({ store, list = [], library, onOpenEquip }) {
   const today = useToday()
   const [weekend, setWeekend] = useState(loadWeekend)
   const [month, setMonth] = useState(() => startOfMonth(new Date()))
-  const [big, setBig] = useState(false)
+  const [big, setBig] = useState(null) // null 닫힘, Date = 처음 고를 날
+  const [cal, setCal] = useState(EMPTY_CAL)
+  const [saveError, setSaveError] = useState(false)
+  const gridRef = useRef(null)
+  useWheelMonth(gridRef, (n) => setMonth((m) => addMonths(m, n)))
 
+  useEffect(() => {
+    let alive = true
+    store
+      ?.getCalendar?.()
+      .then((c) => alive && setCal(c))
+      .catch((e) => console.warn('일정을 불러오지 못함', e))
+    return () => {
+      alive = false
+    }
+  }, [store])
+
+  const saveEvents = (events) => {
+    const next = { events, at: Date.now() }
+    setCal(next)
+    setSaveError(false)
+    store
+      ?.saveCalendar?.(next)
+      .catch((e) => {
+        console.warn('일정 저장 실패', e)
+        setSaveError(true)
+      })
+  }
+
+  const equip = useMemo(() => equipByDay(list), [list])
   const changeWeekend = (days) => {
     setWeekend(days)
     saveWeekend(days)
@@ -65,6 +145,7 @@ export default function HomeCalendar() {
           <path d="M3 10h18M8 3v4M16 3v4" />
         </svg>
         달력
+        {saveError && <span className="ml-auto font-normal text-danger-500">일정 저장 못 함 (이 브라우저에는 남아 있어요)</span>}
       </div>
       <div className="rounded-xl bg-surface p-3 shadow-sm">
         <div className="mb-1 flex items-center gap-1">
@@ -81,22 +162,32 @@ export default function HomeCalendar() {
           <button onClick={() => setMonth((m) => addMonths(m, 1))} className={navBtn} title="다음 달" aria-label="다음 달">
             <Chevron dir="right" />
           </button>
-          <button onClick={() => setBig(true)} className={navBtn} title="크게 보기" aria-label="달력 크게 보기">
+          <button onClick={() => setBig(today)} className={navBtn} title="크게 보기" aria-label="달력 크게 보기">
             <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" />
             </svg>
           </button>
         </div>
-        <MonthGrid month={month} today={today} weekend={weekend} />
+        <div ref={gridRef} title="마우스 휠로 이전·다음 달">
+          <MonthGrid month={month} today={today} weekend={weekend} events={cal.events} equip={equip} onPick={(d) => setBig(d)} />
+        </div>
       </div>
       {big && (
         <CalendarDialog
-          initialMonth={month}
+          initial={big}
           today={today}
           weekend={weekend}
           onWeekend={changeWeekend}
+          events={cal.events}
+          onSaveEvents={saveEvents}
+          equip={equip}
+          library={library}
+          onOpenEquip={(item) => {
+            setBig(null)
+            onOpenEquip?.(item.doc, item.row)
+          }}
           onClose={(m) => {
-            setBig(false)
+            setBig(null)
             if (m) setMonth(m)
           }}
         />
@@ -105,9 +196,14 @@ export default function HomeCalendar() {
   )
 }
 
-// 작은 달력 칸
-function MonthGrid({ month, today, weekend }) {
+const dayTone = (isToday, off, inMonth) =>
+  isToday ? 'bg-brand-600 font-semibold text-white' : off ? (inMonth ? 'text-danger-600' : 'text-danger-300') : inMonth ? 'text-ink-700' : 'text-ink-300'
+
+// 작은 달력 칸: 일정·Equipment 가 있는 날은 숫자 아래 작은 점. 누르면 그날로 큰 창
+function MonthGrid({ month, today, weekend, events, equip, onPick }) {
   const order = weekdayOrder()
+  const cells = useMemo(() => monthGrid(month), [month])
+  const evMap = useMemo(() => eventsByDay(events, cells.map((c) => c.key)), [events, cells])
   return (
     <div className="grid grid-cols-7 text-center text-xs tabular-nums">
       {order.map((d) => (
@@ -115,28 +211,24 @@ function MonthGrid({ month, today, weekend }) {
           {WEEKDAYS[d]}
         </div>
       ))}
-      {monthGrid(month).map(({ date, key, inMonth }) => {
+      {cells.map(({ date, key, inMonth }) => {
         const isToday = sameDay(date, today)
         const off = weekend.includes(date.getDay())
+        const ev = evMap.get(key)?.length ?? 0
+        const eq = equip.get(key)?.length ?? 0
+        const tip = [isToday && '오늘', ev && `일정 ${ev}개`, eq && `Equipment ${eq}개`].filter(Boolean).join(' · ')
         return (
-          <div key={key} className="flex items-center justify-center py-0.5">
-            <span
-              title={isToday ? '오늘' : undefined}
-              className={`flex h-7 w-7 items-center justify-center rounded-full ${
-                isToday
-                  ? 'bg-brand-600 font-semibold text-white'
-                  : off
-                    ? inMonth
-                      ? 'text-danger-600'
-                      : 'text-danger-300'
-                    : inMonth
-                      ? 'text-ink-700'
-                      : 'text-ink-300'
-              }`}
-            >
+          <button key={key} onClick={() => onPick(date)} title={tip || undefined} className="group relative flex items-center justify-center py-0.5">
+            <span className={`flex h-7 w-7 items-center justify-center rounded-full transition-colors ${dayTone(isToday, off, inMonth)} ${isToday ? '' : 'group-hover:bg-ink-100'}`}>
               {date.getDate()}
             </span>
-          </div>
+            {(ev > 0 || eq > 0) && (
+              <span className="pointer-events-none absolute bottom-0 left-1/2 flex -translate-x-1/2 gap-0.5" aria-hidden="true">
+                {ev > 0 && <span className="h-1 w-1 rounded-full bg-brand-500" />}
+                {eq > 0 && <span className="h-1 w-1 rounded-full bg-ok-500" />}
+              </span>
+            )}
+          </button>
         )
       })}
     </div>
@@ -144,29 +236,49 @@ function MonthGrid({ month, today, weekend }) {
 }
 
 // 크게 보기 Calendar 창
-function CalendarDialog({ initialMonth, today, weekend, onWeekend, onClose }) {
-  const [month, setMonth] = useState(initialMonth)
-  const [selected, setSelected] = useState(() => (sameDay(startOfMonth(today), initialMonth) ? today : initialMonth))
+function CalendarDialog({ initial, today, weekend, onWeekend, events, onSaveEvents, equip, library, onOpenEquip, onClose }) {
+  const [month, setMonth] = useState(() => startOfMonth(initial))
+  const [selected, setSelected] = useState(initial)
   const [settings, setSettings] = useState(false)
+  const [editing, setEditing] = useState(null) // 고치는 일정 (새 일정은 id 없음)
+  const gridRef = useRef(null)
+  const lines = useCellLines()
   const order = weekdayOrder()
+  const cells = useMemo(() => monthGrid(month), [month])
+  const evMap = useMemo(() => eventsByDay(events, cells.map((c) => c.key)), [events, cells])
+  useWheelMonth(gridRef, (n) => setMonth((m) => addMonths(m, n)))
 
+  const closeRef = useRef(null)
+  useLayoutEffect(() => {
+    closeRef.current = () => (editing ? setEditing(null) : onClose(month))
+  })
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === 'Escape') onClose(month)
-      else if (e.target.closest?.('input, textarea, [contenteditable="true"]')) return
+      if (e.key === 'Escape') closeRef.current()
+      else if (e.target.closest?.('input, textarea, select, [contenteditable="true"]')) return
       else if (e.key === 'ArrowLeft' || e.key === 'PageUp') setMonth((m) => addMonths(m, -1))
       else if (e.key === 'ArrowRight' || e.key === 'PageDown') setMonth((m) => addMonths(m, 1))
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [month, onClose])
+  }, [])
 
   const goToday = () => {
     setMonth(startOfMonth(today))
     setSelected(today)
   }
   const toggleDay = (d) => onWeekend(weekend.includes(d) ? weekend.filter((x) => x !== d) : [...weekend, d].sort())
-  const hijri = hijriLabel(selected)
+  const startNew = (date) => setEditing({ date: dayKey(date), title: '', color: EVENT_COLORS[0] })
+
+  const saveEvent = (ev) => {
+    if (ev.id) onSaveEvents(events.map((e) => (e.id === ev.id ? ev : e)))
+    else onSaveEvents([...events, { ...ev, id: newEventId() }])
+    setEditing(null)
+  }
+  const deleteEvent = (id) => {
+    onSaveEvents(events.filter((e) => e.id !== id))
+    setEditing(null)
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-2 sm:p-4" onMouseDown={() => onClose(month)}>
@@ -175,17 +287,17 @@ function CalendarDialog({ initialMonth, today, weekend, onWeekend, onClose }) {
         aria-modal="true"
         aria-label="Calendar"
         onMouseDown={(e) => e.stopPropagation()}
-        className="flex max-h-full w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-surface shadow-xl"
+        className="flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-surface shadow-xl"
       >
         {/* 머리줄 */}
         <div className="flex flex-wrap items-center gap-2 border-b border-ink-200 px-4 py-3">
           <h3 className="mr-2 text-lg font-semibold tracking-tight text-ink-900">Calendar</h3>
           <div className="flex items-center gap-1">
-            <button onClick={() => setMonth((m) => addMonths(m, -1))} className={navBtn} title="이전 달 (←)" aria-label="이전 달">
+            <button onClick={() => setMonth((m) => addMonths(m, -1))} className={navBtn} title="이전 달 (← 또는 휠 위로)" aria-label="이전 달">
               <Chevron dir="left" />
             </button>
             <span className="min-w-[7.5rem] text-center text-base font-semibold text-ink-800 tabular-nums">{monthLabel(month)}</span>
-            <button onClick={() => setMonth((m) => addMonths(m, 1))} className={navBtn} title="다음 달 (→)" aria-label="다음 달">
+            <button onClick={() => setMonth((m) => addMonths(m, 1))} className={navBtn} title="다음 달 (→ 또는 휠 아래로)" aria-label="다음 달">
               <Chevron dir="right" />
             </button>
           </div>
@@ -193,6 +305,15 @@ function CalendarDialog({ initialMonth, today, weekend, onWeekend, onClose }) {
             오늘
           </button>
           <div className="ml-auto flex items-center gap-1">
+            <button
+              onClick={() => startNew(selected)}
+              className="flex items-center gap-1 rounded-lg bg-brand-600 px-3 py-1 text-sm font-medium text-white hover:bg-brand-press"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              일정
+            </button>
             <button
               onClick={() => setSettings((v) => !v)}
               aria-expanded={settings}
@@ -204,7 +325,7 @@ function CalendarDialog({ initialMonth, today, weekend, onWeekend, onClose }) {
                 <circle cx="12" cy="12" r="3" />
                 <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
               </svg>
-              주말 설정
+              <span className="hidden sm:inline">주말 설정</span>
             </button>
             <button onClick={() => onClose(month)} className={navBtn} title="닫기 (Esc)" aria-label="닫기">
               <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -247,35 +368,53 @@ function CalendarDialog({ initialMonth, today, weekend, onWeekend, onClose }) {
                 </div>
               ))}
             </div>
-            <div className="grid grid-cols-7 overflow-hidden rounded-lg ring-1 ring-ink-200" style={{ gap: 1, background: 'var(--color-ink-200)' }}>
-              {monthGrid(month).map((cell) => (
+            <div ref={gridRef} className="grid grid-cols-7 overflow-hidden rounded-lg ring-1 ring-ink-200" style={{ gap: 1, background: 'var(--color-ink-200)' }}>
+              {cells.map((cell) => (
                 <DayCell
                   key={cell.key}
                   {...cell}
+                  lines={lines}
+                  events={evMap.get(cell.key) ?? []}
+                  equip={equip.get(cell.key) ?? []}
                   isToday={sameDay(cell.date, today)}
                   isSelected={sameDay(cell.date, selected)}
                   off={weekend.includes(cell.date.getDay())}
                   onSelect={() => {
                     setSelected(cell.date)
+                    setEditing(null)
                     if (!cell.inMonth) setMonth(startOfMonth(cell.date))
+                  }}
+                  onAdd={() => {
+                    setSelected(cell.date)
+                    startNew(cell.date)
+                  }}
+                  onEdit={(ev) => {
+                    setSelected(cell.date)
+                    setEditing(ev)
                   }}
                 />
               ))}
             </div>
+            <p className="mt-2 hidden text-xs text-ink-400 sm:block">빈 곳을 두 번 누르면 일정 추가 · 마우스 휠로 이전·다음 달</p>
           </div>
 
-          {/* 선택한 날: 나중에 일정 목록·등록 자리 */}
-          <aside className="shrink-0 border-t border-ink-200 p-4 md:w-64 md:border-t-0 md:border-l">
-            <div className="text-xs font-semibold tracking-wide text-ink-500">선택한 날</div>
-            <div className={`mt-1 text-lg font-semibold tabular-nums ${weekend.includes(selected.getDay()) ? 'text-danger-600' : 'text-ink-900'}`}>
-              {selected.getMonth() + 1}월 {selected.getDate()}일 {WEEKDAYS_LONG[selected.getDay()]}
-            </div>
-            <div className="text-sm text-ink-500 tabular-nums">
-              {selected.getFullYear()}년{sameDay(selected, today) && <span className="ml-1.5 font-medium text-brand-600">오늘</span>}
-              {weekend.includes(selected.getDay()) && <span className="ml-1.5 text-danger-500">휴무</span>}
-            </div>
-            {hijri && <div className="mt-1 text-xs text-ink-400">{hijri} (Hijri)</div>}
-            <div className="mt-4 rounded-lg border border-dashed border-ink-300 px-3 py-4 text-center text-sm text-ink-400">일정 기능은 곧 추가돼요</div>
+          {/* 선택한 날: 일정·Equipment 목록, 일정 등록·수정 */}
+          <aside className="shrink-0 border-t border-ink-200 p-4 md:w-72 md:overflow-y-auto md:border-t-0 md:border-l">
+            {editing ? (
+              <EventForm key={editing.id ?? 'new'} event={editing} onSave={saveEvent} onDelete={deleteEvent} onCancel={() => setEditing(null)} />
+            ) : (
+              <DayPanel
+                day={selected}
+                today={today}
+                weekend={weekend}
+                events={events.filter((e) => eventOn(e, dayKey(selected)))}
+                equip={equip.get(dayKey(selected)) ?? []}
+                library={library}
+                onAdd={() => startNew(selected)}
+                onEdit={setEditing}
+                onOpenEquip={onOpenEquip}
+              />
+            )}
           </aside>
         </div>
       </div>
@@ -283,32 +422,204 @@ function CalendarDialog({ initialMonth, today, weekend, onWeekend, onClose }) {
   )
 }
 
-function DayCell({ date, inMonth, isToday, isSelected, off, onSelect }) {
+const timeOf = (e) => (e.time ? `${e.time} ` : '')
+
+function DayCell({ date, inMonth, isToday, isSelected, off, events, equip, lines, onSelect, onAdd, onEdit }) {
+  const all = [...events.map((e) => ({ type: 'ev', e })), ...equip.map((q) => ({ type: 'eq', q }))]
+  // 다 들어가면 그대로, 넘치면 마지막 줄을 +N 자리로
+  const fit = all.length <= lines ? all.length : Math.max(lines - 1, 0)
+  const rest = all.length - fit
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onSelect}
+      onDoubleClick={onAdd}
+      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onSelect())}
       aria-current={isToday ? 'date' : undefined}
       aria-pressed={isSelected}
-      className={`flex h-16 flex-col items-stretch p-1.5 text-left transition-colors sm:h-20 lg:h-24 ${
+      className={`flex h-20 min-w-0 cursor-pointer flex-col items-stretch gap-px p-1 text-left transition-colors select-none sm:h-24 lg:h-28 ${
         inMonth ? 'bg-surface' : 'bg-ink-50'
       } ${isSelected ? 'ring-2 ring-brand-500 ring-inset' : 'hover:bg-brand-50/60'}`}
     >
-      <span
-        className={`flex h-6 min-w-6 items-center justify-center self-start rounded-full px-1 text-sm tabular-nums ${
-          isToday
-            ? 'bg-brand-600 font-semibold text-white'
-            : off
-              ? inMonth
-                ? 'font-medium text-danger-600'
-                : 'text-danger-300'
-              : inMonth
-                ? 'text-ink-800'
-                : 'text-ink-300'
-        }`}
-      >
+      <span className={`mb-0.5 flex h-6 min-w-6 shrink-0 items-center justify-center self-start rounded-full px-1 text-sm tabular-nums ${dayTone(isToday, off, inMonth)}`}>
         {date.getDate()}
       </span>
-      {/* 일정 표시 자리 */}
-    </button>
+      {all.slice(0, fit).map((it) =>
+        it.type === 'ev' ? (
+          <button
+            key={it.e.id}
+            onClick={(e) => {
+              e.stopPropagation()
+              onEdit(it.e)
+            }}
+            onDoubleClick={(e) => e.stopPropagation()}
+            title={`${timeOf(it.e)}${it.e.title}`}
+            className="truncate rounded px-1 text-left text-[11px] leading-4 font-medium text-white"
+            style={{ backgroundColor: it.e.color }}
+          >
+            {timeOf(it.e)}
+            {it.e.title || '(제목 없음)'}
+          </button>
+        ) : (
+          <span key={it.q.key} title={`${it.q.tag} - ${it.q.label}${it.q.desc ? ` (${it.q.desc})` : ''}`} className="flex min-w-0 items-center gap-1 px-0.5 text-[11px] leading-4 text-ink-700">
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: it.q.color }} />
+            <span className="truncate">
+              <span className="font-medium">{it.q.tag}</span>
+              <span className="text-ink-500"> - {it.q.label}</span>
+            </span>
+          </span>
+        ),
+      )}
+      {rest > 0 && <span className="px-1 text-[11px] leading-4 font-medium text-ink-500">+{rest}</span>}
+    </div>
+  )
+}
+
+function DayPanel({ day, today, weekend, events, equip, library, onAdd, onEdit, onOpenEquip }) {
+  const off = weekend.includes(day.getDay())
+  const hijri = hijriLabel(day)
+  return (
+    <>
+      <div className="text-xs font-semibold tracking-wide text-ink-500">선택한 날</div>
+      <div className={`mt-1 text-lg font-semibold tabular-nums ${off ? 'text-danger-600' : 'text-ink-900'}`}>
+        {day.getMonth() + 1}월 {day.getDate()}일 {WEEKDAYS_LONG[day.getDay()]}
+      </div>
+      <div className="text-sm text-ink-500 tabular-nums">
+        {day.getFullYear()}년{sameDay(day, today) && <span className="ml-1.5 font-medium text-brand-600">오늘</span>}
+        {off && <span className="ml-1.5 text-danger-500">휴무</span>}
+      </div>
+      {hijri && <div className="mt-1 text-xs text-ink-400">{hijri} (Hijri)</div>}
+
+      <div className="mt-4 flex items-center">
+        <h4 className="text-xs font-semibold tracking-wide text-ink-500">일정</h4>
+        <button onClick={onAdd} className="ml-auto rounded-md px-2 py-0.5 text-sm font-medium text-brand-600 hover:bg-brand-50">
+          + 추가
+        </button>
+      </div>
+      {events.length ? (
+        <ul className="mt-1 space-y-1">
+          {events.map((e) => (
+            <li key={e.id}>
+              <button onClick={() => onEdit(e)} className="flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-ink-50" title="눌러서 고치기">
+                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: e.color }} />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium break-words text-ink-800">{e.title || '(제목 없음)'}</span>
+                  <span className="block text-xs text-ink-500 tabular-nums">
+                    {e.time ?? '종일'}
+                    {e.end && ` · ${e.date.slice(5).replace('-', '/')}~${e.end.slice(5).replace('-', '/')}`}
+                  </span>
+                  {e.memo && <span className="mt-0.5 block text-xs whitespace-pre-wrap text-ink-500">{e.memo}</span>}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-1 px-2 text-sm text-ink-400">일정이 없어요</p>
+      )}
+
+      {equip.length > 0 && (
+        <>
+          <h4 className="mt-4 text-xs font-semibold tracking-wide text-ink-500">Equipment ({equip.length})</h4>
+          <ul className="mt-1 space-y-0.5">
+            {equip.map((q) => (
+              <li key={q.key}>
+                <button onClick={() => onOpenEquip(q)} className="flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-brand-50/60" title="도면에서 이 Equipment 로 이동">
+                  <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: q.color }} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm text-ink-800">
+                      <span className="font-medium">{q.tag}</span> - {q.label}
+                    </span>
+                    {q.desc && <span className="block truncate text-xs text-ink-500">{q.desc}</span>}
+                    <span className="block truncate text-xs text-ink-400">
+                      {displayName(library, q.doc.id, q.doc.name)}
+                      {q.row.page > 1 && ` · ${q.row.page}쪽`}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </>
+  )
+}
+
+const inputCls = 'mt-1 w-full rounded-lg border border-ink-300 bg-surface px-2.5 py-1.5 text-sm text-ink-800 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100'
+
+function EventForm({ event, onSave, onDelete, onCancel }) {
+  const [title, setTitle] = useState(event.title ?? '')
+  const [date, setDate] = useState(event.date)
+  const [end, setEnd] = useState(event.end ?? '')
+  const [time, setTime] = useState(event.time ?? '')
+  const [memo, setMemo] = useState(event.memo ?? '')
+  const [color, setColor] = useState(event.color ?? EVENT_COLORS[0])
+  const editing = !!event.id
+
+  const submit = (e) => {
+    e.preventDefault()
+    if (!title.trim() || !date) return
+    const out = { id: event.id, date, title: title.trim(), color }
+    if (end && end > date) out.end = end
+    if (time) out.time = time
+    if (memo.trim()) out.memo = memo.trim()
+    onSave(out)
+  }
+
+  return (
+    <form onSubmit={submit}>
+      <div className="text-xs font-semibold tracking-wide text-ink-500">{editing ? '일정 고치기' : '새 일정'}</div>
+      <label className="mt-2 block text-sm font-medium text-ink-600">
+        제목
+        <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} placeholder="예: FT-101 Loop Check 입회" className={inputCls} />
+      </label>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <label className="block text-sm font-medium text-ink-600">
+          날짜
+          <input type="date" required value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+        </label>
+        <label className="block text-sm font-medium text-ink-600">
+          끝 날짜
+          <input type="date" value={end} min={date} onChange={(e) => setEnd(e.target.value)} className={inputCls} />
+        </label>
+      </div>
+      <label className="mt-2 block text-sm font-medium text-ink-600">
+        시간 <span className="font-normal text-ink-400">(비우면 종일)</span>
+        <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className={inputCls} />
+      </label>
+      <div className="mt-2 text-sm font-medium text-ink-600">색</div>
+      <div className="mt-1 flex gap-2">
+        {EVENT_COLORS.map((c) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => setColor(c)}
+            aria-label={`색 ${c}`}
+            aria-pressed={color === c}
+            className={`h-6 w-6 rounded-full ring-offset-2 ring-offset-surface transition ${color === c ? 'ring-2 ring-ink-700' : 'hover:scale-110'}`}
+            style={{ backgroundColor: c }}
+          />
+        ))}
+      </div>
+      <label className="mt-2 block text-sm font-medium text-ink-600">
+        메모
+        <textarea value={memo} onChange={(e) => setMemo(e.target.value)} rows={3} maxLength={4000} className={`${inputCls} resize-y`} />
+      </label>
+      <div className="mt-3 flex items-center gap-2">
+        {editing && (
+          <button type="button" onClick={() => window.confirm('이 일정을 지울까요?') && onDelete(event.id)} className="rounded-lg px-2 py-1.5 text-sm text-danger-500 hover:bg-danger-50">
+            삭제
+          </button>
+        )}
+        <button type="button" onClick={onCancel} className="ml-auto rounded-lg px-3 py-1.5 text-sm text-ink-600 hover:bg-ink-100">
+          취소
+        </button>
+        <button type="submit" disabled={!title.trim()} className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-press disabled:opacity-40">
+          저장
+        </button>
+      </div>
+    </form>
   )
 }
