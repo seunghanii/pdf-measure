@@ -19,7 +19,7 @@ import DocSearch from './DocSearch'
 import LinkPicker from './LinkPicker'
 import { DEFAULT_MEMO_COLOR, isLinkOnly, memoPhotoIds, memosAt } from '../lib/memo'
 import { memoFileIds } from '../lib/excel'
-import { DEFAULT_STATUS, cardBoxFor, guessKind, isInst, itemGroup, linksPatch, memoLinkPhotoIds, memoLinks, statusOf } from '../lib/instrument'
+import { DEFAULT_STATUS, cardBoxFor, donePatch, doneUpTo, guessKind, isInst, itemGroup, linksPatch, memoLinkPhotoIds, memoLinks, statusOf } from '../lib/instrument'
 import { liveItemTrash, pushItems } from '../lib/trash'
 import { MAX_ZOOM, MIN_ZOOM } from '../lib/zoom'
 import { adaptState, newRevKey } from '../lib/revision'
@@ -517,7 +517,9 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
   const setCardStatus = useCallback(
     (id, status) => {
       beginEdit()
-      updateItem(id, { inst: { ...measurementsRef.current.find((m) => m.id === id)?.inst, status }, color: statusOf(status).color })
+      // 목록의 상태 칸은 하나만 고름: 그 단계까지 고른 작업·날짜는 두고 뒤 단계는 뺌
+      const inst = measurementsRef.current.find((m) => m.id === id)?.inst
+      updateItem(id, donePatch(inst, doneUpTo(inst, status)))
     },
     [beginEdit, updateItem],
   )
