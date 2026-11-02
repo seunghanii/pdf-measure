@@ -97,7 +97,7 @@ export function TagInput({ tag, onTag }) {
         aria-pressed={!en}
         aria-label={en ? 'Tag. No 영어 입력 중, 누르면 한글 입력' : 'Tag. No 한글 입력 중, 누르면 영어 입력'}
         title={en ? '영어 입력 (한글 자판으로 쳐도 영문으로 바뀜). 누르면 한글 그대로 쓰기' : '한글 입력. 누르면 영어 입력'}
-        className={`w-7 shrink-0 rounded py-1 text-xs font-semibold ${en ? 'text-ink-600 ring-1 ring-ink-200 hover:bg-ink-50' : 'bg-ink-800 text-white'}`}
+        className={`w-7 shrink-0 rounded py-1 text-xs font-semibold ${en ? 'text-ink-600 ring-1 ring-ink-200 hover:bg-ink-50' : 'bg-ink-800 text-surface'}`}
       >
         {en ? 'A' : '한'}
       </button>
@@ -164,7 +164,7 @@ export function InstFields({ memo, onChange, kinds, onAddKind }) {
               type="button"
               aria-pressed={inst.kind === k}
               onClick={() => setKind(inst.kind === k ? '' : k)}
-              className={`rounded px-1.5 py-0.5 text-xs font-semibold tabular-nums ${inst.kind === k ? 'bg-ink-800 text-white' : 'text-ink-600 ring-1 ring-ink-200 hover:bg-ink-50'}`}
+              className={`rounded px-1.5 py-0.5 text-xs font-semibold tabular-nums ${inst.kind === k ? 'bg-ink-800 text-surface' : 'text-ink-600 ring-1 ring-ink-200 hover:bg-ink-50'}`}
             >
               {k}
             </button>
@@ -248,7 +248,7 @@ export function RelatedDocs({ memo, library, onChange, onOpen, onPick }) {
                   className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md bg-brand-50 px-2 py-1 text-left text-brand-700 hover:bg-brand-100"
                   title="이 사진 크게 보기"
                 >
-                  {l.role && <span className="shrink-0 rounded bg-white px-1.5 py-px text-[11px] font-semibold text-brand-800 ring-1 ring-brand-200">{l.role}</span>}
+                  {l.role && <span className="shrink-0 rounded bg-surface px-1.5 py-px text-[11px] font-semibold text-brand-800 ring-1 ring-brand-200">{l.role}</span>}
                   <LinkThumb id={l.photo} />
                   <span className="truncate font-medium">{l.name || '사진'}</span>
                 </button>
@@ -258,7 +258,7 @@ export function RelatedDocs({ memo, library, onChange, onOpen, onPick }) {
                 className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md bg-brand-50 px-2 py-1 text-left text-brand-700 hover:bg-brand-100"
                 title="이 도면 미리보기 (파일 열기 버튼으로 탭 열기)"
               >
-                {l.role && <span className="shrink-0 rounded bg-white px-1.5 py-px text-[11px] font-semibold text-brand-800 ring-1 ring-brand-200">{l.role}</span>}
+                {l.role && <span className="shrink-0 rounded bg-surface px-1.5 py-px text-[11px] font-semibold text-brand-800 ring-1 ring-brand-200">{l.role}</span>}
                 {library?.aliases?.[l.id] ? (
                   <span className="min-w-0">
                     <span className="block truncate font-medium">{library.aliases[l.id]}</span>
@@ -304,7 +304,7 @@ export function RelatedDocs({ memo, library, onChange, onOpen, onPick }) {
 function LinkThumb({ id }) {
   const url = useImageUrl(id)
   return (
-    <span className="grid h-6 w-8 shrink-0 place-items-center overflow-hidden rounded bg-white ring-1 ring-brand-200">
+    <span className="grid h-6 w-8 shrink-0 place-items-center overflow-hidden rounded bg-surface ring-1 ring-brand-200">
       {url ? (
         <img src={url} alt="" className="h-full w-full object-cover" />
       ) : (

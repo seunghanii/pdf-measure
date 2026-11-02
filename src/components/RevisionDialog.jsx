@@ -153,7 +153,7 @@ export default function RevisionDialog({ pdfDoc, store, docId, current, revision
       <div
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.key === 'Escape' && !busy && onCancel()}
-        className="flex max-h-full w-full max-w-lg flex-col overflow-hidden rounded-xl bg-white shadow-2xl"
+        className="flex max-h-full w-full max-w-lg flex-col overflow-hidden rounded-xl bg-surface shadow-2xl"
       >
         <div className="border-b border-ink-100 px-5 py-4">
           <h2 className="text-lg font-bold text-ink-900">{pick?.newPdf ? '개정판으로 바꾸기' : '도면 개정'}</h2>
@@ -348,7 +348,7 @@ export default function RevisionDialog({ pdfDoc, store, docId, current, revision
                 type="button"
                 disabled={busy}
                 onClick={apply}
-                className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
+                className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-press disabled:opacity-60"
               >
                 {busy && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
                 {busy ? '바꾸는 중…' : pick.fromRev ? '이 판으로 되돌리기' : '개정판으로 바꾸기'}

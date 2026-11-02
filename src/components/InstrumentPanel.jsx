@@ -25,7 +25,7 @@ export default function InstrumentPanel({
 }) {
   return (
     <div
-      className="fixed inset-x-2 top-16 bottom-2 z-40 flex flex-col md:absolute md:inset-x-auto md:top-14 md:bottom-3 md:left-3 md:z-20 md:w-[560px] md:max-w-[calc(100%-1.5rem)] overflow-hidden rounded-xl border border-ink-200 bg-white shadow-2xl"
+      className="fixed inset-x-2 top-16 bottom-2 z-40 flex flex-col md:absolute md:inset-x-auto md:top-14 md:bottom-3 md:left-3 md:z-20 md:w-[560px] md:max-w-[calc(100%-1.5rem)] overflow-hidden rounded-xl border border-ink-200 bg-surface shadow-2xl"
       onKeyDown={(e) => {
         if (e.key === 'Escape') {
           e.stopPropagation()
@@ -42,7 +42,7 @@ export default function InstrumentPanel({
             key={id}
             onClick={() => onTab(id)}
             aria-pressed={tab === id}
-            className={`rounded-md px-3 py-1 text-sm font-semibold ${tab === id ? 'bg-ink-800 text-white' : 'text-ink-600 hover:bg-ink-100'}`}
+            className={`rounded-md px-3 py-1 text-sm font-semibold ${tab === id ? 'bg-ink-800 text-surface' : 'text-ink-600 hover:bg-ink-100'}`}
           >
             {label}
           </button>
@@ -132,7 +132,7 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
                 key={v}
                 aria-pressed={scope === v}
                 onClick={() => setScope(v)}
-                className={`px-2 py-1 text-xs font-medium first:rounded-l last:rounded-r ${scope === v ? 'bg-ink-800 text-white' : 'text-ink-700 hover:bg-ink-100'}`}
+                className={`px-2 py-1 text-xs font-medium first:rounded-l last:rounded-r ${scope === v ? 'bg-ink-800 text-surface' : 'text-ink-700 hover:bg-ink-100'}`}
               >
                 {l}
               </button>
@@ -143,7 +143,7 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
         <div className="flex flex-wrap items-center gap-1">
           <button
             onClick={() => setStatus(null)}
-            className={`rounded-full px-2 py-0.5 text-xs font-medium ${status === null ? 'bg-ink-800 text-white' : 'text-ink-600 ring-1 ring-ink-200 hover:bg-ink-50'}`}
+            className={`rounded-full px-2 py-0.5 text-xs font-medium ${status === null ? 'bg-ink-800 text-surface' : 'text-ink-600 ring-1 ring-ink-200 hover:bg-ink-50'}`}
           >
             전체 {matched.length}
           </button>
@@ -246,7 +246,7 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
                           aria-label="상태 바꾸기"
                         >
                           {INST_STATUSES.map((s) => (
-                            <option key={s.id} value={s.id} className="bg-white text-ink-800">
+                            <option key={s.id} value={s.id} className="bg-surface text-ink-800">
                               {s.label}
                             </option>
                           ))}
@@ -402,7 +402,7 @@ function TagFinder({ docId, kinds, measurements, textIndex, onPreview, onCreate,
             setPicked(new Set())
             onDone()
           }}
-          className="ml-auto rounded-md bg-brand-600 px-3 py-1 text-xs font-semibold text-white hover:bg-brand-700 disabled:opacity-40"
+          className="ml-auto rounded-md bg-brand-600 px-3 py-1 text-xs font-semibold text-white hover:bg-brand-press disabled:opacity-40"
         >
           고른 {pickedHits.length}개 카드 만들기
         </button>

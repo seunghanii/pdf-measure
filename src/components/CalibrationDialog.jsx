@@ -18,7 +18,7 @@ export default function CalibrationDialog({ defaultUnit, initial, onCancel, onCo
         onSubmit={submit}
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.key === 'Escape' && onCancel()}
-        className="w-full max-w-sm rounded-xl bg-white p-5 shadow-2xl"
+        className="w-full max-w-sm rounded-xl bg-surface p-5 shadow-2xl"
       >
         <h2 className="text-lg font-bold">{initial ? '기준 길이 수정' : '기준 길이 입력'}</h2>
         <p className="mt-1 text-sm text-ink-500">

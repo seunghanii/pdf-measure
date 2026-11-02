@@ -34,7 +34,7 @@ export default function TextEditor({ editing, zoom, onChange, onCommit, onCancel
       }}
       onPointerDown={(e) => e.stopPropagation()}
       spellCheck={false}
-      className="absolute z-10 resize-none overflow-hidden rounded-sm border border-dashed bg-white/95 outline-none"
+      className="absolute z-10 resize-none overflow-hidden rounded-sm border border-dashed bg-surface/95 outline-none"
       style={{
         left: editing.point.x * zoom,
         top: editing.point.y * zoom,

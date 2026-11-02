@@ -27,6 +27,15 @@ Tailwind 기본 색은 꺼 두었습니다(`--color-*: initial`). 아래 이름�
 측정 분류 색(`lib/categories.js` `CATEGORY_COLORS`)도 데이터 색이지만, 파랑·주황·분홍과 헷갈리지 않도록 청록·보라·갈색·빨강 계열만 둡니다.
 색을 바꾸려면 `@theme` 값만 고치면 앱 전체에 반영됩니다.
 
+## 다크 모드
+
+- 홈 툴바 오른쪽 해·달 단추에서 밝게 / 어둡게 / 시스템 설정 따라가기. 이 브라우저에 저장(`pdf-measure:theme`, 기본 밝게). `lib/theme.js`, `components/ThemeMenu.jsx`.
+- `<html class="dark">` 에서 `src/index.css` 의 `html.dark` 가 토큰 값을 바꿔 끼웁니다. 그래서 대부분 `dark:` 접두사 없이 그대로 맞습니다.
+- 카드·툴바 바탕은 `bg-surface`(밝게=흰색). `bg-white` 는 늘 흰색이어야 하는 곳(도면 종이)만.
+- 진한 회색 바탕 칩은 `bg-ink-800 text-surface`(다크에선 밝은 칩 + 어두운 글자). 도면 위 안내 말풍선·대화상자 뒤 가림막은 `bg-black/..`.
+- 주 버튼 hover 는 `hover:bg-brand-press`(다크에선 더 밝게).
+- 도면 종이 위와 엑셀 표는 `.theme-light` 로 늘 밝은 토큰.
+
 ## 모양
 
 - 둥글기: 버튼 `rounded-lg`, 도구 묶음 안 버튼 `rounded-[10px]`, 카드·창 `rounded-xl`.

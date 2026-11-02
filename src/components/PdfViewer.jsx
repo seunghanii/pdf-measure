@@ -1088,7 +1088,7 @@ export default function PdfViewer({
                 key={page}
                 ref={(el) => (pageEls.current[i] = el)}
                 data-page={i}
-                className="relative shrink-0 bg-white shadow-lg"
+                className="theme-light relative shrink-0 bg-white shadow-lg"
                 style={{ width: w, height: h }}
               >
                 <PageCanvas pdfDoc={pdfDoc} page={page} size={size} zoom={zoom} visible={visible.has(i)} scrollRoot={containerRef} />
@@ -1218,7 +1218,7 @@ export default function PdfViewer({
         </div>
       </div>
       {sizes.length > 1 && (
-        <div className="pointer-events-none absolute top-3 right-4 rounded-full bg-ink-900/70 px-3 py-1 text-sm text-white shadow">
+        <div className="pointer-events-none absolute top-3 right-4 rounded-full bg-black/70 px-3 py-1 text-sm text-white shadow">
           {pageNum} / {sizes.length} 페이지
         </div>
       )}
@@ -1301,7 +1301,7 @@ function DrawHint({ tool, count }) {
         : '계속 클릭하거나, 첫 점 클릭 / 더블클릭 / Enter 로 완료 (Backspace: 한 점 취소)'
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-4">
-      <div className="rounded-full bg-ink-900/80 px-4 py-1.5 text-center text-sm text-white shadow">
+      <div className="rounded-full bg-black/80 px-4 py-1.5 text-center text-sm text-white shadow">
         {text} <span className="text-ink-400">· Esc 취소</span>
       </div>
     </div>
@@ -1325,13 +1325,13 @@ function TextCopyMarks({ zoom, hover, sel, rects }) {
 
 function TextCopyHint({ ready, copied, picked }) {
   let text
-  let tone = 'bg-ink-900/80'
+  let tone = 'bg-black/80'
   if (copied?.waiting) text = '도면 글자를 아직 읽는 중이에요. 다 읽으면 복사할 수 있어요.'
   else if (copied && !copied.ok) text = '복사하지 못했어요. 브라우저가 클립보드를 막았을 수 있어요.'
   else if (copied) {
     const one = copied.text.replace(/\s+/g, ' ')
     text = `복사했어요: ${one.length > 40 ? `${one.slice(0, 40)}…` : one}`
-    tone = 'bg-brand-700/90'
+    tone = 'bg-brand-600/90'
   } else if (!ready) text = '도면 글자를 읽는 중이에요 (스캔 도면은 조금 걸려요)'
   else if (picked) text = 'Ctrl+C 로 다시 복사 · 다른 곳을 누르거나 끌어서 새로 고르기'
   else text = '글자를 누르면 그 줄이, 끌면 상자 안 글자가 복사돼요'

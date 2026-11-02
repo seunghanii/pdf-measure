@@ -124,7 +124,7 @@ export default function Sidebar({
   const rowProps = { mmPerPt, unit, pageNum, numPages, selectedIds, onSetAllHidden, rowActions, categories }
 
   return (
-    <aside className={`${collapsed ? 'hidden' : 'flex'} max-h-[35vh] w-full shrink-0 flex-col border-t border-ink-200 bg-white md:max-h-none md:w-80 md:border-t-0 md:border-l`}>
+    <aside className={`${collapsed ? 'hidden' : 'flex'} max-h-[35vh] w-full shrink-0 flex-col border-t border-ink-200 bg-surface md:max-h-none md:w-80 md:border-t-0 md:border-l`}>
       {top}
       {/* 계기 카드: 목록 보기, 도면 글자에서 태그 찾기 */}
       <div className="flex items-center gap-1.5 border-b border-ink-200 px-4 py-2">
@@ -241,7 +241,7 @@ export default function Sidebar({
                   inputMode="decimal"
                   className="w-20 rounded border border-ink-300 px-2 py-1"
                 />
-                <button className="rounded bg-ink-700 px-2 py-1 text-xs text-white">적용</button>
+                <button className="rounded bg-ink-700 px-2 py-1 text-xs text-surface">적용</button>
               </form>
             )}
           </div>
@@ -255,7 +255,7 @@ export default function Sidebar({
                 <button
                   key={u}
                   onClick={() => setUnit(u)}
-                  className={`rounded px-3 py-0.5 text-sm ${unit === u ? 'bg-white font-semibold shadow-sm' : 'text-ink-500'}`}
+                  className={`rounded px-3 py-0.5 text-sm ${unit === u ? 'bg-surface font-semibold shadow-sm' : 'text-ink-500'}`}
                 >
                   {u}
                 </button>
@@ -392,7 +392,7 @@ function ValueEditor({ prefix, value, unit, onCommit }) {
         onFocus={(e) => e.target.select()}
         inputMode="decimal"
         title="숫자를 고치고 Enter"
-        className="w-24 min-w-0 rounded border border-ref-300 bg-white px-1.5 py-0.5 tabular-nums outline-none focus:border-ref-500 focus:ring-2 focus:ring-ref-200"
+        className="w-24 min-w-0 rounded border border-ref-300 bg-surface px-1.5 py-0.5 tabular-nums outline-none focus:border-ref-500 focus:ring-2 focus:ring-ref-200"
       />
       {unit && (
         <select
@@ -401,7 +401,7 @@ function ValueEditor({ prefix, value, unit, onCommit }) {
             setU(e.target.value)
             commit(e.target.value)
           }}
-          className="rounded border border-ref-300 bg-white px-1 py-0.5 text-sm"
+          className="rounded border border-ref-300 bg-surface px-1 py-0.5 text-sm"
         >
           {Object.keys(UNITS).map((k) => (
             <option key={k} value={k}>
@@ -506,7 +506,7 @@ const ItemRow = memo(function ItemRow({ m, mmPerPt, unit, otherPage, gonePage, s
             value={m.name}
             onChange={(e) => onRename(m.id, e.target.value)}
             onClick={(e) => e.stopPropagation()}
-            className="min-w-0 flex-1 truncate rounded bg-transparent px-1 text-sm text-ink-600 hover:bg-white focus:bg-white focus:outline focus:outline-brand-300"
+            className="min-w-0 flex-1 truncate rounded bg-transparent px-1 text-sm text-ink-600 hover:bg-surface focus:bg-surface focus:outline focus:outline-brand-300"
           />
           {otherPage && (
             <span
@@ -692,7 +692,7 @@ function CategoryPicker({ categories, value, onChange, mixed }) {
     <select
       value={value}
       onChange={(e) => e.target.value !== 'mixed' && onChange(e.target.value)}
-      className="min-w-0 max-w-36 rounded-md border border-ink-300 bg-white px-1.5 py-0.5 text-xs font-medium"
+      className="min-w-0 max-w-36 rounded-md border border-ink-300 bg-surface px-1.5 py-0.5 text-xs font-medium"
       style={cat ? { color: cat.color } : undefined}
     >
       {mixed && (
@@ -719,7 +719,7 @@ function CategoryRow({ color, name, total, mmPerPt, unit, on, onClick, onEdit })
       onClick={onClick}
       aria-pressed={on}
       title={on ? '전체 항목 보기' : `${name} 항목만 보기`}
-      className={`group flex cursor-pointer items-start gap-2 rounded-md px-1.5 py-1 transition-colors ${on ? 'bg-white ring-1 ring-brand-300' : 'hover:bg-white'}`}
+      className={`group flex cursor-pointer items-start gap-2 rounded-md px-1.5 py-1 transition-colors ${on ? 'bg-surface ring-1 ring-brand-300' : 'hover:bg-surface'}`}
     >
       <span
         className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${color ? '' : 'ring-1 ring-ink-300 ring-inset'}`}
@@ -770,9 +770,9 @@ function CategoryNameForm({ placeholder, submitLabel, onSubmit, onCancel, preset
           onKeyDown={(e) => e.key === 'Escape' && onCancel()}
           placeholder={placeholder}
           maxLength={30}
-          className="min-w-0 flex-1 rounded-md border border-ink-300 bg-white px-2 py-1 text-sm outline-none focus:border-brand-500"
+          className="min-w-0 flex-1 rounded-md border border-ink-300 bg-surface px-2 py-1 text-sm outline-none focus:border-brand-500"
         />
-        <button className="rounded-md bg-brand-600 px-2 py-1 text-xs font-semibold text-white hover:bg-brand-700">{submitLabel}</button>
+        <button className="rounded-md bg-brand-600 px-2 py-1 text-xs font-semibold text-white hover:bg-brand-press">{submitLabel}</button>
         <button type="button" className="px-1 text-xs text-ink-500 hover:underline" onClick={onCancel}>
           취소
         </button>
@@ -784,7 +784,7 @@ function CategoryNameForm({ placeholder, submitLabel, onSubmit, onCancel, preset
               key={n}
               type="button"
               onClick={() => onSubmit(n)}
-              className="rounded-full bg-white px-2 py-0.5 text-xs text-ink-600 ring-1 ring-ink-200 transition-colors hover:text-brand-700 hover:ring-brand-300"
+              className="rounded-full bg-surface px-2 py-0.5 text-xs text-ink-600 ring-1 ring-ink-200 transition-colors hover:text-brand-700 hover:ring-brand-300"
             >
               + {n}
             </button>
@@ -808,7 +808,7 @@ function CategoryEditor({ cat, onSave, onCancel, onDelete }) {
   }
   return (
     <form
-      className="rounded-md bg-white p-1.5 ring-1 ring-brand-300"
+      className="rounded-md bg-surface p-1.5 ring-1 ring-brand-300"
       onSubmit={(e) => {
         e.preventDefault()
         save()
@@ -838,7 +838,7 @@ function CategoryEditor({ cat, onSave, onCancel, onDelete }) {
         ))}
       </div>
       <div className="mt-1.5 flex items-center gap-2 text-xs">
-        <button className="rounded-md bg-brand-600 px-2 py-1 font-semibold text-white hover:bg-brand-700">저장</button>
+        <button className="rounded-md bg-brand-600 px-2 py-1 font-semibold text-white hover:bg-brand-press">저장</button>
         <button type="button" className="text-ink-500 hover:underline" onClick={onCancel}>
           취소
         </button>

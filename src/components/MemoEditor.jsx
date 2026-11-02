@@ -756,7 +756,7 @@ export default function MemoEditor({ initial, editorRef, apiRef, onEdit, onPaste
         onPaste={onPaste}
       />
       {inTable && (
-        <div className="sticky bottom-0 flex flex-wrap items-center gap-1 bg-white/90 px-3 py-1.5 text-xs">
+        <div className="sticky bottom-0 flex flex-wrap items-center gap-1 bg-surface/90 px-3 py-1.5 text-xs">
           {inTable === 'xls' && <span className="mr-1 text-ink-400">엑셀 양식 표</span>}
           {(inTable === 'xls' ? xlsButtons : tableButtons).map(([label, fn]) => (
             <button
@@ -765,7 +765,7 @@ export default function MemoEditor({ initial, editorRef, apiRef, onEdit, onPaste
                 e.preventDefault() // 커서를 표 안에 둔 채로
                 fn()
               }}
-              className="rounded-md bg-white px-2 py-0.5 text-ink-600 shadow-xs ring-1 ring-ink-200 hover:bg-ink-100"
+              className="rounded-md bg-surface px-2 py-0.5 text-ink-600 shadow-xs ring-1 ring-ink-200 hover:bg-ink-100"
               title={label === '일반 표로' ? '양식을 빼고 일반 표로 바꿔요. 그러면 줄·칸을 더하고 뺄 수 있어요.' : label === '작게' || label === '크게' ? `표를 ${label} 보기 (열 너비는 칸 오른쪽 경계를 끌어서 바꿔요)` : undefined}
             >
               {label}
@@ -788,12 +788,12 @@ export function MemoHelp() {
         aria-pressed={help}
         aria-label="메모 꾸미기 도움말"
         title="메모 꾸미기 도움말"
-        className={`flex h-6 w-6 items-center justify-center rounded-full text-ink-500 ring-1 ring-ink-200 ${help ? 'bg-ink-800 text-white' : 'bg-white hover:bg-ink-100'}`}
+        className={`flex h-6 w-6 items-center justify-center rounded-full text-ink-500 ring-1 ring-ink-200 ${help ? 'bg-ink-800 text-surface' : 'bg-surface hover:bg-ink-100'}`}
       >
         ?
       </button>
       {help && (
-        <div className="absolute bottom-8 left-0 z-10 w-64 rounded-lg bg-white p-3 text-xs text-ink-600 shadow-lg ring-1 ring-ink-200">
+        <div className="absolute bottom-8 left-0 z-10 w-64 rounded-lg bg-surface p-3 text-xs text-ink-600 shadow-lg ring-1 ring-ink-200">
           <div className="mb-1.5 font-semibold text-ink-800">쓰면서 바로 꾸미기</div>
           {MEMO_HELP.map((row, i) => (
             <div key={i} className="mb-1 flex flex-wrap gap-1">

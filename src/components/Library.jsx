@@ -272,7 +272,7 @@ export default function Library({ list, library, openIds, cloud, onOpen, onRemov
                 key={folder.id}
                 {...dropProps(folder.id, folder.id)}
                 {...reorder.tileProps(folder.id)}
-                className={`group relative rounded-lg bg-white shadow-sm ring-2 transition select-none [-webkit-touch-callout:none] ${
+                className={`group relative rounded-lg bg-surface shadow-sm ring-2 transition select-none [-webkit-touch-callout:none] ${
                   lifted
                     ? 'opacity-50 ring-brand-400'
                     : dropTarget === folder.id
@@ -304,7 +304,7 @@ export default function Library({ list, library, openIds, cloud, onOpen, onRemov
                 </button>
                 <div
                   data-no-reorder
-                  className={`absolute top-1/2 right-1 hidden -translate-y-1/2 items-center rounded bg-white ${reorder.drag ? '' : 'group-hover:flex'}`}
+                  className={`absolute top-1/2 right-1 hidden -translate-y-1/2 items-center rounded bg-surface ${reorder.drag ? '' : 'group-hover:flex'}`}
                 >
                   <button
                     onClick={() => onEditFolder(folder)}
@@ -337,7 +337,7 @@ export default function Library({ list, library, openIds, cloud, onOpen, onRemov
       )}
       {dragFolder && (
         <div
-          className="pointer-events-none fixed z-50 flex max-w-48 items-center gap-2 rounded-lg bg-white px-2.5 py-2 shadow-lg ring-2 ring-brand-400"
+          className="pointer-events-none fixed z-50 flex max-w-48 items-center gap-2 rounded-lg bg-surface px-2.5 py-2 shadow-lg ring-2 ring-brand-400"
           style={{ left: reorder.drag.x + 12, top: reorder.drag.y + 12 }}
         >
           <span style={{ color: colorHex(dragFolder.color) }}>
@@ -350,7 +350,7 @@ export default function Library({ list, library, openIds, cloud, onOpen, onRemov
       {openFolder ? (
         <div>
           <div className="mb-1 px-1 text-xs font-medium text-ink-400">이 폴더의 도면</div>
-          <ul className="divide-y divide-ink-100 overflow-hidden rounded-xl bg-white shadow-sm">
+          <ul className="divide-y divide-ink-100 overflow-hidden rounded-xl bg-surface shadow-sm">
             {shown.length ? (
               shown.map(row)
             ) : (
@@ -368,7 +368,7 @@ export default function Library({ list, library, openIds, cloud, onOpen, onRemov
             className={`rounded-xl ring-2 transition ${dropTarget === 'none' ? 'ring-brand-400' : 'ring-transparent'}`}
           >
             {folders.length > 0 && <div className="mb-1 px-1 text-xs font-medium text-ink-400">폴더 밖</div>}
-            <ul className="divide-y divide-ink-100 overflow-hidden rounded-xl bg-white shadow-sm">{shown.map(row)}</ul>
+            <ul className="divide-y divide-ink-100 overflow-hidden rounded-xl bg-surface shadow-sm">{shown.map(row)}</ul>
           </div>
         )
       )}
@@ -528,7 +528,7 @@ function FileRow({ item, isOpen, cloud, library, folderId, alias, onOpen, onRemo
       {menu && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setMenu(false)} />
-          <div className="absolute top-full right-4 z-20 -mt-2 max-h-80 w-60 overflow-y-auto rounded-lg bg-white py-1 text-sm shadow-lg ring-1 ring-ink-200">
+          <div className="absolute top-full right-4 z-20 -mt-2 max-h-80 w-60 overflow-y-auto rounded-lg bg-surface py-1 text-sm shadow-lg ring-1 ring-ink-200">
             <div className="px-3 py-1.5 text-xs font-medium text-ink-400">폴더로 옮기기</div>
             {folderTree(library).map(({ folder: f, depth }) => (
               <button
@@ -579,11 +579,11 @@ export function FolderDialog({ folder, library, onClose, onSave }) {
     if (name.trim()) onSave(name.trim(), color, parent || null)
   }
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" onMouseDown={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onMouseDown={onClose}>
       <form
         onSubmit={submit}
         onMouseDown={(e) => e.stopPropagation()}
-        className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl"
+        className="w-full max-w-sm rounded-2xl bg-surface p-5 shadow-xl"
       >
         <h3 className="text-lg font-semibold">{editing ? '폴더 고치기' : parent ? '새 하위 폴더' : '새 폴더'}</h3>
         <label className="mt-4 block text-sm font-medium text-ink-600">
@@ -630,7 +630,7 @@ export function FolderDialog({ folder, library, onClose, onSave }) {
           <button
             type="submit"
             disabled={!name.trim()}
-            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-press disabled:opacity-50"
           >
             {editing ? '저장' : '만들기'}
           </button>
@@ -646,7 +646,7 @@ export function FolderSelect({ library, value, onChange, exclude, className = ''
     <select
       value={value ?? ''}
       onChange={(e) => onChange(e.target.value)}
-      className={`mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 text-sm text-ink-800 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 ${className}`}
+      className={`mt-1 w-full rounded-lg border border-ink-300 bg-surface px-3 py-2 text-sm text-ink-800 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 ${className}`}
     >
       <option value="">맨 위 (폴더 밖)</option>
       {folderTree(library)
