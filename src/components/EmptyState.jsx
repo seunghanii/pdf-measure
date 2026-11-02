@@ -39,8 +39,8 @@ export default function EmptyState({
   const list = recent ?? []
   const openFolder = library.folders.find((f) => f.id === openFolderId) ?? null
   const hasRecent = list.length > 0 || fetching || library.folders.length > 0
-  // 오른쪽 칸(최근 수정 + 최근 연 도면): 폴더 밖 '전체' 에서만. 넓은 화면은 오른쪽에, 좁은 화면은 PDF 열기 아래에 차례로
-  const side = !fetching && !openFolder && list.length > 0
+  // 오른쪽 칸(최근 수정 + 최근 연 도면): 폴더 안에서도 늘. 넓은 화면은 오른쪽에, 좁은 화면은 PDF 열기 아래에 차례로
+  const side = !fetching && list.length > 0
 
   return (
     <div className="bg-grid flex-1 overflow-auto p-4 sm:p-6">
@@ -98,7 +98,7 @@ export default function EmptyState({
           </div>
         </div>
 
-        {/* 오른쪽 칸: 위 최근 수정, 아래 최근 연 도면 10개 (폴더를 열면 그 폴더 목록에 집중) */}
+        {/* 오른쪽 칸: 위 최근 수정, 아래 최근 연 도면 10개 */}
         {side && (
           <aside className="mt-8 min-w-0 space-y-8 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mt-0">
             <RecentActivity list={list} library={library} onGo={onOpenActivity} />
