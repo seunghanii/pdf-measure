@@ -3,6 +3,7 @@
 // 일정: 등록·수정·삭제 (lib/calEvents.js, 로그인했으면 서버에 저장).
 // Equipment 작업 완료 날짜(inst.done)는 그날 칸에 "Tag. No - 작업" 으로 표시, 칸에 다 안 들어가면 +N.
 // 마우스 휠(트랙패드 위아래)로 이전 달·다음 달.
+// 기본 공휴일(lib/holidays.js): 사우디는 휴무(빨간 숫자), 한국은 이름만.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   WEEKDAYS,
@@ -18,8 +19,9 @@ import {
   startOfMonth,
   weekdayOrder,
 } from '../lib/calendar'
-import { EMPTY_CAL, EVENT_COLORS, equipByDay, eventOn, eventsByDay, newEventId, weekLanes } from '../lib/calEvents'
+import { EMPTY_CAL, EVENT_COLORS, equipByDay, eventOn, newEventId, weekLanes } from '../lib/calEvents'
 import { displayName } from '../lib/library'
+import { holidaysOn, isPublicOff, loadPublicShow, savePublicShow } from '../lib/holidays'
 
 // 오늘 날짜: 자정이 지나거나 창으로 돌아오면 새로 고침
 function useToday() {
@@ -119,8 +121,8 @@ export default function HomeCalendar({ store, list = [], library, onOpenEquip })
     }
   }, [store])
 
-  const saveEvents = (events) => {
-    const next = { events, at: Date.now() }
+  const saveCal = (patch) => {
+    const next = { ...cal, ...patch, at: Date.now() }
     setCal(next)
     setSaveError(false)
     store
@@ -131,7 +133,15 @@ export default function HomeCalendar({ store, list = [], library, onOpenEquip })
       })
   }
 
+  const saveEvents = (events) => saveCal({ events })
+  const holidays = useMemo(() => new Set(cal.holidays ?? []), [cal.holidays])
+  const toggleHoliday = (key) => saveCal({ holidays: holidays.has(key) ? [...holidays].filter((k) => k !== key) : [...holidays, key].sort() })
   const equip = useMemo(() => equipByDay(list), [list])
+  const [pubShow, setPubShow] = useState(loadPublicShow)
+  const changePubShow = (v) => {
+    setPubShow(v)
+    savePublicShow(v)
+  }
   const changeWeekend = (days) => {
     setWeekend(days)
     saveWeekend(days)
@@ -169,7 +179,7 @@ export default function HomeCalendar({ store, list = [], library, onOpenEquip })
           </button>
         </div>
         <div ref={gridRef} title="마우스 휠로 이전·다음 달">
-          <MonthGrid month={month} today={today} weekend={weekend} events={cal.events} equip={equip} onPick={(d) => setBig(d)} />
+          <MonthGrid month={month} today={today} weekend={weekend} holidays={holidays} pubShow={pubShow} events={cal.events} equip={equip} onPick={(d) => setBig(d)} />
         </div>
       </div>
       {big && (
@@ -178,8 +188,12 @@ export default function HomeCalendar({ store, list = [], library, onOpenEquip })
           today={today}
           weekend={weekend}
           onWeekend={changeWeekend}
+          pubShow={pubShow}
+          onPubShow={changePubShow}
           events={cal.events}
           onSaveEvents={saveEvents}
+          holidays={holidays}
+          onToggleHoliday={toggleHoliday}
           equip={equip}
           library={library}
           onOpenEquip={(item) => {
@@ -199,44 +213,94 @@ export default function HomeCalendar({ store, list = [], library, onOpenEquip })
 const dayTone = (isToday, off, inMonth) =>
   isToday ? 'bg-brand-600 font-semibold text-white' : off ? (inMonth ? 'text-danger-600' : 'text-danger-300') : inMonth ? 'text-ink-700' : 'text-ink-300'
 
-// 작은 달력 칸: 일정·Equipment 가 있는 날은 숫자 아래 작은 점. 누르면 그날로 큰 창
-function MonthGrid({ month, today, weekend, events, equip, onPick }) {
+// 주마다 일정 줄 배치 (여러 날 일정이 같은 줄에 이어진 막대로 보이게)
+function useSlotMap(cells, events) {
+  return useMemo(() => {
+    const map = new Map()
+    for (let w = 0; w < cells.length; w += 7) {
+      const keys = cells.slice(w, w + 7).map((c) => c.key)
+      weekLanes(keys, events).forEach((col, i) => map.set(keys[i], col))
+    }
+    return map
+  }, [events, cells])
+}
+
+const MINI_LINES = 2 // 작은 달력 한 칸 줄 수 (넘치면 마지막 줄이 +N)
+
+// 작은 달력: 칸마다 일정·Equipment 를 작게 그대로 보여 주고, 넘치면 +N. 누르면 그날로 큰 창
+function MonthGrid({ month, today, weekend, holidays, pubShow, events, equip, onPick }) {
   const order = weekdayOrder()
   const cells = useMemo(() => monthGrid(month), [month])
-  const evMap = useMemo(() => eventsByDay(events, cells.map((c) => c.key)), [events, cells])
+  const slotMap = useSlotMap(cells, events)
   return (
-    <div className="grid grid-cols-7 text-center text-xs tabular-nums">
-      {order.map((d) => (
-        <div key={d} className={`py-1 font-medium ${weekend.includes(d) ? 'text-danger-500' : 'text-ink-400'}`}>
-          {WEEKDAYS[d]}
-        </div>
-      ))}
-      {cells.map(({ date, key, inMonth }) => {
-        const isToday = sameDay(date, today)
-        const off = weekend.includes(date.getDay())
-        const ev = evMap.get(key)?.length ?? 0
-        const eq = equip.get(key)?.length ?? 0
-        const tip = [isToday && '오늘', ev && `일정 ${ev}개`, eq && `Equipment ${eq}개`].filter(Boolean).join(' · ')
-        return (
-          <button key={key} onClick={() => onPick(date)} title={tip || undefined} className="group relative flex items-center justify-center py-0.5">
-            <span className={`flex h-7 w-7 items-center justify-center rounded-full transition-colors ${dayTone(isToday, off, inMonth)} ${isToday ? '' : 'group-hover:bg-ink-100'}`}>
-              {date.getDate()}
-            </span>
-            {(ev > 0 || eq > 0) && (
-              <span className="pointer-events-none absolute bottom-0 left-1/2 flex -translate-x-1/2 gap-0.5" aria-hidden="true">
-                {ev > 0 && <span className="h-1 w-1 rounded-full bg-brand-500" />}
-                {eq > 0 && <span className="h-1 w-1 rounded-full bg-ok-500" />}
+    <div>
+      <div className="grid grid-cols-7 text-center text-xs tabular-nums">
+        {order.map((d) => (
+          <div key={d} className={`py-1 font-medium ${weekend.includes(d) ? 'text-danger-500' : 'text-ink-400'}`}>
+            {WEEKDAYS[d]}
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7">
+        {cells.map(({ date, key, inMonth }) => {
+          const isToday = sameDay(date, today)
+          const holiday = holidays.has(key)
+          const pub = holidaysOn(date, pubShow)
+          const off = holiday || isPublicOff(pub) || weekend.includes(date.getDay())
+          const slots = slotMap.get(key) ?? []
+          const eq = equip.get(key) ?? []
+          const rows = [...slots.map((x) => (x ? { type: 'ev', s: x } : { type: 'gap' })), ...eq.map((q) => ({ type: 'eq', q }))]
+          const fit = rows.length <= MINI_LINES ? rows.length : MINI_LINES - 1
+          const rest = rows.slice(fit).filter((r) => r.type !== 'gap').length
+          const tip = [
+            isToday && '오늘',
+            ...pub.map((h) => h.name),
+            holiday && '휴무',
+            ...slots.filter(Boolean).map((x) => `${timeOf(x.e)}${x.e.title}`),
+            ...eq.map((q) => `${q.tag} - ${q.label}`),
+          ]
+            .filter(Boolean)
+            .join('\n')
+          return (
+            <button
+              key={key}
+              onClick={() => onPick(date)}
+              title={tip || undefined}
+              className={`group flex h-12 min-w-0 flex-col items-stretch gap-px overflow-hidden rounded-md pt-0.5 transition-colors hover:bg-ink-100 ${inMonth ? '' : 'opacity-60'}`}
+            >
+              <span className={`mx-auto flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-0.5 text-xs tabular-nums ${dayTone(isToday, off, inMonth)}`}>
+                {date.getDate()}
               </span>
-            )}
-          </button>
-        )
-      })}
+              {rows.slice(0, fit).map((r, i) => {
+                if (r.type === 'gap') return <span key={`g${i}`} className="h-3 shrink-0" aria-hidden="true" />
+                if (r.type === 'eq')
+                  return (
+                    <span key={r.q.key} className="mx-px truncate rounded-sm px-0.5 text-left text-[9px] leading-3 font-medium" style={{ color: r.q.color, backgroundColor: `${r.q.color}1f` }}>
+                      {r.q.tag}
+                    </span>
+                  )
+                const { e, contLeft, contRight, showTitle } = r.s
+                return (
+                  <span
+                    key={e.id}
+                    className={`h-3 shrink-0 truncate px-0.5 text-left text-[9px] leading-3 font-medium text-white ${contLeft ? 'rounded-l-none' : 'ml-px rounded-l-sm'} ${contRight ? 'rounded-r-none' : 'mr-px rounded-r-sm'}`}
+                    style={{ backgroundColor: e.color }}
+                  >
+                    {showTitle ? e.title || '·' : '\u00a0'}
+                  </span>
+                )
+              })}
+              {rest > 0 && <span className="text-[9px] leading-3 font-medium text-ink-500">+{rest}</span>}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
 
 // 크게 보기 Calendar 창
-function CalendarDialog({ initial, today, weekend, onWeekend, events, onSaveEvents, equip, library, onOpenEquip, onClose }) {
+function CalendarDialog({ initial, today, weekend, onWeekend, pubShow, onPubShow, holidays, onToggleHoliday, events, onSaveEvents, equip, library, onOpenEquip, onClose }) {
   const [month, setMonth] = useState(() => startOfMonth(initial))
   const [selected, setSelected] = useState(initial)
   const [settings, setSettings] = useState(false)
@@ -245,15 +309,7 @@ function CalendarDialog({ initial, today, weekend, onWeekend, events, onSaveEven
   const lines = useCellLines()
   const order = weekdayOrder()
   const cells = useMemo(() => monthGrid(month), [month])
-  // 주마다 일정 줄 배치 (여러 날 일정이 이어진 막대로 보이게)
-  const slotMap = useMemo(() => {
-    const map = new Map()
-    for (let w = 0; w < cells.length; w += 7) {
-      const keys = cells.slice(w, w + 7).map((c) => c.key)
-      weekLanes(keys, events).forEach((col, i) => map.set(keys[i], col))
-    }
-    return map
-  }, [events, cells])
+  const slotMap = useSlotMap(cells, events)
   useWheelMonth(gridRef, (n) => setMonth((m) => addMonths(m, n)))
 
   const closeRef = useRef(null)
@@ -333,7 +389,7 @@ function CalendarDialog({ initial, today, weekend, onWeekend, events, onSaveEven
                 <circle cx="12" cy="12" r="3" />
                 <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
               </svg>
-              <span className="hidden sm:inline">주말 설정</span>
+              <span className="hidden sm:inline">휴무 설정</span>
             </button>
             <button onClick={() => onClose(month)} className={navBtn} title="닫기 (Esc)" aria-label="닫기">
               <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -363,6 +419,25 @@ function CalendarDialog({ initial, today, weekend, onWeekend, events, onSaveEven
               )
             })}
             <span className="text-xs text-ink-400">고른 요일이 빨간색으로 표시돼요 (기본: 금요일)</span>
+            <span className="mx-1 hidden h-5 w-px bg-ink-200 sm:block" aria-hidden="true" />
+            <span className="mr-1 text-sm text-ink-600">공휴일</span>
+            {[
+              ['sa', '사우디', '사우디 공휴일 (휴무, 빨간 숫자)'],
+              ['kr', '한국', '한국 공휴일 (이름만 표시)'],
+            ].map(([id, label, tip]) => (
+              <button
+                key={id}
+                onClick={() => onPubShow({ ...pubShow, [id]: !pubShow[id] })}
+                aria-pressed={pubShow[id]}
+                title={tip}
+                className={`rounded-full px-3 py-1 text-sm font-medium ring-1 transition-colors ${
+                  pubShow[id] ? (id === 'sa' ? 'bg-danger-50 text-danger-600 ring-danger-200' : 'bg-brand-50 text-brand-700 ring-brand-200') : 'bg-surface text-ink-500 ring-ink-200 hover:ring-ink-400'
+                }`}
+              >
+                {pubShow[id] ? '✓ ' : ''}
+                {label}
+              </button>
+            ))}
           </div>
         )}
 
@@ -377,16 +452,19 @@ function CalendarDialog({ initial, today, weekend, onWeekend, events, onSaveEven
               ))}
             </div>
             <div ref={gridRef} className="grid grid-cols-7 overflow-hidden rounded-lg ring-1 ring-ink-200" style={{ gap: 1, background: 'var(--color-ink-200)' }}>
-              {cells.map((cell) => (
+              {cells.map((cell) => {
+                const pub = holidaysOn(cell.date, pubShow)
+                return (
                 <DayCell
                   key={cell.key}
                   {...cell}
+                  pub={pub}
                   lines={lines}
                   slots={slotMap.get(cell.key) ?? []}
                   equip={equip.get(cell.key) ?? []}
                   isToday={sameDay(cell.date, today)}
                   isSelected={sameDay(cell.date, selected)}
-                  off={weekend.includes(cell.date.getDay())}
+                  off={holidays.has(cell.key) || isPublicOff(pub) || weekend.includes(cell.date.getDay())}
                   onSelect={() => {
                     setSelected(cell.date)
                     setEditing(null)
@@ -401,7 +479,8 @@ function CalendarDialog({ initial, today, weekend, onWeekend, events, onSaveEven
                     setEditing(ev)
                   }}
                 />
-              ))}
+                )
+              })}
             </div>
             <p className="mt-2 hidden text-xs text-ink-400 sm:block">빈 곳을 두 번 누르면 일정 추가 · 마우스 휠로 이전·다음 달</p>
           </div>
@@ -415,6 +494,9 @@ function CalendarDialog({ initial, today, weekend, onWeekend, events, onSaveEven
                 day={selected}
                 today={today}
                 weekend={weekend}
+                holiday={holidays.has(dayKey(selected))}
+                pub={holidaysOn(selected, pubShow)}
+                onToggleHoliday={() => onToggleHoliday(dayKey(selected))}
                 events={events.filter((e) => eventOn(e, dayKey(selected)))}
                 equip={equip.get(dayKey(selected)) ?? []}
                 library={library}
@@ -432,7 +514,7 @@ function CalendarDialog({ initial, today, weekend, onWeekend, events, onSaveEven
 
 const timeOf = (e) => (e.time ? `${e.time} ` : '')
 
-function DayCell({ date, inMonth, isToday, isSelected, off, slots, equip, lines, onSelect, onAdd, onEdit }) {
+function DayCell({ date, inMonth, isToday, isSelected, off, pub = [], slots, equip, lines, onSelect, onAdd, onEdit }) {
   // 일정 줄(빈 줄 포함, 주 안에서 같은 일정은 같은 줄) 다음에 Equipment. 다 들어가면 그대로, 넘치면 마지막 줄을 +N 자리로
   const rows = [...slots.map((s) => (s ? { type: 'ev', s } : { type: 'gap' })), ...equip.map((q) => ({ type: 'eq', q }))]
   const fit = rows.length <= lines ? rows.length : Math.max(lines - 1, 0)
@@ -450,9 +532,21 @@ function DayCell({ date, inMonth, isToday, isSelected, off, slots, equip, lines,
         inMonth ? 'bg-surface' : 'bg-ink-50'
       } ${isSelected ? 'after:pointer-events-none after:absolute after:inset-0 after:z-10 after:ring-2 after:ring-brand-500 after:ring-inset' : 'hover:bg-brand-50/60'}`}
     >
-      <span className={`mx-1 mb-0.5 flex h-6 min-w-6 shrink-0 items-center justify-center self-start rounded-full px-1 text-sm tabular-nums ${dayTone(isToday, off, inMonth)}`}>
-        {date.getDate()}
-      </span>
+      <div className="mx-1 mb-0.5 flex min-w-0 shrink-0 items-center gap-1">
+        <span className={`flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full px-1 text-sm tabular-nums ${dayTone(isToday, off, inMonth)}`}>
+          {date.getDate()}
+        </span>
+        {pub.length > 0 && (
+          <span className="min-w-0 truncate text-[10px] leading-4" title={pub.map((h) => `${h.cc === 'SA' ? '사우디' : '한국'} ${h.name}`).join(', ')}>
+            {pub.map((h, i) => (
+              <span key={h.cc + h.name} className={h.cc === 'SA' ? 'font-medium text-danger-600' : 'text-ink-500'}>
+                {i > 0 && ' · '}
+                {h.name}
+              </span>
+            ))}
+          </span>
+        )}
+      </div>
       {rows.slice(0, fit).map((r, i) => {
         if (r.type === 'gap') return <span key={`g${i}`} className="h-4 shrink-0" aria-hidden="true" />
         if (r.type === 'eq')
@@ -489,8 +583,10 @@ function DayCell({ date, inMonth, isToday, isSelected, off, slots, equip, lines,
   )
 }
 
-function DayPanel({ day, today, weekend, events, equip, library, onAdd, onEdit, onOpenEquip }) {
-  const off = weekend.includes(day.getDay())
+function DayPanel({ day, today, weekend, holiday, pub = [], onToggleHoliday, events, equip, library, onAdd, onEdit, onOpenEquip }) {
+  const weekly = weekend.includes(day.getDay())
+  const saOff = isPublicOff(pub)
+  const off = holiday || weekly || saOff
   const hijri = hijriLabel(day)
   return (
     <>
@@ -503,6 +599,36 @@ function DayPanel({ day, today, weekend, events, equip, library, onAdd, onEdit, 
         {off && <span className="ml-1.5 text-danger-500">휴무</span>}
       </div>
       {hijri && <div className="mt-1 text-xs text-ink-400">{hijri} (Hijri)</div>}
+      {pub.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {pub.map((h) => (
+            <li key={h.cc + h.name} className="flex items-center gap-1.5 text-sm">
+              <span className={`rounded px-1.5 text-[11px] font-semibold ${h.cc === 'SA' ? 'bg-danger-50 text-danger-600' : 'bg-ink-100 text-ink-600'}`}>{h.cc === 'SA' ? '사우디' : '한국'}</span>
+              <span className={h.cc === 'SA' ? 'font-medium text-danger-600' : 'text-ink-700'}>{h.name}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {saOff ? (
+        <p className="mt-3 text-xs text-ink-400">사우디 공휴일이라 휴무예요{pub.some((h) => h.name.startsWith('Eid')) ? ' (이드 날짜는 달 관측 발표로 하루쯤 달라질 수 있어요)' : ''}</p>
+      ) : weekly ? (
+        <p className="mt-3 text-xs text-ink-400">주말 요일이라 늘 휴무예요 (위 휴무 설정에서 바꿔요)</p>
+      ) : (
+        <button
+          onClick={onToggleHoliday}
+          aria-pressed={holiday}
+          className={`mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium ring-1 transition-colors ${
+            holiday ? 'bg-danger-50 text-danger-600 ring-danger-200 hover:bg-danger-100' : 'text-ink-600 ring-ink-200 hover:bg-ink-50'
+          }`}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="5" width="18" height="16" rx="2" />
+            <path d="M3 10h18M8 3v4M16 3v4" />
+            {holiday ? <path d="M9 14l6 4M15 14l-6 4" /> : <path d="M12 13v6M9 16h6" />}
+          </svg>
+          {holiday ? '휴무 해제' : '이 날 휴무 지정'}
+        </button>
+      )}
 
       <div className="mt-4 flex items-center">
         <h4 className="text-xs font-semibold tracking-wide text-ink-500">일정</h4>
