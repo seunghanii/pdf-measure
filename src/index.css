@@ -193,6 +193,11 @@
   opacity: 1;
 }
 
+/* 계기 박스 이름표 모두 숨기기 (lib/instLabels.js) */
+.inst-labels-off .inst-label {
+  display: none;
+}
+
 /* 선택 상자의 × 삭제 단추 (components/SelectionBox.jsx) */
 .selection-delete {
   transition: fill 0.12s;

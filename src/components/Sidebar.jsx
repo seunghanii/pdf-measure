@@ -6,6 +6,7 @@ import { CATEGORY_COLORS, CATEGORY_PRESETS, categoryTotals } from '../lib/catego
 import { itemGroup } from '../lib/instrument'
 import { TRASH_DAYS, leftLabel } from '../lib/trash'
 import { loadUncalHidden, saveUncalHidden } from '../lib/scalePanel'
+import { useInstLabelsOff } from '../lib/instLabels'
 
 export default function Sidebar({
   calibration,
@@ -63,6 +64,7 @@ export default function Sidebar({
 
   const measures = useMemo(() => measurements.filter((m) => !isMarkup(m.type)), [measurements])
   const markups = useMemo(() => measurements.filter((m) => itemGroup(m) === 'markup'), [measurements])
+  const [labelsOff, setLabelsOff] = useInstLabelsOff()
   const cards = useMemo(() => measurements.filter((m) => itemGroup(m) === 'inst'), [measurements])
   const totals = useMemo(() => categoryTotals(measures, categories), [measures, categories])
   // 분류 줄을 누르면 그 분류 항목만 목록에 보여 줌 (null: 전체, '': 분류 없음)
@@ -328,6 +330,11 @@ export default function Sidebar({
           empty="메모 범위 도구에서 '계기 카드'를 고르거나, 위 '태그 찾기'로 만들어요."
           group="inst"
           {...rowProps}
+          actions={
+            <button className="text-ink-500 hover:underline" onClick={() => setLabelsOff((v) => !v)} title="도면 위 계기 박스 이름표를 모두 숨기거나 보이기 (모든 도면)">
+              {labelsOff ? '이름표 보이기' : '이름표 숨기기'}
+            </button>
+          }
         />
         <TrashSection trash={trash} onRestore={onRestore} onPurge={onPurge} />
       </div>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { INST_STATUSES, DEFAULT_STATUS, doneDates, donePatch, fmtDay, guessKind, instDone, memoLinks, linksPatch, normTag } from '../lib/instrument'
+import { INST_LABELS, INST_STATUSES, DEFAULT_STATUS, doneDates, donePatch, fmtDay, guessKind, instDone, memoLinks, linksPatch, normTag } from '../lib/instrument'
 import { isDefaultName } from '../lib/categories'
 import { convertTyped, hasHangul } from '../lib/hangulKeys'
 import { useImageUrl } from '../lib/images'
@@ -123,6 +123,8 @@ export function InstFields({ memo, onChange, kinds, onAddKind }) {
   const setDesc = (desc) => onChange({ inst: { ...inst, desc } })
   const setKind = (kind) => onChange({ inst: { ...inst, kind } })
   const setDone = (done) => onChange(donePatch(inst, done))
+  const setLabel = (label) => onChange({ inst: { ...inst, label } })
+  const labelMode = inst.label ?? 'desc'
 
   const addKind = () => {
     const k = newKind.trim().toUpperCase()
@@ -196,6 +198,25 @@ export function InstFields({ memo, onChange, kinds, onAddKind }) {
               + 추가
             </button>
           )}
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className={`${label} w-20 shrink-0`} title="도면 위 박스 테두리에 보이는 글">
+          이름표
+        </span>
+        <div className="flex rounded ring-1 ring-ink-200" role="group" aria-label="도면 위 이름표">
+          {INST_LABELS.map((o) => (
+            <button
+              key={o.id}
+              type="button"
+              aria-pressed={labelMode === o.id}
+              onClick={() => setLabel(o.id)}
+              title={o.id === 'off' ? '이 카드의 이름표를 도면에서 숨기기' : o.id === 'desc' ? 'Description 보이기 (비어 있으면 Tag. No)' : 'Tag. No 보이기'}
+              className={`px-2 py-0.5 text-xs font-medium first:rounded-l last:rounded-r ${labelMode === o.id ? 'bg-ink-800 text-surface' : 'text-ink-600 hover:bg-ink-50'}`}
+            >
+              {o.label}
+            </button>
+          ))}
         </div>
       </div>
       <div className="flex items-start gap-2">
