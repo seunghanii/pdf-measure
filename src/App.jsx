@@ -3,7 +3,7 @@ import { loadPdf, setOpenPdf } from './lib/pdf'
 import { fileIdOf, loadSession, localStore, saveSession } from './lib/storage'
 import { createCloudStore, MAX_UPLOAD_BYTES } from './lib/cloudStore'
 import { kindList } from './lib/instrument'
-import { EMPTY_LIBRARY, cleanRoles, displayName, forgetDoc, loadOpenFolder, moveDoc, saveOpenFolder } from './lib/library'
+import { EMPTY_LIBRARY, cleanRoles, displayName, forgetDoc, loadOpenFolder, moveDoc, saveOpenFolder, setAlias } from './lib/library'
 import { isExpired, setTrashedDocs, trashDoc, untrashDoc } from './lib/trash'
 import { cloudConfigured, networkHint, signOut, supabase } from './lib/supabase'
 import Workspace from './components/Workspace'
@@ -532,7 +532,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
       }}
       onDrop={onDrop}
     >
-      <TabBar docs={docs} library={library} activeId={activeId} onSelect={setActiveId} onClose={closeTab} onHome={() => setActiveId(null)} />
+      <TabBar docs={docs} library={library} activeId={activeId} onSelect={setActiveId} onClose={closeTab} onHome={() => setActiveId(null)} onSetAlias={(id, alias) => updateLibrary((lib) => setAlias(lib, id, alias))} />
 
       {activeId === null && (
         <Toolbar

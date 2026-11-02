@@ -1,8 +1,19 @@
-import { displayName } from '../lib/library'
+import { useState } from 'react'
+import { displayName, fileBase } from '../lib/library'
 
 // 열린 도면 탭. 맨 왼쪽 집 아이콘은 홈(최근 파일 목록)입니다. 별명이 있으면 별명을 보여 줌
-export default function TabBar({ docs, library, activeId, onSelect, onClose, onHome }) {
+// 탭 이름을 더블 클릭하면 홈의 연필 버튼처럼 별명을 바꿀 수 있음 (비우면 원래 파일 이름)
+export default function TabBar({ docs, library, activeId, onSelect, onClose, onHome, onSetAlias }) {
+  const [editingId, setEditingId] = useState(null)
   if (docs.length === 0) return null
+
+  const finishAlias = (d, value) => {
+    setEditingId(null)
+    const alias = library?.aliases?.[d.id] ?? ''
+    const next = value.trim()
+    const wanted = next === fileBase(d.name) ? '' : next
+    if (wanted !== alias) onSetAlias?.(d.id, wanted)
+  }
 
   return (
     <nav className="flex items-end gap-0.5 overflow-x-auto border-b border-ink-200 bg-ink-100 px-2 pt-1.5" aria-label="열린 도면">
@@ -21,6 +32,8 @@ export default function TabBar({ docs, library, activeId, onSelect, onClose, onH
 
       {docs.map((d) => {
         const active = d.id === activeId
+        const editing = d.id === editingId
+        const shown = displayName(library, d.id, d.name)
         return (
           <div
             key={d.id}
@@ -28,7 +41,11 @@ export default function TabBar({ docs, library, activeId, onSelect, onClose, onH
             aria-selected={active}
             onClick={() => onSelect(d.id)}
             onAuxClick={(e) => e.button === 1 && onClose(d.id)}
-            title={d.name}
+            onDoubleClick={(e) => {
+              if (!onSetAlias || e.target.closest('button, input')) return
+              setEditingId(d.id)
+            }}
+            title={editing ? undefined : `${d.name}\n더블 클릭하면 이름 바꾸기`}
             className={`group relative -mb-px flex h-9 max-w-56 shrink-0 cursor-pointer items-center gap-2 rounded-t-lg border border-b-0 pr-1.5 pl-3 text-sm ${
               active
                 ? 'border-ink-200 bg-white font-medium text-ink-900 before:absolute before:inset-x-3 before:top-0 before:h-0.5 before:rounded-b before:bg-brand-600'
@@ -39,7 +56,37 @@ export default function TabBar({ docs, library, activeId, onSelect, onClose, onH
               <path d="M6 2h9l5 5v15H6z" />
               <path d="M15 2v5h5" />
             </svg>
-            <span className="truncate">{displayName(library, d.id, d.name)}</span>
+            {editing ? (
+              <input
+                autoFocus
+                defaultValue={library?.aliases?.[d.id] ?? ''}
+                placeholder={fileBase(d.name)}
+                aria-label="도면 별명"
+                title="비워 두면 원래 파일 이름이 보여요"
+                size={Math.max(8, Math.min(28, shown.length + 2))}
+                onFocus={(e) => {
+                  // 별명이 없으면 지금 보이는 파일 이름을 채워 두고 고칠 수 있게
+                  if (!e.target.value) e.target.value = shown
+                  e.target.select()
+                }}
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => {
+                  e.stopPropagation()
+                  if (e.key === 'Enter') e.currentTarget.blur()
+                  if (e.key === 'Escape') {
+                    e.currentTarget.dataset.cancel = '1'
+                    e.currentTarget.blur()
+                  }
+                }}
+                onBlur={(e) => {
+                  if (e.currentTarget.dataset.cancel) setEditingId(null)
+                  else finishAlias(d, e.currentTarget.value)
+                }}
+                className="min-w-0 rounded border border-brand-400 bg-white px-1 py-0.5 text-sm text-ink-800 outline-none ring-2 ring-brand-100"
+              />
+            ) : (
+              <span className="truncate select-none">{shown}</span>
+            )}
             <button
               onClick={(e) => {
                 e.stopPropagation()
