@@ -19,7 +19,7 @@ import DocSearch from './DocSearch'
 import LinkPicker from './LinkPicker'
 import { DEFAULT_MEMO_COLOR, isLinkOnly, memoPhotoIds, memosAt } from '../lib/memo'
 import { memoFileIds } from '../lib/excel'
-import { DEFAULT_STATUS, cardBoxFor, guessKind, isInst, itemGroup, linksPatch, memoLinks, statusOf } from '../lib/instrument'
+import { DEFAULT_STATUS, cardBoxFor, guessKind, isInst, itemGroup, linksPatch, memoLinkPhotoIds, memoLinks, statusOf } from '../lib/instrument'
 import { liveItemTrash, pushItems } from '../lib/trash'
 import { MAX_ZOOM, MIN_ZOOM } from '../lib/zoom'
 import { adaptState, newRevKey } from '../lib/revision'
@@ -413,6 +413,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
             if (m.type === 'memo') {
               memoPhotoIds(m).forEach((id) => used.add(id))
               memoFileIds(m).forEach((id) => used.add(id)) // 첨부한 엑셀
+              memoLinkPhotoIds(m).forEach((id) => used.add(id)) // 관련 도면으로 연결한 사진
             }
           }
         const unused = ids.filter((id) => !used.has(id) && !freshImageIds.has(id))

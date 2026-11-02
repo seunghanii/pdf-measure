@@ -3,15 +3,24 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { docRoleList } from '../lib/instrument'
 import { EMPTY_LIBRARY, displayName, folderLabel } from '../lib/library'
 import { FolderSelect } from './Library'
+import { isImageFile, newImageId, prepareImage, rememberImage, useImageUrl } from '../lib/images'
+
+// 연결할 사진은 메모 사진처럼 자세히 보이게 긴 변 2400px 로 줄여 이 도면 사진 저장소에 둠
+const LINK_PHOTO_SIDE = 2400
+const isPdfFile = (f) => f && (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'))
 
 // 메모 범위에 연결할 도면 고르기. 앱에 올려 둔 도면 중 하나와 (원하면) 페이지를 고릅니다.
-// initial: 이미 연결된 { id, name, page, role }. role: 관련 문서 종류 (Hook-up, 데이터시트 …, 비워도 됨)
+// 사진도 연결할 수 있음: 컴퓨터에서 고르거나 끌어 놓거나 Ctrl+V → { photo, name, role, w, h }
+// initial: 이미 연결된 { id, name, page, role } (사진이면 { photo, … }). role: 관련 문서 종류 (Hook-up, 데이터시트 …, 비워도 됨)
 // onSetRoles(목록): 문서 종류 목록 고치기 (모든 도면 공통). 없으면 고치는 버튼을 숨김
 // onImportFile(file, folderId): 컴퓨터의 PDF 를 탭을 열지 않고 올림 → { id, name, pages }
 export default function LinkPicker({ store, currentId, currentName, library, onImportFile, onSetRoles, initial, defaultRole = '', onCancel, onConfirm, onUnlink }) {
   const [list, setList] = useState(null) // null = 불러오는 중
   const [query, setQuery] = useState('')
-  const [picked, setPicked] = useState(initial?.id ?? null)
+  const [picked, setPicked] = useState(initial?.photo ? null : (initial?.id ?? null))
+  // 고른 사진 { id, name, w, h } (저장 중이면 busy). 사진을 고르면 도면 고른 것은 풀림
+  const [photo, setPhoto] = useState(initial?.photo ? { id: initial.photo, name: initial.name, w: initial.w, h: initial.h } : null)
+  const [photoBusy, setPhotoBusy] = useState(false)
   const [page, setPage] = useState(String(initial?.page ?? 1))
   const [role, setRole] = useState(initial?.role ?? defaultRole)
   const [added, setAdded] = useState([]) // 이 창에서 방금 올린 도면
@@ -32,7 +41,7 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
       if (!isFileDrag(e)) return
       e.preventDefault()
       e.stopPropagation()
-      const ok = onImportFile && !upload?.busy
+      const ok = !upload?.busy && !photoBusy
       e.dataTransfer.dropEffect = ok ? 'copy' : 'none'
       if (ok) setDropping(true)
     },
@@ -44,9 +53,9 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
       e.preventDefault()
       e.stopPropagation()
       setDropping(false)
-      if (!onImportFile || upload?.busy) return
+      if (upload?.busy || photoBusy) return
       const files = [...e.dataTransfer.files]
-      chooseFile(files.find((f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) ?? files[0])
+      chooseFile(files.find(isPdfFile) ?? files.find(isImageFile) ?? files[0])
     },
   }
   const lib = library ?? EMPTY_LIBRARY
@@ -66,7 +75,7 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
   const items = useMemo(() => {
     const rows = (list ?? []).filter((r) => !added.some((a) => a.id === r.id))
     const all = [...added, { id: currentId, name: currentName }, ...rows.filter((r) => r.id !== currentId && !added.some((a) => a.id === r.id))]
-    if (initial && !all.some((r) => r.id === initial.id)) all.push({ id: initial.id, name: initial.name })
+    if (initial && !initial.photo && !all.some((r) => r.id === initial.id)) all.push({ id: initial.id, name: initial.name })
     const q = query.trim().toLowerCase()
     const label = (r) => `${displayName(lib, r.id, r.name)} ${r.name}`.toLowerCase()
     return q ? all.filter((r) => label(r).includes(q)) : all
@@ -74,12 +83,43 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
 
   const chooseFile = (file) => {
     if (!file) return
-    if (!(file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'))) {
-      setUpload({ file: null, folder: '', error: 'PDF 파일만 올릴 수 있어요.' })
+    if (isImageFile(file)) return addPhoto(file)
+    if (!isPdfFile(file) || !onImportFile) {
+      setUpload({ file: null, folder: '', error: onImportFile ? 'PDF 파일이나 사진만 올릴 수 있어요.' : '사진만 올릴 수 있어요.' })
       return
     }
     // 저장할 폴더 기본값: 지금 도면이 들어 있는 폴더 (이미 골라 둔 폴더가 있으면 그대로)
     setUpload((u) => ({ file, folder: u?.file ? u.folder : (lib.assign[currentId] ?? ''), busy: false, error: '' }))
+  }
+
+  // 사진: 줄여서 이 도면 사진 저장소에 저장 (서버면 pdfs/<uid>/img). 저장되면 바로 고른 상태로
+  const addPhoto = async (file) => {
+    if (photoBusy) return
+    setPhotoBusy(true)
+    setUpload(null)
+    try {
+      const img = await prepareImage(file, { maxSide: LINK_PHOTO_SIDE })
+      const id = newImageId()
+      rememberImage(id, img.blob)
+      await store.saveImage(currentId, id, img.blob)
+      const name = file.name && file.name !== 'image.png' ? file.name : '붙여넣은 사진'
+      setPhoto({ id, name, w: img.width, h: img.height })
+      setPicked(null)
+    } catch (e) {
+      console.warn(e)
+      setUpload({ file: null, folder: '', error: '사진을 올리지 못했어요. JPG·PNG 사진인지, 인터넷 연결을 확인해 주세요.' })
+    } finally {
+      setPhotoBusy(false)
+    }
+  }
+
+  // 이 창에서 Ctrl+V 로 사진 붙여넣기 (도면에 사진 넣기로 넘어가지 않게 막음)
+  const onPaste = (e) => {
+    const file = [...(e.clipboardData?.files ?? [])].find(isImageFile)
+    if (!file) return
+    e.preventDefault()
+    e.stopPropagation()
+    addPhoto(file)
   }
 
   const doUpload = async () => {
@@ -106,13 +146,15 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
 
   const submit = (e) => {
     e.preventDefault()
-    if (chosen) onConfirm({ id: chosen.id, name: chosen.name, page: pageNo, role: role.trim() })
+    if (photo) onConfirm({ photo: photo.id, name: photo.name, role: role.trim(), w: photo.w, h: photo.h })
+    else if (chosen) onConfirm({ id: chosen.id, name: chosen.name, page: pageNo, role: role.trim() })
   }
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onMouseDown={onCancel} {...dropProps}>
       <form
         onSubmit={submit}
+        onPaste={onPaste}
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.key === 'Escape' && onCancel()}
         className={`relative flex max-h-[80vh] w-full max-w-md flex-col rounded-xl bg-white p-5 shadow-2xl ${dropping ? 'ring-4 ring-brand-400' : ''}`}
@@ -123,11 +165,11 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
               <path d="M12 16V4M7 9l5-5 5 5M4 16v4h16v-4" />
             </svg>
             <span className="text-base font-semibold">여기에 놓으면 관련 도면으로 올려요</span>
-            <span className="text-xs text-brand-600">놓은 뒤 저장할 폴더를 고를 수 있어요</span>
+            <span className="text-xs text-brand-600">PDF 는 놓은 뒤 저장할 폴더를 고르고, 사진은 바로 연결돼요</span>
           </div>
         )}
         <h2 className="text-lg font-bold">관련 도면 연결</h2>
-        <p className="mt-1 text-sm text-ink-500">메모장에서 누르면 고른 도면의 그 페이지가 미리 보여요. 올려 둔 도면에서 고르거나, 컴퓨터의 PDF 를 바로 올려 연결할 수 있어요.</p>
+        <p className="mt-1 text-sm text-ink-500">메모장에서 누르면 고른 도면의 그 페이지나 사진이 크게 보여요. 올려 둔 도면에서 고르거나, 컴퓨터의 PDF·사진(현장 사진, 명판 등)을 바로 올려 연결할 수 있어요.</p>
         <input
           autoFocus
           placeholder="도면 이름 검색"
@@ -135,19 +177,26 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
           onChange={(e) => setQuery(e.target.value)}
           className="mt-3 rounded-md border border-ink-300 px-3 py-1.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
         />
-        {onImportFile && (
+        {(
           <>
             <input
               ref={fileRef}
               type="file"
-              accept="application/pdf,.pdf"
+              accept={onImportFile ? 'application/pdf,.pdf,image/*' : 'image/*'}
               className="hidden"
               onChange={(e) => {
                 chooseFile(e.target.files?.[0])
                 e.target.value = ''
               }}
             />
-            {upload?.file ? (
+            {photo ? (
+              <PhotoChoice photo={photo} onRemove={() => setPhoto(null)} onReplace={() => fileRef.current?.click()} />
+            ) : photoBusy ? (
+              <div className="mt-2 flex items-center justify-center gap-2 rounded-md border border-brand-200 bg-brand-50/60 px-3 py-3 text-sm text-brand-700">
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand-200 border-t-brand-600" />
+                사진 올리는 중…
+              </div>
+            ) : upload?.file ? (
               <div className="mt-2 rounded-md border border-brand-200 bg-brand-50/60 p-3 text-sm">
                 <div className="flex items-center gap-2">
                   <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-danger-500" fill="none" stroke="currentColor" strokeWidth="2">
@@ -187,8 +236,8 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
                   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 16V4M7 9l5-5 5 5M4 16v4h16v-4" />
                   </svg>
-                  컴퓨터에서 PDF 올리기
-                  <span className="font-normal text-ink-400">(끌어다 놓아도 돼요)</span>
+                  {onImportFile ? '컴퓨터에서 PDF·사진 올리기' : '컴퓨터에서 사진 올리기'}
+                  <span className="font-normal text-ink-400">(끌어 놓기·Ctrl+V 도 돼요)</span>
                 </button>
                 {upload?.error && <div className="mt-1 text-xs text-danger-600">{upload.error}</div>}
               </>
@@ -204,9 +253,12 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
                 type="button"
                 role="option"
                 aria-selected={picked === r.id}
-                onClick={() => setPicked(r.id)}
+                onClick={() => {
+                  setPicked(r.id)
+                  setPhoto(null)
+                }}
                 onDoubleClick={() => onConfirm({ id: r.id, name: r.name, page: pageNo, role: role.trim() })}
-                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm ${picked === r.id ? 'bg-brand-50 text-brand-800' : 'hover:bg-ink-50'}`}
+                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm ${picked === r.id && !photo ? 'bg-brand-50 text-brand-800' : 'hover:bg-ink-50'}`}
               >
                 <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-ink-400" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M6 3h8l4 4v14H6zM14 3v4h4" strokeLinejoin="round" />
@@ -223,7 +275,7 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
             </li>
           ))}
         </ul>
-        <label className="mt-3 flex items-center gap-2 text-sm text-ink-600">
+        <label className={`mt-3 flex items-center gap-2 text-sm text-ink-600 ${photo ? 'hidden' : ''}`}>
           열 페이지
           <input
             inputMode="numeric"
@@ -244,11 +296,35 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
           <button type="button" onClick={onCancel} className="ml-auto rounded-md px-4 py-2 text-sm text-ink-600 hover:bg-ink-100">
             취소
           </button>
-          <button disabled={!chosen} className="rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-40">
+          <button disabled={photo ? false : !chosen || photoBusy} className="rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-40">
             연결
           </button>
         </div>
       </form>
+    </div>
+  )
+}
+
+// 고른 사진: 작은 그림 + 이름, 다른 사진으로 바꾸기·빼기
+function PhotoChoice({ photo, onRemove, onReplace }) {
+  const url = useImageUrl(photo.id)
+  return (
+    <div className="mt-2 flex items-center gap-3 rounded-md border border-brand-300 bg-brand-50 p-2 text-sm">
+      <div className="grid h-14 w-20 shrink-0 place-items-center overflow-hidden rounded bg-white ring-1 ring-ink-200">
+        {url ? <img src={url} alt="" className="h-full w-full object-cover" /> : <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-200 border-t-ink-500" />}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-medium text-brand-800" title={photo.name}>
+          {photo.name}
+        </div>
+        <div className="text-xs text-ink-500">이 사진을 연결해요{photo.w ? ` · ${photo.w}×${photo.h}` : ''}</div>
+      </div>
+      <button type="button" onClick={onReplace} className="shrink-0 rounded px-2 py-1 text-xs text-ink-600 hover:bg-white">
+        바꾸기
+      </button>
+      <button type="button" onClick={onRemove} className="shrink-0 rounded px-2 py-1 text-xs text-ink-500 hover:bg-white hover:text-danger-600" title="사진 대신 도면 고르기">
+        ✕
+      </button>
     </div>
   )
 }

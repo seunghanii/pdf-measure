@@ -31,7 +31,7 @@ export function migrateMemo(m) {
 }
 
 // 메모 내용이 비어 있고 도면 하나만 연결된 범위는 누르면 바로 그 도면이 열림 (계기 카드는 늘 카드가 열림)
-export const isLinkOnly = (m) => !m.inst && memoLinks(m).length === 1 && !String(m.text ?? '').trim() && !memoPhotoIds(m).length
+export const isLinkOnly = (m) => !m.inst && memoLinks(m).length === 1 && !memoLinks(m)[0].photo && !String(m.text ?? '').trim() && !memoPhotoIds(m).length
 
 // 목록·툴팁에 보여 줄 한 줄 요약
 export function memoSummary(m) {
@@ -49,7 +49,7 @@ export function memoSummary(m) {
   const photos = memoPhotoIds(m).length
   if (photos) return `사진 ${photos}장`
   const links = memoLinks(m)
-  if (links.length) return `→ ${links[0].name}${links[0].page > 1 ? ` ${links[0].page}쪽` : ''}${links.length > 1 ? ` 외 ${links.length - 1}개` : ''}`
+  if (links.length) return `→ ${links[0].name}${!links[0].photo && links[0].page > 1 ? ` ${links[0].page}쪽` : ''}${links.length > 1 ? ` 외 ${links.length - 1}개` : ''}`
   return ''
 }
 

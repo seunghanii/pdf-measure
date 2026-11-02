@@ -3,7 +3,8 @@
 // kind 는 계기 종류 약어(FT, PT …). 목록은 KIND_PRESETS + 사용자가 더한 것(폴더 정보 library.kinds, 모든 도면 공통)
 // (PR #44 판에 있던 service·loop 는 화면에서 뺐고, 이미 적힌 값은 검색에만 남음)
 // 관련 문서(Hook-up, 데이터시트 …)는 links: [{ id, name, page, role }] 로 여러 개.
-// 예전 메모의 link(도면 하나)도 그대로 읽고, 고칠 때 links 로 옮기면서 link 에는 첫 번째를 남겨 둠.
+// 예전 메모의 link(도면 하나)도 그대로 읽고, 고칠 때 links 로 옮기면서 link 에는 첫 번째 도면을 남겨 둠.
+// 사진도 연결할 수 있음: { photo: 사진 id, name, role, w, h } (id 없음, 사진은 이 도면 사진 저장소에 있음)
 // 상태 색은 분류처럼 항목 color 에 함께 넣어 두어 그리기 코드가 상태 목록을 몰라도 되게 함.
 import { isMarkup, rectOf } from './markup'
 
@@ -35,7 +36,10 @@ export const itemGroup = (m) => (isInst(m) ? 'inst' : isMarkup(m.type) ? 'markup
 // 메모의 관련 문서 목록 (예전 link 하나짜리 포함)
 export const memoLinks = (m) => (Array.isArray(m?.links) ? m.links : m?.link ? [m.link] : [])
 // 관련 문서를 바꿀 때 항목에 넣을 값 (예전 판도 첫 번째 도면은 열 수 있게 link 도 둠)
-export const linksPatch = (links) => ({ links, link: links[0] ?? null })
+export const linksPatch = (links) => ({ links, link: links.find((l) => !l.photo) ?? null })
+// 사진 연결인지, 메모에 연결된 사진 id 들 (정리·복사 때 씀)
+export const isPhotoLink = (l) => !!l?.photo
+export const memoLinkPhotoIds = (m) => memoLinks(m).filter(isPhotoLink).map((l) => l.photo)
 
 // 태그 모양 맞추기: 대문자, 띄어쓰기 → '-' ("ft 1001" → "FT-1001")
 export function normTag(s) {
@@ -215,7 +219,7 @@ export function instRows(measurements) {
       desc: i.desc ?? '',
       kind: i.kind ?? '',
       status: i.status ?? DEFAULT_STATUS,
-      docs: memoLinks(m).map((l) => ({ id: l.id, name: l.name, page: l.page ?? 1, role: l.role ?? '' })),
+      docs: memoLinks(m).map((l) => (l.photo ? { photo: 1, name: l.name, page: 1, role: l.role ?? '' } : { id: l.id, name: l.name, page: l.page ?? 1, role: l.role ?? '' })),
       hidden: m.hidden ? 1 : 0,
     })
   }
@@ -231,7 +235,7 @@ const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
 
 export function downloadInstCsv(rows, fileBase) {
   const head = ['Tag. No', 'Description', '종류', '상태', '도면', '페이지', '관련 문서']
-  const lines = [head, ...rows.map((r) => [r.tag, r.desc ?? '', r.kind, statusOf(r.status).label, r.docName, r.page, r.docs.map((d) => `${d.role ? `${d.role}: ` : ''}${d.name}${d.page > 1 ? ` (${d.page}쪽)` : ''}`).join('; ')])]
+  const lines = [head, ...rows.map((r) => [r.tag, r.desc ?? '', r.kind, statusOf(r.status).label, r.docName, r.page, r.docs.map((d) => `${d.role ? `${d.role}: ` : ''}${d.name}${d.photo ? ' (사진)' : d.page > 1 ? ` (${d.page}쪽)` : ''}`).join('; ')])]
   const csv = lines.map((l) => l.map(cell).join(',')).join('\r\n')
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }) // 엑셀에서 한글이 깨지지 않게 BOM
   const a = document.createElement('a')
