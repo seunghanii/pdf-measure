@@ -5,6 +5,7 @@ import { TYPE_INFO, describe } from '../lib/measure'
 import { DEFAULT_BOX_OPACITY, FONT_FAMILY, RESIZE_DIRS, cropOf, fullImageRect, isMarkup, rectOf, resizeHandlePos, strokeOf, textMetricsOf } from '../lib/markup'
 import { useImageUrl } from '../lib/images'
 import { isLinkOnly, memoSummary } from '../lib/memo'
+import { instLabelText } from '../lib/instrument'
 
 function Label({ x, y, text, sub, color }) {
   return (
@@ -270,9 +271,10 @@ function MarkupShape({ m, zoom, selected, showHandles, showResize, draft }) {
           strokeWidth={1.2}
           strokeDasharray="5 3"
         />
-        {/* 계기 카드: 범위 위에 태그 번호 */}
-        {!draft && m.inst?.tag && (
+        {/* 계기 카드: 범위 위에 이름표 (기본 Description, 없으면 Tag. No / 카드에서 Tag. No·숨김 고름, 오른쪽 목록에서 모두 숨기기) */}
+        {!draft && instLabelText(m.inst) && (
           <text
+            className="inst-label"
             x={r.x + 1}
             y={r.y - 4}
             fontSize="11"
@@ -284,7 +286,7 @@ function MarkupShape({ m, zoom, selected, showHandles, showResize, draft }) {
             strokeLinejoin="round"
             pointerEvents="none"
           >
-            {m.inst.tag}
+            {instLabelText(m.inst)}
           </text>
         )}
         {!draft && r.w > s + 6 && r.h > s + 6 && (

@@ -64,6 +64,21 @@ export const KIND_PRESETS = ['FE', 'FT', 'LI', 'LS', 'LT', 'PDI', 'PDT', 'PI', '
 // 기본 목록 + 사용자가 더한 종류 (겹치지 않게)
 export const kindList = (custom) => [...new Set([...KIND_PRESETS, ...(custom ?? [])])]
 
+// 도면 위 박스 이름표: inst.label 'desc'(기본, Description 없으면 Tag. No) | 'tag' | 'off'
+export const INST_LABELS = [
+  { id: 'desc', label: 'Description' },
+  { id: 'tag', label: 'Tag. No' },
+  { id: 'off', label: '숨김' },
+]
+const LABEL_MAX = 32
+export function instLabelText(inst) {
+  if (!inst || inst.label === 'off') return ''
+  const tag = String(inst.tag ?? '').trim()
+  const desc = String(inst.desc ?? '').trim()
+  const t = inst.label === 'tag' ? tag || desc : desc || tag
+  return t.length > LABEL_MAX ? `${t.slice(0, LABEL_MAX - 1)}…` : t
+}
+
 export const isInst = (m) => m?.type === 'memo' && !!m.inst
 
 // 오른쪽 목록의 묶음: 'measure' 측정 | 'markup' 마크업 | 'inst' 계기 카드 (마크업 전체 삭제에 휩쓸리지 않게 따로)
