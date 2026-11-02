@@ -5,12 +5,18 @@ import { nextRevLabel, pageSizes, revisionReport } from '../lib/revision'
 
 const isPdf = (f) => f && (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'))
 const dateText = (at) => (at ? new Date(at).toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' }) : '')
+// 파일 이름에 판 표시가 있으면 판 이름으로 ("..._RevC_Hook-up.pdf" → "Rev.C")
+const revLabelFromName = (name) => {
+  const m = String(name).match(/(?:^|[\s_.(-])rev(?:ision)?\.?[\s_.-]*([a-z0-9]{1,3})(?![a-z0-9])/i)
+  return m ? `Rev.${m[1].toUpperCase()}` : null
+}
 const pct = (k) => `${Math.round(k * 100)}%`
 
 // 도면 개정판으로 바꾸기 창.
 // 1) 판 목록: 지금 판, 예전 판(내려받기·되돌리기·지우기), 새 개정판 PDF 고르기(끌어놓기 가능)
 // 2) 확인: 쪽 수·크기 변화, 없어지는 쪽의 항목, 축척 확인 안내 → 바꾸기
-export default function RevisionDialog({ pdfDoc, store, docId, current, revisions, items, calibrated, calPage, onCancel, onApply, onRemoveRev }) {
+// initialFile: 창을 열자마자 고를 새 판 PDF (관련 도면 연결에서 같은 도면 번호의 PDF 를 "개정판으로" 고른 경우)
+export default function RevisionDialog({ pdfDoc, store, docId, current, revisions, items, calibrated, calPage, initialFile, onCancel, onApply, onRemoveRev }) {
   const [pick, setPick] = useState(null) // { file, fromRev, newPdf, oldSizes, newSizes, report, label, fit } | { loading } | { error }
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -50,7 +56,7 @@ export default function RevisionDialog({ pdfDoc, store, docId, current, revision
         oldSizes,
         newSizes,
         report,
-        label: fromRev?.label ?? nextRevLabel(current.label === '처음 판' ? null : current, revisions),
+        label: fromRev?.label ?? revLabelFromName(file.name) ?? nextRevLabel(current.label === '처음 판' ? null : current, revisions),
         fit: true,
       })
     } catch (e) {
@@ -59,6 +65,12 @@ export default function RevisionDialog({ pdfDoc, store, docId, current, revision
       setError(`"${file.name}" 을(를) 열 수 없어요. 암호가 걸려 있거나 손상된 PDF 인지 확인해 주세요.`)
     }
   }
+
+  // 넘겨받은 PDF 가 있으면 바로 골라 확인 단계로
+  useEffect(() => {
+    if (initialFile) choose(initialFile)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFile])
 
   const apply = async () => {
     if (!pick?.newPdf || busy) return

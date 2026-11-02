@@ -4,6 +4,8 @@ import { docRoleList } from '../lib/instrument'
 import { EMPTY_LIBRARY, displayName, folderLabel } from '../lib/library'
 import { FolderSelect } from './Library'
 import { isImageFile, newImageId, prepareImage, rememberImage, useImageUrl } from '../lib/images'
+import { resolveFile } from '../lib/revision'
+import { drawingNo, sameNumberDocs } from '../lib/drawingNo'
 
 // 연결할 사진은 메모 사진처럼 자세히 보이게 긴 변 2400px 로 줄여 이 도면 사진 저장소에 둠
 const LINK_PHOTO_SIDE = 2400
@@ -14,7 +16,9 @@ const isPdfFile = (f) => f && (f.type === 'application/pdf' || f.name.toLowerCas
 // initial: 이미 연결된 { id, name, page, role } (사진이면 { photo, … }). role: 관련 문서 종류 (Hook-up, 데이터시트 …, 비워도 됨)
 // onSetRoles(목록): 문서 종류 목록 고치기 (모든 도면 공통). 없으면 고치는 버튼을 숨김
 // onImportFile(file, folderId): 컴퓨터의 PDF 를 탭을 열지 않고 올림 → { id, name, pages }
-export default function LinkPicker({ store, currentId, currentName, library, onImportFile, onSetRoles, initial, defaultRole = '', onCancel, onConfirm, onUnlink }) {
+// onReviseDoc(doc, file): 같은 도면 번호의 기존 도면을 열어 이 PDF 로 개정판 바꾸기 창을 띄움
+// 이미 올라가 있는 PDF(이름·크기 같음)면 올리지 않고 그 도면을 골라 둠. 도면 번호만 같으면 개정판·연결·새로 올리기 중 고름
+export default function LinkPicker({ store, currentId, currentName, library, onImportFile, onReviseDoc, onSetRoles, initial, defaultRole = '', onCancel, onConfirm, onUnlink }) {
   const [list, setList] = useState(null) // null = 불러오는 중
   const [query, setQuery] = useState('')
   const [picked, setPicked] = useState(initial?.photo ? null : (initial?.id ?? null))
@@ -27,6 +31,7 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
   const [upload, setUpload] = useState(null) // { file, folder, busy, error } 올릴 PDF 와 저장할 폴더
   const fileRef = useRef(null)
   const [dropping, setDropping] = useState(false) // 컴퓨터의 파일을 이 창 위로 끌고 있음
+  const [already, setAlready] = useState(null) // 고른 PDF 가 이미 올라가 있던 도면 { id, name }
 
   // 이 창이 떠 있는 동안 끌어 온 파일은 여기서만 받음: 앱 전체의 "PDF 열기" 끌어놓기(탭 열기)와
   // 도면에 사진 넣기로 넘어가지 않게 전파를 멈춤. 창 바깥 어두운 곳에 놓아도 올리기로 받음.
@@ -88,8 +93,26 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
       setUpload({ file: null, folder: '', error: onImportFile ? 'PDF 파일이나 사진만 올릴 수 있어요.' : '사진만 올릴 수 있어요.' })
       return
     }
+    setAlready(null)
+    // 이미 올라가 있는 도면 (같은 이름·크기, 또는 개정판으로 이어 둔 파일): 올리지 않고 그 도면을 고름
+    const rows = [...added, ...(list ?? [])]
+    const { id } = resolveFile(lib, file)
+    const have = rows.find((r) => r.id === id)
+    if (have) {
+      setUpload(null)
+      setPhoto(null)
+      setPicked(have.id)
+      setQuery('')
+      setAlready({ id: have.id, name: have.name })
+      return
+    }
+    // 도면 번호만 같은 도면 (rev 도면 등): 개정판으로 바꿀지 물어봄
+    const seen = new Set()
+    const matches = sameNumberDocs(rows, file.name, id)
+      .filter((r) => !seen.has(r.id) && seen.add(r.id))
+      .slice(0, 3)
     // 저장할 폴더 기본값: 지금 도면이 들어 있는 폴더 (이미 골라 둔 폴더가 있으면 그대로)
-    setUpload((u) => ({ file, folder: u?.file ? u.folder : (lib.assign[currentId] ?? ''), busy: false, error: '' }))
+    setUpload((u) => ({ file, matches, folder: u?.file ? u.folder : (lib.assign[currentId] ?? ''), busy: false, error: '' }))
   }
 
   // 사진: 줄여서 이 도면 사진 저장소에 저장 (서버면 pdfs/<uid>/img). 저장되면 바로 고른 상태로
@@ -143,6 +166,13 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
 
   const chosen = items.find((r) => r.id === picked) ?? (initial?.id === picked ? initial : null)
   const pageNo = Math.max(1, Math.round(Number(page) || 1))
+
+  // 같은 번호 도면을 개정판으로: 그 도면을 연결하고, 그 도면 탭에서 개정판 바꾸기 창을 띄움
+  const reviseInto = (m) => {
+    const file = upload.file
+    onConfirm({ id: m.id, name: m.name, page: pageNo, role: role.trim() })
+    onReviseDoc(m, file)
+  }
 
   const submit = (e) => {
     e.preventDefault()
@@ -206,6 +236,52 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
                     {upload.file.name}
                   </span>
                 </div>
+                {upload.matches?.length > 0 && (
+                  <div className="mt-2 rounded-md border border-warn-200 bg-warn-50 p-2 text-xs text-ink-700">
+                    <div className="font-semibold text-warn-800">같은 도면 번호({drawingNo(upload.file.name)})의 도면이 있어요</div>
+                    <ul className="mt-1.5 flex flex-col gap-1.5">
+                      {upload.matches.map((m) => (
+                        <li key={m.id} className="rounded bg-white/80 px-2 py-1.5 ring-1 ring-warn-200">
+                          <div className="truncate font-medium text-ink-800" title={m.name}>
+                            {displayName(lib, m.id, m.name)}
+                          </div>
+                          {(displayName(lib, m.id, m.name) !== m.name || lib.assign[m.id]) && (
+                            <div className="truncate text-[11px] text-ink-400">
+                              {[displayName(lib, m.id, m.name) !== m.name && m.name, lib.assign[m.id] && folderLabel(lib, lib.assign[m.id])].filter(Boolean).join(' · ')}
+                            </div>
+                          )}
+                          <div className="mt-1 flex flex-wrap gap-1.5">
+                            {onReviseDoc && (
+                              <button
+                                type="button"
+                                disabled={upload.busy}
+                                onClick={() => reviseInto(m)}
+                                title="그 도면을 열어 PDF 만 이 파일로 바꿔요. 마크업·메모·연결은 그대로, 예전 판은 보관"
+                                className="rounded bg-ink-800 px-2 py-1 font-semibold text-white hover:bg-ink-700 disabled:opacity-50"
+                              >
+                                개정판으로 바꾸기
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              disabled={upload.busy}
+                              onClick={() => {
+                                setPicked(m.id)
+                                setUpload(null)
+                                setQuery('')
+                              }}
+                              title="올리지 않고 이미 있는 이 도면에 연결"
+                              className="rounded px-2 py-1 font-medium text-ink-700 ring-1 ring-ink-300 hover:bg-ink-100 disabled:opacity-50"
+                            >
+                              기존 도면에 연결만
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-1.5 text-[11px] text-ink-500">다른 도면이면 아래에서 폴더를 고르고 새 도면으로 올리세요.</div>
+                  </div>
+                )}
                 <label className="mt-2 block text-xs font-medium text-ink-600">
                   저장할 폴더
                   <FolderSelect library={lib} value={upload.folder} onChange={(folder) => setUpload((u) => ({ ...u, folder }))} />
@@ -222,7 +298,7 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
                     className="flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-1.5 font-semibold text-white hover:bg-brand-press disabled:opacity-60"
                   >
                     {upload.busy && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
-                    {upload.busy ? '올리는 중…' : '올리기'}
+                    {upload.busy ? '올리는 중…' : upload.matches?.length ? '새 도면으로 올리기' : '올리기'}
                   </button>
                 </div>
               </div>
@@ -244,6 +320,18 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
             )}
           </>
         )}
+        {already && !upload?.file && !photo && (
+          <div className="mt-2 flex items-start gap-2 rounded-md border border-ok-200 bg-ok-50 px-3 py-2 text-sm text-ok-800" role="status">
+            <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 12l5 5L20 7" />
+            </svg>
+            <span className="min-w-0">
+              이미 올라가 있는 도면이에요: <b className="font-semibold">{displayName(lib, already.id, already.name)}</b>
+              {lib.assign[already.id] && <span className="text-ok-700"> ({folderLabel(lib, lib.assign[already.id])})</span>}
+              <span className="block text-xs text-ok-700">다시 올리지 않고 아래 목록에서 골라 뒀어요. 폴더도 그대로예요.</span>
+            </span>
+          </div>
+        )}
         <ul className="mt-2 min-h-24 flex-1 overflow-y-auto rounded-md border border-ink-200" role="listbox" aria-label="도면 목록">
           {list === null && <li className="px-3 py-4 text-center text-sm text-ink-400">도면 목록 불러오는 중…</li>}
           {list !== null && items.length === 0 && <li className="px-3 py-4 text-center text-sm text-ink-400">찾는 도면이 없어요</li>}
@@ -256,6 +344,7 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
                 onClick={() => {
                   setPicked(r.id)
                   setPhoto(null)
+                  if (already?.id !== r.id) setAlready(null)
                 }}
                 onDoubleClick={() => onConfirm({ id: r.id, name: r.name, page: pageNo, role: role.trim() })}
                 className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm ${picked === r.id && !photo ? 'bg-brand-50 text-brand-800' : 'hover:bg-ink-50'}`}
