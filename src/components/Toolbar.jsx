@@ -46,7 +46,7 @@ export default function Toolbar({
   const numPages = pdfDoc?.numPages ?? 0
 
   return (
-    <header className="relative z-20 border-b border-ink-200 bg-white">
+    <header className="relative z-20 border-b border-ink-200 bg-surface">
       {/* 좁은 화면(폰·세로 아이패드)에서는 줄을 바꾸지 않고 한 줄로 옆으로 밀어 봄 */}
       <div className="no-scrollbar flex flex-wrap items-center gap-x-2.5 gap-y-2 px-3 py-2 max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:overscroll-x-contain max-lg:*:shrink-0">
       <div className={`flex items-center gap-2 ${pdfDoc ? 'max-sm:hidden' : ''}`}>
@@ -55,7 +55,7 @@ export default function Toolbar({
       </div>
 
       <button
-        className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold whitespace-nowrap text-white shadow-xs transition-colors hover:bg-brand-700 active:bg-brand-800 pointer-coarse:py-2.5"
+        className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold whitespace-nowrap text-white shadow-xs transition-colors hover:bg-brand-press active:bg-brand-press pointer-coarse:py-2.5"
         onClick={() => inputRef.current?.click()}
         title="PDF 열기"
         aria-label="PDF 열기"
@@ -98,7 +98,7 @@ export default function Toolbar({
               title="사진 넣기 (I) · 복사한 사진은 Ctrl+V 로 바로 붙여넣기, 사진 파일을 도면에 끌어다 놓아도 돼요"
               aria-label="사진 넣기"
               onClick={onInsertImage}
-              className="flex items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-sm font-medium whitespace-nowrap text-ink-600 transition-colors hover:bg-white hover:text-ink-900 pointer-coarse:px-3 pointer-coarse:py-2.5"
+              className="flex items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-sm font-medium whitespace-nowrap text-ink-600 transition-colors hover:bg-surface hover:text-ink-900 pointer-coarse:px-3 pointer-coarse:py-2.5"
             >
               <Icon d="M4 5h16v14H4zM4 16l5-5 4 4 2-2 5 5M15.5 9.5h.01" />
               <span className="hidden min-[1800px]:inline">사진</span>
@@ -117,7 +117,7 @@ export default function Toolbar({
             {syncStatus && <SyncBadge status={syncStatus} />}
             {onRevision && (
               <button
-                className="flex items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-2.5 py-1.5 text-sm font-medium text-ink-700 shadow-xs transition-colors hover:border-ink-300 hover:bg-ink-50"
+                className="flex items-center gap-1.5 rounded-lg border border-ink-200 bg-surface px-2.5 py-1.5 text-sm font-medium text-ink-700 shadow-xs transition-colors hover:border-ink-300 hover:bg-ink-50"
                 onClick={onRevision}
                 title="도면 개정: 새 개정판 PDF 로 바꾸기 (마크업·메모는 그대로), 예전 판 보기"
               >
@@ -126,7 +126,7 @@ export default function Toolbar({
               </button>
             )}
             <button
-              className="flex items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-2.5 py-1.5 text-sm font-medium whitespace-nowrap text-ink-700 shadow-xs pointer-coarse:py-2.5 transition-colors hover:border-ink-300 hover:bg-ink-50 disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-lg border border-ink-200 bg-surface px-2.5 py-1.5 text-sm font-medium whitespace-nowrap text-ink-700 shadow-xs pointer-coarse:py-2.5 transition-colors hover:border-ink-300 hover:bg-ink-50 disabled:opacity-50"
               onClick={onSave}
               disabled={saving}
               title="마크업과 측정을 그려 넣은 PDF로 저장 (Ctrl+S)"
@@ -163,7 +163,7 @@ export default function Toolbar({
               <SmallButton onClick={() => setZoom(Math.min(MAX_ZOOM, zoom * 1.25))} title="확대 (+)">
                 +
               </SmallButton>
-              <button className="rounded-[10px] px-2 py-1 whitespace-nowrap text-ink-600 transition-colors hover:bg-white hover:text-ink-900 pointer-coarse:py-2" onClick={onFit} title="화면에 맞춤">
+              <button className="rounded-[10px] px-2 py-1 whitespace-nowrap text-ink-600 transition-colors hover:bg-surface hover:text-ink-900 pointer-coarse:py-2" onClick={onFit} title="화면에 맞춤">
                 맞춤
               </button>
             </div>
@@ -226,7 +226,7 @@ function Divider() {
 function SmallButton({ children, ...props }) {
   return (
     <button
-      className="flex h-7 w-7 items-center justify-center rounded-[10px] text-base pointer-coarse:h-9 pointer-coarse:w-9 text-ink-600 transition-colors hover:bg-white hover:text-ink-900 disabled:opacity-30 disabled:hover:bg-transparent"
+      className="flex h-7 w-7 items-center justify-center rounded-[10px] text-base pointer-coarse:h-9 pointer-coarse:w-9 text-ink-600 transition-colors hover:bg-surface hover:text-ink-900 disabled:opacity-30 disabled:hover:bg-transparent"
       {...props}
     >
       {children}
@@ -245,7 +245,7 @@ function SnapButton() {
       title={on ? '자석 켜짐: 선 끝점·교차점·선 위에 붙어요. 누르면 꺼짐 (S)' : '자석 꺼짐: 누르면 선에 붙게 켜요 (S)'}
       className={[
         'flex items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-sm font-medium whitespace-nowrap transition-colors pointer-coarse:px-3 pointer-coarse:py-2.5',
-        on ? 'bg-white text-snap-600 shadow-xs ring-1 ring-snap-200 hover:bg-snap-50' : 'text-ink-400 hover:bg-white hover:text-ink-600',
+        on ? 'bg-surface text-snap-600 shadow-xs ring-1 ring-snap-200 hover:bg-snap-50' : 'text-ink-400 hover:bg-surface hover:text-ink-600',
       ].join(' ')}
     >
       <Icon d={on ? 'M6 4v8a6 6 0 0012 0V4h-4v8a2 2 0 01-4 0V4zM6 8h4M14 8h4' : 'M6 4v8a6 6 0 0012 0V4h-4v8a2 2 0 01-4 0V4zM3 3l18 18'} />
@@ -268,7 +268,7 @@ function ToolButton({ t, active, onClick, showLabel }) {
           ? t.accent === 'orange'
             ? 'bg-ref-500 text-white shadow-xs'
             : 'bg-brand-600 text-white shadow-xs'
-          : 'text-ink-600 hover:bg-white hover:text-ink-900',
+          : 'text-ink-600 hover:bg-surface hover:text-ink-900',
       ].join(' ')}
     >
       <Icon d={t.icon} />
@@ -296,10 +296,10 @@ function MarkupStyle({ kind, title, style, onChange, showStroke, showShape, imag
   const widths = STROKE_WIDTHS.includes(style.strokeWidth) ? STROKE_WIDTHS : [...STROKE_WIDTHS, style.strokeWidth].sort((a, b) => a - b)
   const transparency = Math.round((1 - (style.boxOpacity ?? DEFAULT_BOX_OPACITY)) * 100)
   return (
-    <div className="flex flex-wrap items-center gap-1 rounded-lg border border-ink-200 bg-white/95 px-2.5 py-1.5 shadow-md backdrop-blur max-lg:max-w-full max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:*:shrink-0 no-scrollbar pointer-coarse:py-2">
+    <div className="flex flex-wrap items-center gap-1 rounded-lg border border-ink-200 bg-surface/95 px-2.5 py-1.5 shadow-md backdrop-blur max-lg:max-w-full max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:*:shrink-0 no-scrollbar pointer-coarse:py-2">
       {title && <span className="mr-1.5 text-xs font-semibold whitespace-nowrap text-ink-700">{title}</span>}
       {(kind === 'rect' || showShape) && (
-        <div className="mr-1.5 flex items-center rounded border border-ink-300 bg-white" role="group" aria-label="도형 모양">
+        <div className="mr-1.5 flex items-center rounded border border-ink-300 bg-surface" role="group" aria-label="도형 모양">
           {SHAPES.map(([value, label, d]) => (
             <button
               key={value}
@@ -307,7 +307,7 @@ function MarkupStyle({ kind, title, style, onChange, showStroke, showShape, imag
               aria-pressed={(style.shape ?? 'rect') === value}
               onClick={() => onChange({ shape: value })}
               className={`flex h-6 items-center gap-1 px-1.5 text-xs pointer-coarse:h-8 pointer-coarse:px-2.5 font-medium whitespace-nowrap first:rounded-l last:rounded-r ${
-                (style.shape ?? 'rect') === value ? 'bg-ink-800 text-white' : 'text-ink-600 hover:bg-ink-100'
+                (style.shape ?? 'rect') === value ? 'bg-ink-800 text-surface' : 'text-ink-600 hover:bg-ink-100'
               }`}
             >
               <Icon d={d} />
@@ -331,7 +331,7 @@ function MarkupStyle({ kind, title, style, onChange, showStroke, showShape, imag
           <select
             value={style.strokeWidth}
             onChange={(e) => onChange({ strokeWidth: Number(e.target.value) })}
-            className="rounded border border-ink-300 bg-white px-1 py-0.5 text-xs tabular-nums pointer-coarse:py-1.5"
+            className="rounded border border-ink-300 bg-surface px-1 py-0.5 text-xs tabular-nums pointer-coarse:py-1.5"
           >
             {widths.map((n) => (
               <option key={n} value={n}>
@@ -351,7 +351,7 @@ function MarkupStyle({ kind, title, style, onChange, showStroke, showShape, imag
             <select
               value={style.fontSize}
               onChange={(e) => onChange({ fontSize: Number(e.target.value) })}
-              className="rounded border border-ink-300 bg-white px-1 py-0.5 text-xs tabular-nums pointer-coarse:py-1.5"
+              className="rounded border border-ink-300 bg-surface px-1 py-0.5 text-xs tabular-nums pointer-coarse:py-1.5"
             >
               {sizes.map((n) => (
                 <option key={n} value={n}>
@@ -360,7 +360,7 @@ function MarkupStyle({ kind, title, style, onChange, showStroke, showShape, imag
               ))}
             </select>
           </label>
-          <div className="ml-2 flex items-center rounded border border-ink-300 bg-white" role="group" aria-label="정렬">
+          <div className="ml-2 flex items-center rounded border border-ink-300 bg-surface" role="group" aria-label="정렬">
             {ALIGN_BUTTONS.map(([value, label, d]) => (
               <button
                 key={value}
@@ -368,7 +368,7 @@ function MarkupStyle({ kind, title, style, onChange, showStroke, showShape, imag
                 aria-pressed={(style.textAlign ?? 'left') === value}
                 onClick={() => onChange({ textAlign: value })}
                 className={`flex h-6 w-6 items-center justify-center first:rounded-l pointer-coarse:h-8 pointer-coarse:w-8 last:rounded-r ${
-                  (style.textAlign ?? 'left') === value ? 'bg-ink-800 text-white' : 'text-ink-600 hover:bg-ink-100'
+                  (style.textAlign ?? 'left') === value ? 'bg-ink-800 text-surface' : 'text-ink-600 hover:bg-ink-100'
                 }`}
               >
                 <Icon d={d} />
@@ -402,10 +402,10 @@ function ImageStyle({ title, style, onChange, actions }) {
     : [...IMAGE_BORDER_WIDTHS, style.imageBorderWidth].sort((a, b) => a - b)
   const btn = (active) =>
     `flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium whitespace-nowrap pointer-coarse:py-1.5 ${
-      active ? 'bg-ink-800 text-white' : 'text-ink-700 ring-1 ring-ink-300 hover:bg-ink-100'
+      active ? 'bg-ink-800 text-surface' : 'text-ink-700 ring-1 ring-ink-300 hover:bg-ink-100'
     }`
   return (
-    <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-ink-200 bg-white/95 px-2.5 py-1.5 shadow-md backdrop-blur max-lg:max-w-full max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:*:shrink-0 no-scrollbar pointer-coarse:py-2">
+    <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-ink-200 bg-surface/95 px-2.5 py-1.5 shadow-md backdrop-blur max-lg:max-w-full max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:*:shrink-0 no-scrollbar pointer-coarse:py-2">
       <span className="mr-1 text-xs font-semibold whitespace-nowrap text-ink-700">{title}</span>
       {actions && (
         <>
@@ -446,7 +446,7 @@ function ImageStyle({ title, style, onChange, actions }) {
             <select
               value={style.imageBorderWidth}
               onChange={(e) => onChange({ imageBorderWidth: Number(e.target.value) })}
-              className="rounded border border-ink-300 bg-white px-1 py-0.5 text-xs tabular-nums pointer-coarse:py-1.5"
+              className="rounded border border-ink-300 bg-surface px-1 py-0.5 text-xs tabular-nums pointer-coarse:py-1.5"
             >
               {widths.map((n) => (
                 <option key={n} value={n}>
@@ -474,11 +474,11 @@ function ImageStyle({ title, style, onChange, actions }) {
 function MemoStyle({ title, style, onChange, actions }) {
   const btn = (active) =>
     `flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium whitespace-nowrap pointer-coarse:py-1.5 ${
-      active ? 'bg-ink-800 text-white' : 'text-ink-700 ring-1 ring-ink-300 hover:bg-ink-100'
+      active ? 'bg-ink-800 text-surface' : 'text-ink-700 ring-1 ring-ink-300 hover:bg-ink-100'
     }`
   const kind = style.memoKind ?? 'note'
   return (
-    <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-ink-200 bg-white/95 px-2.5 py-1.5 shadow-md backdrop-blur max-lg:max-w-full max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:*:shrink-0 no-scrollbar pointer-coarse:py-2">
+    <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-ink-200 bg-surface/95 px-2.5 py-1.5 shadow-md backdrop-blur max-lg:max-w-full max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:*:shrink-0 no-scrollbar pointer-coarse:py-2">
       <span className="mr-1 text-xs font-semibold whitespace-nowrap text-ink-700">{title}</span>
       {actions ? (
         <>
@@ -504,7 +504,7 @@ function MemoStyle({ title, style, onChange, actions }) {
               aria-pressed={kind === value}
               onClick={() => onChange({ memoKind: value })}
               className={`px-2 py-0.5 text-xs font-medium whitespace-nowrap first:rounded-l pointer-coarse:px-3 pointer-coarse:py-1.5 last:rounded-r ${
-                kind === value ? 'bg-ink-800 text-white' : 'text-ink-700 hover:bg-ink-100'
+                kind === value ? 'bg-ink-800 text-surface' : 'text-ink-700 hover:bg-ink-100'
               }`}
             >
               {label}

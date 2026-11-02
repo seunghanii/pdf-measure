@@ -157,7 +157,7 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
         onPaste={onPaste}
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.key === 'Escape' && onCancel()}
-        className={`relative flex max-h-[80vh] w-full max-w-md flex-col rounded-xl bg-white p-5 shadow-2xl ${dropping ? 'ring-4 ring-brand-400' : ''}`}
+        className={`relative flex max-h-[80vh] w-full max-w-md flex-col rounded-xl bg-surface p-5 shadow-2xl ${dropping ? 'ring-4 ring-brand-400' : ''}`}
       >
         {dropping && (
           <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-brand-500 bg-brand-50/90 text-brand-700">
@@ -219,7 +219,7 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
                     type="button"
                     disabled={upload.busy}
                     onClick={doUpload}
-                    className="flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-1.5 font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
+                    className="flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-1.5 font-semibold text-white hover:bg-brand-press disabled:opacity-60"
                   >
                     {upload.busy && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
                     {upload.busy ? '올리는 중…' : '올리기'}
@@ -296,7 +296,7 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
           <button type="button" onClick={onCancel} className="ml-auto rounded-md px-4 py-2 text-sm text-ink-600 hover:bg-ink-100">
             취소
           </button>
-          <button disabled={photo ? false : !chosen || photoBusy} className="rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-40">
+          <button disabled={photo ? false : !chosen || photoBusy} className="rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-press disabled:opacity-40">
             연결
           </button>
         </div>
@@ -310,7 +310,7 @@ function PhotoChoice({ photo, onRemove, onReplace }) {
   const url = useImageUrl(photo.id)
   return (
     <div className="mt-2 flex items-center gap-3 rounded-md border border-brand-300 bg-brand-50 p-2 text-sm">
-      <div className="grid h-14 w-20 shrink-0 place-items-center overflow-hidden rounded bg-white ring-1 ring-ink-200">
+      <div className="grid h-14 w-20 shrink-0 place-items-center overflow-hidden rounded bg-surface ring-1 ring-ink-200">
         {url ? <img src={url} alt="" className="h-full w-full object-cover" /> : <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-200 border-t-ink-500" />}
       </div>
       <div className="min-w-0 flex-1">
@@ -319,10 +319,10 @@ function PhotoChoice({ photo, onRemove, onReplace }) {
         </div>
         <div className="text-xs text-ink-500">이 사진을 연결해요{photo.w ? ` · ${photo.w}×${photo.h}` : ''}</div>
       </div>
-      <button type="button" onClick={onReplace} className="shrink-0 rounded px-2 py-1 text-xs text-ink-600 hover:bg-white">
+      <button type="button" onClick={onReplace} className="shrink-0 rounded px-2 py-1 text-xs text-ink-600 hover:bg-surface">
         바꾸기
       </button>
-      <button type="button" onClick={onRemove} className="shrink-0 rounded px-2 py-1 text-xs text-ink-500 hover:bg-white hover:text-danger-600" title="사진 대신 도면 고르기">
+      <button type="button" onClick={onRemove} className="shrink-0 rounded px-2 py-1 text-xs text-ink-500 hover:bg-surface hover:text-danger-600" title="사진 대신 도면 고르기">
         ✕
       </button>
     </div>
@@ -415,7 +415,7 @@ function RoleChips({ roles, role, setRole, onSetRoles }) {
                 type="button"
                 aria-pressed={role === r}
                 onClick={() => setRole((cur) => (cur === r ? '' : r))}
-                className={`${chip} ${role === r ? 'bg-ink-800 text-white' : 'text-ink-600 ring-1 ring-ink-300 hover:bg-ink-100'}`}
+                className={`${chip} ${role === r ? 'bg-ink-800 text-surface' : 'text-ink-600 ring-1 ring-ink-300 hover:bg-ink-100'}`}
               >
                 {r}
               </button>

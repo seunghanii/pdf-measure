@@ -32,7 +32,7 @@ export function AuthPanel() {
   }
 
   return (
-    <section className="mb-6 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-ink-200">
+    <section className="mb-6 rounded-2xl bg-surface p-5 shadow-sm ring-1 ring-ink-200">
       <div className="flex items-start gap-3">
         <CloudIcon className="mt-0.5 h-6 w-6 shrink-0 text-brand-600" />
         <div>
@@ -73,7 +73,7 @@ export function AuthPanel() {
         <button
           type="submit"
           disabled={busy}
-          className="w-full rounded-md bg-brand-600 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+          className="w-full rounded-md bg-brand-600 py-2 text-sm font-semibold text-white hover:bg-brand-press disabled:opacity-50"
         >
           {busy ? '잠시만요…' : mode === 'login' ? '로그인' : '재설정 메일 보내기'}
         </button>
@@ -130,7 +130,7 @@ export function AccountMenu({ user, onLogout, onChangePassword }) {
         <span className="text-xs text-ink-400">▾</span>
       </button>
       {open && (
-        <div className="absolute right-0 z-30 mt-1 w-48 overflow-hidden rounded-lg bg-white py-1 text-sm shadow-lg ring-1 ring-ink-200">
+        <div className="absolute right-0 z-30 mt-1 w-48 overflow-hidden rounded-lg bg-surface py-1 text-sm shadow-lg ring-1 ring-ink-200">
           <button
             className="block w-full px-3 py-2 text-left hover:bg-ink-50"
             onClick={() => {
@@ -182,7 +182,7 @@ export function PasswordDialog({ recovery, onClose }) {
         onSubmit={submit}
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.key === 'Escape' && onClose()}
-        className="w-full max-w-sm rounded-xl bg-white p-5 shadow-2xl"
+        className="w-full max-w-sm rounded-xl bg-surface p-5 shadow-2xl"
       >
         <h2 className="text-lg font-bold">{recovery ? '새 비밀번호 정하기' : '비밀번호 바꾸기'}</h2>
         {done ? (
@@ -211,7 +211,7 @@ export function PasswordDialog({ recovery, onClose }) {
             <button
               type="submit"
               disabled={busy}
-              className="rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-40"
+              className="rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-press disabled:opacity-40"
             >
               {busy ? '바꾸는 중…' : '바꾸기'}
             </button>

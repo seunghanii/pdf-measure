@@ -80,14 +80,14 @@ function ExcelFile({ file, loadBlob, onUpdate, onRemove }) {
         {file.sheet && (
           <button
             onClick={() => setEditing((v) => !v)}
-            className="shrink-0 rounded px-1.5 py-0.5 text-ink-600 tabular-nums ring-1 ring-ink-200 hover:bg-white"
+            className="shrink-0 rounded px-1.5 py-0.5 text-ink-600 tabular-nums ring-1 ring-ink-200 hover:bg-surface"
             title="보여 줄 시트·행·열 바꾸기"
             aria-expanded={editing}
           >
             {file.sheet} · {rangeLabel(file)}
           </button>
         )}
-        <button onClick={download} disabled={!blob} className="ml-auto shrink-0 rounded p-1 text-ink-500 hover:bg-white hover:text-ink-800 disabled:opacity-40" title="엑셀 파일 받기" aria-label="엑셀 파일 받기">
+        <button onClick={download} disabled={!blob} className="ml-auto shrink-0 rounded p-1 text-ink-500 hover:bg-surface hover:text-ink-800 disabled:opacity-40" title="엑셀 파일 받기" aria-label="엑셀 파일 받기">
           <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />
           </svg>
@@ -161,7 +161,7 @@ function RangeEditor({ sheets, sheet, range, onChange, onDone }) {
   )
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-ink-100 bg-white px-2 py-1.5 text-xs text-ink-600">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-ink-100 bg-surface px-2 py-1.5 text-xs text-ink-600">
       <label className="flex items-center gap-1">
         시트
         <select
@@ -188,7 +188,7 @@ function RangeEditor({ sheets, sheet, range, onChange, onDone }) {
       <button onClick={() => onChange({ sheet: sheet.sheet, ...usedRange(sheet) })} className="rounded px-1.5 py-0.5 text-ink-500 hover:bg-ink-100" title="값·양식이 있는 칸 전체">
         전체
       </button>
-      <button onClick={onDone} className="ml-auto rounded bg-ink-800 px-2 py-0.5 font-medium text-white hover:bg-ink-700">
+      <button onClick={onDone} className="ml-auto rounded bg-ink-800 px-2 py-0.5 font-medium text-surface hover:bg-ink-700">
         완료
       </button>
     </div>

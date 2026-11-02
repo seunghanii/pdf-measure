@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* 다크 모드: <html class="dark"> (lib/theme.js). 색 토큰을 바꿔 끼우는 방식이라 dark: 접두사는 거의 필요 없음 */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /*
  * 색상 토큰 (자세한 설명은 DESIGN.md)
  * 기본 Tailwind 색은 끄고 아래 이름만 씁니다. 화면 색을 바꿀 땐 여기만 고치면 돼요.
@@ -8,11 +11,15 @@
  * - ref: 줄자 주황. 기준 길이(축척)에만
  * - snap: 자석
  * - ok / warn / danger: 상태
+ * - surface: 카드·툴바 바탕 (다크 모드에서 바뀜. 흰색 그대로여야 하는 곳만 white)
+ * 다크 모드 값은 아래 html.dark 에 있습니다. 도면 종이와 엑셀 표는 .theme-light 로 늘 밝게.
  * 도면 위 마크업·측정 색(lib/markup.js 등)은 사용자 데이터라 여기와 별개입니다.
  */
 @theme {
   --color-*: initial;
   --color-white: #ffffff;
+  /* 카드·툴바·창 바탕. 밝게=흰색, 어둡게=짙은 흑연색 (bg-white 대신 bg-surface) */
+  --color-surface: #ffffff;
   --color-black: #000000;
   --color-transparent: transparent;
   --color-current: currentColor;
@@ -38,6 +45,8 @@
   --color-brand-700: #213fbd;
   --color-brand-800: #1f3696;
   --color-brand-900: #1d3077;
+  /* 주 버튼 누를 때·마우스 올릴 때 (어둡게에선 더 밝게) */
+  --color-brand-press: #213fbd;
 
   --color-ref-50: #fff5ed;
   --color-ref-100: #ffe7d3;
@@ -110,6 +119,7 @@
 @layer base {
   html {
     color-scheme: light;
+    --grid-line: rgb(59 66 82 / 0.05);
     -webkit-tap-highlight-color: transparent;
   }
   html,
@@ -141,8 +151,8 @@
 .bg-grid {
   background-color: var(--color-ink-50);
   background-image:
-    linear-gradient(rgb(59 66 82 / 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(59 66 82 / 0.05) 1px, transparent 1px);
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   background-size: 24px 24px;
   background-position: -1px -1px;
 }
@@ -218,7 +228,7 @@
   height: 1em;
   border: 1.5px solid var(--color-ink-400);
   border-radius: 4px;
-  background: var(--color-white);
+  background: var(--color-surface);
   cursor: pointer;
 }
 .memo-doc li[data-task="1"] { color: var(--color-ink-400); text-decoration: line-through; }
@@ -267,6 +277,179 @@
 .memo-doc table.memo-xls { font-size: 14.7px; line-height: 1.25; color: #000; background: var(--color-white); }
 .memo-doc table.memo-xls td { border: 1px solid #e2e3e5; padding: 1px 4px; min-width: 0; vertical-align: bottom; white-space: pre; overflow: hidden; }
 .memo-doc.xls-col-resize, .memo-doc.xls-col-resize * { cursor: col-resize !important; }
+
+/*
+ * 다크 모드 (설정: 홈 툴바의 화면 모드 단추, lib/theme.js)
+ * ink 회색은 순서를 뒤집고(50=어두운 바탕 … 900=밝은 글자), 색 계열은 50~300 은 어두운 물빛, 700~900 은 밝은 글자색으로.
+ * 400~600 은 버튼 바탕이라 비슷하게 둠. 흰 글자(text-white)는 그대로 흰색.
+ */
+html.dark {
+  color-scheme: dark;
+  --color-surface: #191c24;
+  --color-ink-50: #1e222b;
+  --color-ink-100: #232731;
+  --color-ink-200: #2f3440;
+  --color-ink-300: #3e4452;
+  --color-ink-400: #5d6576;
+  --color-ink-500: #878fa0;
+  --color-ink-600: #a4abb9;
+  --color-ink-700: #c0c5cf;
+  --color-ink-800: #d9dde4;
+  --color-ink-900: #eef0f3;
+  --color-desk: #101218;
+  --color-brand-press: #6088fb;
+  --grid-line: rgb(255 255 255 / 0.035);
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.35), 0 1px 3px rgb(0 0 0 / 0.2);
+  --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.45), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+  --shadow-lg: 0 12px 28px -6px rgb(0 0 0 / 0.55), 0 4px 8px -4px rgb(0 0 0 / 0.35);
+  --shadow-xl: 0 20px 40px -8px rgb(0 0 0 / 0.6), 0 8px 16px -8px rgb(0 0 0 / 0.4);
+  --color-brand-50: color-mix(in srgb, #3c64f4 14%, #171a22);
+  --color-brand-100: color-mix(in srgb, #3c64f4 22%, #171a22);
+  --color-brand-200: color-mix(in srgb, #3c64f4 34%, #171a22);
+  --color-brand-300: color-mix(in srgb, #6088fb 55%, #171a22);
+  --color-brand-400: #6088fb;
+  --color-brand-500: #3c64f4;
+  --color-brand-600: #3c64f4;
+  --color-brand-700: #92b0ff;
+  --color-brand-800: #bfd1ff;
+  --color-brand-900: #dce6ff;
+  --color-ref-50: color-mix(in srgb, #f75e0f 14%, #171a22);
+  --color-ref-100: color-mix(in srgb, #f75e0f 22%, #171a22);
+  --color-ref-200: color-mix(in srgb, #f75e0f 34%, #171a22);
+  --color-ref-300: color-mix(in srgb, #ff7a36 55%, #171a22);
+  --color-ref-400: #ff7a36;
+  --color-ref-500: #f75e0f;
+  --color-ref-600: #f75e0f;
+  --color-ref-700: #ffa56e;
+  --color-ref-800: #ffcba6;
+  --color-ref-900: #ffe7d3;
+  --color-snap-50: color-mix(in srgb, #ec4899 14%, #171a22);
+  --color-snap-100: color-mix(in srgb, #ec4899 22%, #171a22);
+  --color-snap-200: color-mix(in srgb, #ec4899 34%, #171a22);
+  --color-snap-300: color-mix(in srgb, #f472b6 55%, #171a22);
+  --color-snap-400: #f472b6;
+  --color-snap-500: #ec4899;
+  --color-snap-600: #ec4899;
+  --color-snap-700: #f9a8d4;
+  --color-snap-800: #fbcfe8;
+  --color-snap-900: #fce7f3;
+  --color-ok-50: color-mix(in srgb, #10b981 14%, #171a22);
+  --color-ok-100: color-mix(in srgb, #10b981 22%, #171a22);
+  --color-ok-200: color-mix(in srgb, #10b981 34%, #171a22);
+  --color-ok-300: color-mix(in srgb, #34d399 55%, #171a22);
+  --color-ok-400: #34d399;
+  --color-ok-500: #10b981;
+  --color-ok-600: #10b981;
+  --color-ok-700: #6ee7b7;
+  --color-ok-800: #a7f3d0;
+  --color-ok-900: #d1fae5;
+  --color-warn-50: color-mix(in srgb, #f59e0b 14%, #171a22);
+  --color-warn-100: color-mix(in srgb, #f59e0b 22%, #171a22);
+  --color-warn-200: color-mix(in srgb, #f59e0b 34%, #171a22);
+  --color-warn-300: color-mix(in srgb, #fbbf24 55%, #171a22);
+  --color-warn-400: #fbbf24;
+  --color-warn-500: #f59e0b;
+  --color-warn-600: #f59e0b;
+  --color-warn-700: #fcd34d;
+  --color-warn-800: #fde68a;
+  --color-warn-900: #fef3c7;
+  --color-danger-50: color-mix(in srgb, #ef4444 14%, #171a22);
+  --color-danger-100: color-mix(in srgb, #ef4444 22%, #171a22);
+  --color-danger-200: color-mix(in srgb, #ef4444 34%, #171a22);
+  --color-danger-300: color-mix(in srgb, #f87171 55%, #171a22);
+  --color-danger-400: #f87171;
+  --color-danger-500: #ef4444;
+  --color-danger-600: #ef4444;
+  --color-danger-700: #fca5a5;
+  --color-danger-800: #fecaca;
+  --color-danger-900: #fee2e2;
+}
+
+/* 늘 밝게 보여야 하는 곳: 도면 종이 위(마크업·입력 상자), 엑셀 표 */
+html.dark .theme-light {
+  color-scheme: light;
+  --grid-line: rgb(59 66 82 / 0.05);
+  --color-surface: #ffffff;
+  --color-ink-50: #f7f8fa;
+  --color-ink-100: #eff1f5;
+  --color-ink-200: #e2e5eb;
+  --color-ink-300: #cbd0da;
+  --color-ink-400: #9aa1b1;
+  --color-ink-500: #6b7385;
+  --color-ink-600: #505869;
+  --color-ink-700: #3b4252;
+  --color-ink-800: #262c39;
+  --color-ink-900: #161a24;
+  --color-desk: #e4e7ed;
+  --color-brand-press: #213fbd;
+  --shadow-xs: 0 1px 2px rgb(22 26 36 / 0.05);
+  --shadow-sm: 0 1px 2px rgb(22 26 36 / 0.06), 0 1px 3px rgb(22 26 36 / 0.04);
+  --shadow-md: 0 4px 12px -2px rgb(22 26 36 / 0.10), 0 2px 4px -2px rgb(22 26 36 / 0.06);
+  --shadow-lg: 0 12px 28px -6px rgb(22 26 36 / 0.16), 0 4px 8px -4px rgb(22 26 36 / 0.08);
+  --shadow-xl: 0 20px 40px -8px rgb(22 26 36 / 0.20), 0 8px 16px -8px rgb(22 26 36 / 0.10);
+  --color-brand-50: #eef3ff;
+  --color-brand-100: #dce6ff;
+  --color-brand-200: #bfd1ff;
+  --color-brand-300: #92b0ff;
+  --color-brand-400: #6088fb;
+  --color-brand-500: #3c64f4;
+  --color-brand-600: #2a4fe0;
+  --color-brand-700: #213fbd;
+  --color-brand-800: #1f3696;
+  --color-brand-900: #1d3077;
+  --color-ref-50: #fff5ed;
+  --color-ref-100: #ffe7d3;
+  --color-ref-200: #ffcba6;
+  --color-ref-300: #ffa56e;
+  --color-ref-400: #ff7a36;
+  --color-ref-500: #f75e0f;
+  --color-ref-600: #dd4805;
+  --color-ref-700: #b73608;
+  --color-ref-800: #922c0e;
+  --color-ref-900: #76270f;
+  --color-snap-50: #fdf2f8;
+  --color-snap-100: #fce7f3;
+  --color-snap-200: #fbcfe8;
+  --color-snap-300: #f9a8d4;
+  --color-snap-400: #f472b6;
+  --color-snap-500: #ec4899;
+  --color-snap-600: #db2777;
+  --color-snap-700: #be185d;
+  --color-snap-800: #9d174d;
+  --color-snap-900: #831843;
+  --color-ok-50: #ecfdf5;
+  --color-ok-100: #d1fae5;
+  --color-ok-200: #a7f3d0;
+  --color-ok-300: #6ee7b7;
+  --color-ok-400: #34d399;
+  --color-ok-500: #10b981;
+  --color-ok-600: #059669;
+  --color-ok-700: #047857;
+  --color-ok-800: #065f46;
+  --color-ok-900: #064e3b;
+  --color-warn-50: #fffbeb;
+  --color-warn-100: #fef3c7;
+  --color-warn-200: #fde68a;
+  --color-warn-300: #fcd34d;
+  --color-warn-400: #fbbf24;
+  --color-warn-500: #f59e0b;
+  --color-warn-600: #d97706;
+  --color-warn-700: #b45309;
+  --color-warn-800: #92400e;
+  --color-warn-900: #78350f;
+  --color-danger-50: #fef2f2;
+  --color-danger-100: #fee2e2;
+  --color-danger-200: #fecaca;
+  --color-danger-300: #fca5a5;
+  --color-danger-400: #f87171;
+  --color-danger-500: #ef4444;
+  --color-danger-600: #dc2626;
+  --color-danger-700: #b91c1c;
+  --color-danger-800: #991b1b;
+  --color-danger-900: #7f1d1d;
+
+}
 
 /* 움직임 줄이기 설정: 화면 전환 효과만 끔 (검색 위치 깜빡임은 위치를 알려 주는 용도라 그대로) */
 @media (prefers-reduced-motion: reduce) {

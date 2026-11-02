@@ -1037,7 +1037,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
           )}
         </div>
         {!sidebarOpen && (
-          <div className="flex shrink-0 justify-center border-t border-ink-200 bg-white p-1 md:w-10 md:flex-col md:justify-start md:border-t-0 md:border-l md:py-3">
+          <div className="flex shrink-0 justify-center border-t border-ink-200 bg-surface p-1 md:w-10 md:flex-col md:justify-start md:border-t-0 md:border-l md:py-3">
             <SidebarToggle open={false} onClick={() => setSidebarOpen(true)} />
           </div>
         )}

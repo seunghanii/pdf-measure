@@ -43,7 +43,7 @@ export default function EmptyState({
         {showLogin && <AuthPanel />}
         {cloud && <MigrationCard store={store} onDone={onMigrated} />}
         <div
-          className={`group cursor-pointer rounded-2xl border border-dashed border-ink-300 bg-white/90 px-6 text-center shadow-sm transition-colors hover:border-brand-400 hover:bg-brand-50/60 ${
+          className={`group cursor-pointer rounded-2xl border border-dashed border-ink-300 bg-surface/90 px-6 text-center shadow-sm transition-colors hover:border-brand-400 hover:bg-brand-50/60 ${
             hasRecent ? 'py-6' : 'py-12'
           }`}
           onClick={() => inputRef.current?.click()}
@@ -97,7 +97,7 @@ export default function EmptyState({
               )}
             </div>
             {fetching ? (
-              <div className="rounded-xl bg-white px-4 py-6 text-center text-sm text-ink-400 shadow-xs ring-1 ring-ink-200">
+              <div className="rounded-xl bg-surface px-4 py-6 text-center text-sm text-ink-400 shadow-xs ring-1 ring-ink-200">
                 서버에서 도면 목록을 불러오는 중…
               </div>
             ) : (
@@ -127,7 +127,7 @@ export default function EmptyState({
             </div>
             <ol className="mt-10 grid gap-3 text-left sm:grid-cols-3">
               {STEPS.map((s) => (
-                <li key={s.n} className="rounded-xl bg-white p-4 shadow-xs ring-1 ring-ink-200">
+                <li key={s.n} className="rounded-xl bg-surface p-4 shadow-xs ring-1 ring-ink-200">
                   <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-50 text-sm font-bold text-brand-700 tabular-nums ring-1 ring-brand-100">
                     {s.n}
                   </div>
@@ -177,7 +177,7 @@ function DocTrash({ trashed, cloud, onRestore, onPurge }) {
         </svg>
       </button>
       {open && (
-        <ul className="mt-2 divide-y divide-ink-100 overflow-hidden rounded-xl bg-white shadow-xs ring-1 ring-ink-200">
+        <ul className="mt-2 divide-y divide-ink-100 overflow-hidden rounded-xl bg-surface shadow-xs ring-1 ring-ink-200">
           {trashed.map((d) => (
             <li key={d.id} className="flex items-center gap-3 px-4 py-2.5">
               <div className="min-w-0 flex-1">

@@ -119,9 +119,9 @@ export default function SearchPanel({ store, recent, library, onOpenHit, onOpenD
   const folderOf = (id) => library.folders.find((f) => f.id === library.assign[id])
 
   return (
-    <div className="fixed inset-0 z-40 flex items-start justify-center bg-ink-900/30 p-4 pt-[8vh]" onPointerDown={onClose}>
+    <div className="fixed inset-0 z-40 flex items-start justify-center bg-black/30 p-4 pt-[8vh]" onPointerDown={onClose}>
       <div
-        className="flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+        className="flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-surface shadow-2xl"
         onPointerDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 border-b border-ink-200 px-4 py-3">

@@ -75,8 +75,8 @@ function SheetTable({ sheet, range, colWidths, onColWidth }) {
   }
 
   return (
-    <div className="relative">
-      <div ref={scroller} className="overflow-auto bg-white" style={{ maxHeight: height }}>
+    <div className="theme-light relative">
+      <div ref={scroller} className="overflow-auto bg-surface" style={{ maxHeight: height }}>
         <table className="border-separate border-spacing-0 text-ink-900" style={{ tableLayout: 'fixed', width: width + 32, zoom: zoom / 100, fontFamily: '"Malgun Gothic", "Apple SD Gothic Neo", sans-serif', fontSize: '14.7px', lineHeight: 1.2 }}>
           <colgroup>
             <col style={{ width: 32 }} />
@@ -126,7 +126,7 @@ function SheetTable({ sheet, range, colWidths, onColWidth }) {
       >
         <span className="h-0.5 w-8 rounded-full bg-ink-300 group-hover:bg-ink-500" />
       </div>
-      <div className="absolute right-3 bottom-4.5 flex items-center rounded-md bg-white/90 text-[11px] text-ink-600 shadow-xs ring-1 ring-ink-200">
+      <div className="absolute right-3 bottom-4.5 flex items-center rounded-md bg-surface/90 text-[11px] text-ink-600 shadow-xs ring-1 ring-ink-200">
         <button onClick={() => step(-1)} disabled={zoom === ZOOMS[0]} className="px-1.5 py-0.5 hover:bg-ink-100 disabled:opacity-30" aria-label="작게 보기" title="작게 보기">
           −
         </button>

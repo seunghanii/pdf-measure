@@ -242,7 +242,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
     <div
       ref={panelRef}
       style={bottom ? { height: bottomH ?? undefined } : size ? { width: size.w, height: size.h } : undefined}
-      className={`absolute z-20 flex min-w-0 flex-col overflow-hidden rounded-xl border border-ink-200 bg-white shadow-2xl ${
+      className={`absolute z-20 flex min-w-0 flex-col overflow-hidden rounded-xl border border-ink-200 bg-surface shadow-2xl ${
         bottom
           ? `right-3 bottom-3 left-3 max-h-[calc(100%-1.5rem)] ${bottomH ? '' : 'h-[38%] min-h-[200px]'}`
           : `top-14 right-3 max-h-[calc(100%-4.25rem)] max-w-[calc(100%-1.5rem)] ${size ? '' : 'w-[400px]'}`
@@ -273,7 +273,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
         <input
           value={memo.name}
           onChange={(e) => onChange({ name: e.target.value })}
-          className="min-w-0 flex-1 rounded px-1 py-0.5 text-sm font-semibold text-ink-800 hover:bg-ink-50 focus:bg-white focus:outline focus:outline-brand-300"
+          className="min-w-0 flex-1 rounded px-1 py-0.5 text-sm font-semibold text-ink-800 hover:bg-ink-50 focus:bg-surface focus:outline focus:outline-brand-300"
           aria-label="메모 이름"
         />
         <button
@@ -326,7 +326,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
                 onSwitch(o.id)
               }}
               title={memoSummary(o)}
-              className={`max-w-32 truncate rounded-full px-2 py-0.5 ${o.id === memo.id ? 'bg-ink-800 text-white' : 'bg-white ring-1 ring-ink-200 hover:bg-ink-100'}`}
+              className={`max-w-32 truncate rounded-full px-2 py-0.5 ${o.id === memo.id ? 'bg-ink-800 text-surface' : 'bg-surface ring-1 ring-ink-200 hover:bg-ink-100'}`}
             >
               {o.name}
             </button>
@@ -441,7 +441,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
           onClose={() => setPhotoLink(null)}
           title={
             <span>
-              {photoLink.role && <span className="mr-1.5 rounded bg-white/20 px-1.5 py-px text-xs font-semibold">{photoLink.role}</span>}
+              {photoLink.role && <span className="mr-1.5 rounded bg-surface/20 px-1.5 py-px text-xs font-semibold">{photoLink.role}</span>}
               {photoLink.name || '사진'}
             </span>
           }

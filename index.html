@@ -9,6 +9,16 @@
     <meta name="description" content="JCP(Jafurah Cogen Project) 도면 관리: PDF 도면 측정, 마크업, 메모, 계기 카드" />
     <meta name="application-name" content="JCP 도면 관리" />
     <meta name="apple-mobile-web-app-title" content="JCP 도면" />
+    <script>
+      // 화면 모드를 그리기 전에 먼저 적용 (src/lib/theme.js 와 같은 키)
+      try {
+        var t = localStorage.getItem('pdf-measure:theme')
+        if (t === 'dark' || (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+          document.documentElement.classList.add('dark')
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#191c24')
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

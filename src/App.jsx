@@ -12,6 +12,7 @@ import TabBar from './components/TabBar'
 import EmptyState from './components/EmptyState'
 import { AccountMenu, PasswordDialog } from './components/Account'
 import SearchPanel, { SearchIcon } from './components/SearchPanel'
+import ThemeMenu from './components/ThemeMenu'
 import { ensureIndexed, forgetIndex, reindex } from './lib/indexer'
 import { linkRevision, resolveFile } from './lib/revision'
 
@@ -542,11 +543,12 @@ function Session({ store, user, onLogout, onChangePassword }) {
               <button
                 onClick={() => setSearchOpen(true)}
                 title="도면 이름·별명, 도면 속 글자 검색 (Ctrl+F)"
-                className="flex items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-2.5 py-1.5 text-sm text-ink-600 shadow-xs transition-colors hover:border-ink-300 hover:bg-ink-50 hover:text-ink-900"
+                className="flex items-center gap-1.5 rounded-lg border border-ink-200 bg-surface px-2.5 py-1.5 text-sm text-ink-600 shadow-xs transition-colors hover:border-ink-300 hover:bg-ink-50 hover:text-ink-900"
               >
                 <SearchIcon />
                 <span className="hidden sm:inline">검색</span>
               </button>
+              <ThemeMenu />
               {cloudConfigured && <AccountMenu user={user} onLogout={logout} onChangePassword={onChangePassword} />}
             </>
           }
@@ -644,7 +646,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
 
       {dragOver && (
         <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-brand-600/20">
-          <div className="rounded-xl border-2 border-dashed border-brand-600 bg-white px-8 py-6 text-lg font-semibold text-brand-700">
+          <div className="rounded-xl border-2 border-dashed border-brand-600 bg-surface px-8 py-6 text-lg font-semibold text-brand-700">
             여기에 PDF를 놓으세요
           </div>
         </div>

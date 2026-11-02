@@ -21,7 +21,7 @@ export default function TabBar({ docs, library, activeId, onSelect, onClose, onH
         onClick={onHome}
         title="홈 (최근 파일)"
         className={`mb-1 flex h-8 shrink-0 items-center gap-1 rounded-md px-2.5 text-sm ${
-          activeId === null ? 'bg-white font-semibold text-brand-700 shadow-xs ring-1 ring-ink-200' : 'text-ink-500 transition-colors hover:bg-white/70 hover:text-ink-800'
+          activeId === null ? 'bg-surface font-semibold text-brand-700 shadow-xs ring-1 ring-ink-200' : 'text-ink-500 transition-colors hover:bg-surface/70 hover:text-ink-800'
         }`}
       >
         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round">
@@ -48,8 +48,8 @@ export default function TabBar({ docs, library, activeId, onSelect, onClose, onH
             title={editing ? undefined : `${d.name}\n더블 클릭하면 이름 바꾸기`}
             className={`group relative -mb-px flex h-9 max-w-56 shrink-0 cursor-pointer items-center gap-2 rounded-t-lg border border-b-0 pr-1.5 pl-3 text-sm ${
               active
-                ? 'border-ink-200 bg-white font-medium text-ink-900 before:absolute before:inset-x-3 before:top-0 before:h-0.5 before:rounded-b before:bg-brand-600'
-                : 'border-transparent text-ink-500 transition-colors hover:bg-white/60 hover:text-ink-800'
+                ? 'border-ink-200 bg-surface font-medium text-ink-900 before:absolute before:inset-x-3 before:top-0 before:h-0.5 before:rounded-b before:bg-brand-600'
+                : 'border-transparent text-ink-500 transition-colors hover:bg-surface/60 hover:text-ink-800'
             }`}
           >
             <svg viewBox="0 0 24 24" className={`h-4 w-4 shrink-0 ${active ? 'text-brand-600' : 'text-ink-400'}`} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round">
@@ -82,7 +82,7 @@ export default function TabBar({ docs, library, activeId, onSelect, onClose, onH
                   if (e.currentTarget.dataset.cancel) setEditingId(null)
                   else finishAlias(d, e.currentTarget.value)
                 }}
-                className="min-w-0 rounded border border-brand-400 bg-white px-1 py-0.5 text-sm text-ink-800 outline-none ring-2 ring-brand-100"
+                className="min-w-0 rounded border border-brand-400 bg-surface px-1 py-0.5 text-sm text-ink-800 outline-none ring-2 ring-brand-100"
               />
             ) : (
               <span className="truncate select-none">{shown}</span>
@@ -110,7 +110,7 @@ export default function TabBar({ docs, library, activeId, onSelect, onClose, onH
         onClick={onHome}
         title="다른 도면 열기"
         aria-label="다른 도면 열기"
-        className="mb-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-lg text-ink-500 hover:bg-white/70 hover:text-ink-800"
+        className="mb-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-lg text-ink-500 hover:bg-surface/70 hover:text-ink-800"
       >
         +
       </button>
