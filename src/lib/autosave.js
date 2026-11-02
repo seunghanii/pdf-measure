@@ -1,20 +1,29 @@
 // 측정값이 바뀌면 잠시 뒤 자동 저장 (로그인했으면 서버, 아니면 이 브라우저).
 // 서버 저장은 한 번에 하나씩, 밀린 것은 가장 최근 상태만 보냄. 저장 상태('saved' | 'saving' | 'error')를 돌려줌.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { normalizeActivity, trackActivity } from './activity'
 
 // counters: 종류별 번호를 담은 ref
 // revs: 개정판 정보 { rev, revisions } (lib/revision.js, 바꾼 적 없으면 비어 있음)
 // controlRef: 개정판으로 바꿀 때 자동 저장을 멈추는 stop() 을 넣어 줌 (멈춘 뒤에는 보내던 저장이 끝나기를 기다림)
-export function useAutosave({ store, docId, measurements, categories, calibration, unit, markupStyle, counters, pageNum, trash, revs, controlRef }) {
+// activity: 불러온 수정 기록 (lib/activity.js). 저장할 때마다 지난번 저장한 항목과 비교해 기록을 더함
+export function useAutosave({ store, docId, measurements, categories, calibration, unit, markupStyle, counters, pageNum, trash, revs, controlRef, activity }) {
   const cloud = store.kind === 'cloud'
   const [syncStatus, setSyncStatus] = useState('saved')
   const queue = useRef({ busy: false, next: null })
   // 마지막으로 보낸 내용 (바뀐 게 없으면 다시 보내지 않음. 메모를 열고 닫기만 해도 항목이 새로 만들어지는 경우 등)
   const lastSent = useRef(null)
   const stopped = useRef(false)
+  // 수정 기록: 지난번 저장(처음엔 불러온) 항목과 비교 기준
+  const activityRef = useRef(null)
+  const baseItems = useRef(measurements)
+  if (activityRef.current === null) activityRef.current = normalizeActivity(activity)
   const persist = useCallback(
-    (state) => {
+    (raw) => {
       if (stopped.current) return
+      activityRef.current = trackActivity(baseItems.current, raw.measurements, activityRef.current)
+      baseItems.current = raw.measurements
+      const state = { ...raw, activity: activityRef.current }
       const json = JSON.stringify(state)
       if (json === lastSent.current) return
       lastSent.current = json
@@ -64,6 +73,8 @@ export function useAutosave({ store, docId, measurements, categories, calibratio
       resume: () => {
         stopped.current = false
       },
+      // 개정판 저장에 지금까지의 수정 기록도 함께 넣도록
+      activity: () => activityRef.current,
     }
   })
   useEffect(() => {

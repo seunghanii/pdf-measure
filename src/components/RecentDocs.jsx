@@ -1,4 +1,4 @@
-// 홈 위쪽 "최근 연 도면": 마지막으로 연 시각(last_opened) 순서로 10개.
+// 홈 오른쪽 아래 "최근 연 도면": 마지막으로 연 시각(last_opened) 순서로 10개.
 // 목록(recent)은 저장소가 이미 연 시각 순서로 주므로 앞에서 10개만 자름.
 // 서버 저장이면 연 시각도 서버에 있어 다른 컴퓨터에서 연 도면도 함께 보임.
 import { useState } from 'react'
@@ -46,7 +46,7 @@ export default function RecentDocs({ list, library, openIds, onOpen }) {
   }
 
   return (
-    <section className="mt-8">
+    <section>
       <button
         onClick={toggle}
         aria-expanded={!hidden}
