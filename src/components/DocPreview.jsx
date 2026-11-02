@@ -72,6 +72,20 @@ export default function DocPreview({ store, link, alias, onOpen, onClose }) {
         ctx.fillStyle = '#fff'
         ctx.fillRect(0, 0, canvas.width, canvas.height)
         await page.render({ canvasContext: ctx, canvas, viewport: vp }).promise
+        // 박스 연결이면 그 박스 자리를 노란 테로 표시 (고를 때 자리, 배율 1 페이지 좌표)
+        if (link.rect && i + 1 === (link.page || 1)) {
+          const r = link.rect
+          const pad = 4 / scale
+          ctx.save()
+          ctx.lineWidth = Math.max(3, scale * 1.5)
+          ctx.strokeStyle = '#f59e0b'
+          ctx.fillStyle = 'rgba(251, 191, 36, 0.25)'
+          ctx.beginPath()
+          ctx.rect((r.x - pad) * scale, (r.y - pad) * scale, (r.w + pad * 2) * scale, (r.h + pad * 2) * scale)
+          ctx.fill()
+          ctx.stroke()
+          ctx.restore()
+        }
         const blob = await new Promise((r) => canvas.toBlob(r, 'image/png'))
         canvas.width = canvas.height = 0
         if (!blob) throw new Error('render')
@@ -87,7 +101,7 @@ export default function DocPreview({ store, link, alias, onOpen, onClose }) {
     return () => {
       cancelled = true
     }
-  }, [pdf, index])
+  }, [pdf, index, link.rect, link.page])
 
   const list = Array.from({ length: Math.max(1, pages) }, (_, i) => urls[i] ?? null)
 
@@ -102,6 +116,7 @@ export default function DocPreview({ store, link, alias, onOpen, onClose }) {
       title={
         <span>
           {link.role && <span className="mr-1.5 rounded bg-white/20 px-1.5 py-px text-xs font-semibold">{link.role}</span>}
+          {link.item && link.itemName && <span className="mr-1.5 rounded bg-warn-400/30 px-1.5 py-px text-xs font-semibold">{link.itemName}</span>}
           {alias || link.name}
           {alias && <span className="ml-2 text-xs text-white/50">{link.name}</span>}
           {pages > 0 && <span className="ml-2 text-white/60 tabular-nums">{index + 1} / {pages}쪽</span>}
@@ -109,7 +124,7 @@ export default function DocPreview({ store, link, alias, onOpen, onClose }) {
       }
       actions={
         <button
-          onClick={() => onOpen({ ...link, page: index + 1 })}
+          onClick={() => onOpen(index + 1 === (link.page || 1) ? link : { ...link, page: index + 1, item: null, rect: null })}
           disabled={!!error}
           title="이 도면을 탭으로 열기"
           className="flex h-9 items-center gap-1.5 rounded-full bg-brand-600 px-3.5 text-sm font-semibold text-white hover:bg-brand-500 disabled:opacity-40"

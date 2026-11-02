@@ -41,7 +41,8 @@ function loadBottomH() {
 
 // 메모장. 도면 오른쪽 위(또는 아래에 길게, memoDock 설정)에 떠 있고, 글을 바로 쓰고 사진을 글 사이에 넣습니다.
 // others: 같은 자리에 겹친 메모들 (누르면 그 메모로 바뀜)
-export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, onDelete, onOpenLink, onPickLink, store, library, docId, onNotice, kinds, onAddKind }) {
+// backlinks: 다른 박스가 이 메모로 연결해 둔 것들 (양방향 연결, lib/backlinks.js)
+export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, onDelete, onOpenLink, onPickLink, store, library, docId, onNotice, kinds, onAddKind, backlinks }) {
   // 예전(사진을 아래 칸에 모아 둔) 메모는 처음 열 때 사진을 글 끝으로 옮김
   const [migrated] = useState(() => migrateMemo(memo))
   const [initialText] = useState(() => migrated?.text ?? memo.text ?? '')
@@ -341,6 +342,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
 
       {/* 관련 도면 (여러 개) */}
       <RelatedDocs memo={memo} library={library} onChange={onChange} onOpen={(l) => (l.photo ? openPhotoLink(l) : setPreviewing(l))} onPick={onPickLink} />
+      {backlinks?.length > 0 && <Backlinks links={backlinks} library={library} onOpen={onOpenLink} />}
 
       {/* 글과 사진 (같이 스크롤) */}
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -467,6 +469,35 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
           }}
         />
       )}
+    </div>
+  )
+}
+
+// 여기로 연결한 박스: 누르면 그 박스로 돌아감
+function Backlinks({ links, library, onOpen }) {
+  return (
+    <div className="border-b border-ink-100 px-3 py-1.5 text-xs">
+      <div className="mb-1 text-[11px] font-semibold text-ink-500">여기로 연결한 박스</div>
+      <ul className="flex flex-col gap-1">
+        {links.map((l, i) => (
+          <li key={`${l.id}-${l.item}-${i}`}>
+            <button
+              onClick={() => onOpen?.(l)}
+              title="그 박스로 돌아가기"
+              className="flex w-full min-w-0 items-center gap-1.5 rounded-md bg-ink-50 px-2 py-1 text-left text-ink-700 hover:bg-ink-100"
+            >
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0 text-brand-600" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 14L4 9l5-5M4 9h10a6 6 0 010 12h-3" />
+              </svg>
+              <span className="truncate font-medium">{l.itemName}</span>
+              <span className="ml-auto shrink-0 truncate text-[11px] text-ink-400">
+                {l.here ? '이 도면' : (library?.aliases?.[l.id] ?? l.name)}
+                {l.page > 1 ? ` · ${l.page}쪽` : ''}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

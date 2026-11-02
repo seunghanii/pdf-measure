@@ -193,6 +193,21 @@
   opacity: 1;
 }
 
+/* 도면 연결의 박스 고르기: 항목 위에 올리면 손가락 모양 + 파란 테 */
+.box-pick [data-shape]:not([data-shape="calibration"]) {
+  cursor: pointer;
+}
+.box-pick [data-shape]:not([data-shape="calibration"]):hover {
+  filter: drop-shadow(0 0 1.5px #2563eb) drop-shadow(0 0 4px #3b82f6);
+}
+.box-pick [data-type="memo"]:hover .memo-area {
+  fill-opacity: 0.2;
+  stroke-opacity: 0.9;
+}
+.box-pick [data-type="memo"] .memo-icon {
+  opacity: 1;
+}
+
 /* 계기 박스 이름표 모두 숨기기 (lib/instLabels.js) */
 .inst-labels-off .inst-label {
   display: none;

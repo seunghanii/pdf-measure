@@ -322,7 +322,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
       try {
         const blob = await storeRef.current.getFile(item.id)
         if (!blob) throw new Error('missing')
-        await openDoc(item.id, new File([blob], item.name, { type: 'application/pdf' }), { fromRecent: true })
+        return (await openDoc(item.id, new File([blob], item.name, { type: 'application/pdf' }), { fromRecent: true })) !== false
       } catch (e) {
         console.error(e)
         setError(
@@ -342,13 +342,53 @@ function Session({ store, user, onLogout, onChangePassword }) {
   const openLinked = useCallback(
     async (link) => {
       if (!link?.id) return
-      await openRecent({ id: link.id, name: link.name })
+      // 이미 열린 탭이면 PDF 를 다시 받지 않고 그 탭으로
+      if (docsRef.current.some((d) => d.id === link.id)) setActiveId(link.id)
+      else await openRecent({ id: link.id, name: link.name })
       // rect: 계기 목록에서 다른 도면의 카드로 갈 때 그 자리 (검색 이동처럼 확대하고 깜빡임)
-      if (link.rect || docsRef.current.some((d) => d.id === link.id) || link.page > 1)
-        setSearchJump({ id: link.id, page: Math.max(1, link.page || 1), rect: link.rect, nonce: Date.now() })
+      // item: 박스 연결. 그 도면이 박스의 지금 자리를 찾아 감 (Workspace)
+      if (link.rect || link.item || docsRef.current.some((d) => d.id === link.id) || link.page > 1)
+        setSearchJump({ id: link.id, page: Math.max(1, link.page || 1), rect: link.rect, item: link.item ?? null, nonce: Date.now() })
     },
     [openRecent],
   )
+
+  // ---------- 박스 고르기: 도면 연결이 다른(또는 같은) 도면의 박스 하나를 가리키게 ----------
+  // { from: 연결 박스가 있는 도면, fromName, memoId, index, fresh, target: { id, name, role }, result }
+  // target 도면 탭에서 박스를 누르면 result 를 채우고 from 탭으로 돌아감 → from 탭이 연결을 저장하고 지움
+  const [boxPick, setBoxPick] = useState(null)
+  const boxPickRef = useRef(null)
+  useEffect(() => {
+    boxPickRef.current = boxPick
+  }, [boxPick])
+  const startBoxPick = useCallback(
+    async (req) => {
+      const fromName = displayName(library, req.from, req.fromName)
+      let opened = true
+      if (docsRef.current.some((d) => d.id === req.target.id)) setActiveId(req.target.id)
+      else opened = await openRecent({ id: req.target.id, name: req.target.name })
+      // 못 열었으면 (파일 없음 등) 돌아와서 취소로 처리
+      if (!opened) {
+        setBoxPick({ ...req, fromName, result: { cancelled: true } })
+        return
+      }
+      setBoxPick({ ...req, fromName, result: null })
+    },
+    [library, openRecent],
+  )
+  const finishBoxPick = useCallback((result) => {
+    const bp = boxPickRef.current
+    if (!bp || bp.result) return
+    if (docsRef.current.some((d) => d.id === bp.from)) {
+      setActiveId(bp.from)
+      setBoxPick({ ...bp, result })
+    } else setBoxPick(null) // 연결 박스가 있던 탭을 닫았으면 그만둠
+  }, [])
+  const boxPickApplied = useCallback(() => setBoxPick((bp) => (bp?.result ? null : bp)), [])
+  // 고르는 도면 탭을 닫으면 그만둠
+  useEffect(() => {
+    if (boxPick && !boxPick.result && !docs.some((d) => d.id === boxPick.target.id)) finishBoxPick({ cancelled: true })
+  }, [docs, boxPick, finishBoxPick])
 
   // 관련 도면 연결에서 같은 도면 번호의 PDF 를 고르고 "개정판으로 바꾸기": 그 도면 탭을 열고 개정 창에 이 파일을 넣어 둠
   const reviseLinked = useCallback(
@@ -602,6 +642,11 @@ function Session({ store, user, onLogout, onChangePassword }) {
           onOpenFile={openFiles}
           searchJump={searchJump?.id === doc.id ? searchJump : null}
           onOpenLink={openLinked}
+          boxPick={boxPick && !boxPick.result && boxPick.target.id === doc.id ? boxPick : null}
+          boxPickResult={boxPick?.result && boxPick.from === doc.id ? boxPick : null}
+          onStartBoxPick={startBoxPick}
+          onFinishBoxPick={finishBoxPick}
+          onBoxPickApplied={boxPickApplied}
           library={library}
           onImportFile={importFile}
           onReviseDoc={reviseLinked}

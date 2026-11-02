@@ -1,11 +1,12 @@
 import { withoutTrashed } from '../lib/trash'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { docRoleList } from '../lib/instrument'
+import { docRoleList, isBoxLink, unboxLink } from '../lib/instrument'
 import { EMPTY_LIBRARY, displayName, folderLabel } from '../lib/library'
 import { FolderSelect } from './Library'
 import { isImageFile, newImageId, prepareImage, rememberImage, useImageUrl } from '../lib/images'
 import { resolveFile } from '../lib/revision'
 import { drawingNo, sameNumberDocs } from '../lib/drawingNo'
+import BoxIcon from './BoxIcon'
 
 // 연결할 사진은 메모 사진처럼 자세히 보이게 긴 변 2400px 로 줄여 이 도면 사진 저장소에 둠
 const LINK_PHOTO_SIDE = 2400
@@ -18,7 +19,9 @@ const isPdfFile = (f) => f && (f.type === 'application/pdf' || f.name.toLowerCas
 // onImportFile(file, folderId): 컴퓨터의 PDF 를 탭을 열지 않고 올림 → { id, name, pages }
 // onReviseDoc(doc, file): 같은 도면 번호의 기존 도면을 열어 이 PDF 로 개정판 바꾸기 창을 띄움
 // 이미 올라가 있는 PDF(이름·크기 같음)면 올리지 않고 그 도면을 골라 둠. 도면 번호만 같으면 개정판·연결·새로 올리기 중 고름
-export default function LinkPicker({ store, currentId, currentName, library, onImportFile, onReviseDoc, onSetRoles, initial, defaultRole = '', onCancel, onConfirm, onUnlink }) {
+// onPickBox({ id, name, role }): 그 도면을 열고 박스(메모 범위·Equipment·도형 …)를 눌러 고르기. 고르면 박스 연결이 됨
+// initial 이 박스 연결이면 ({ item, itemName, rect }) 그 박스를 그대로 둘지, 페이지로만 갈지 고름
+export default function LinkPicker({ store, currentId, currentName, library, onImportFile, onReviseDoc, onSetRoles, onPickBox, initial, defaultRole = '', onCancel, onConfirm, onUnlink }) {
   const [list, setList] = useState(null) // null = 불러오는 중
   const [query, setQuery] = useState('')
   const [picked, setPicked] = useState(initial?.photo ? null : (initial?.id ?? null))
@@ -27,6 +30,7 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
   const [photoBusy, setPhotoBusy] = useState(false)
   const [page, setPage] = useState(String(initial?.page ?? 1))
   const [role, setRole] = useState(initial?.role ?? defaultRole)
+  const [keepBox, setKeepBox] = useState(isBoxLink(initial)) // 이미 고른 박스 그대로 (같은 도면을 고른 동안만)
   const [added, setAdded] = useState([]) // 이 창에서 방금 올린 도면
   const [upload, setUpload] = useState(null) // { file, folder, busy, error } 올릴 PDF 와 저장할 폴더
   const fileRef = useRef(null)
@@ -166,6 +170,7 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
 
   const chosen = items.find((r) => r.id === picked) ?? (initial?.id === picked ? initial : null)
   const pageNo = Math.max(1, Math.round(Number(page) || 1))
+  const box = keepBox && !photo && chosen && chosen.id === initial?.id ? initial : null
 
   // 같은 번호 도면을 개정판으로: 그 도면을 연결하고, 그 도면 탭에서 개정판 바꾸기 창을 띄움
   const reviseInto = (m) => {
@@ -177,8 +182,10 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
   const submit = (e) => {
     e.preventDefault()
     if (photo) onConfirm({ photo: photo.id, name: photo.name, role: role.trim(), w: photo.w, h: photo.h })
-    else if (chosen) onConfirm({ id: chosen.id, name: chosen.name, page: pageNo, role: role.trim() })
+    else if (box) onConfirm({ ...box, name: chosen.name, role: role.trim() })
+    else if (chosen) onConfirm({ ...unboxLink(initial?.id === chosen.id ? initial : {}), id: chosen.id, name: chosen.name, page: pageNo, role: role.trim() })
   }
+  const pickBox = () => chosen && onPickBox({ id: chosen.id, name: chosen.name, role: role.trim() })
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onMouseDown={onCancel} {...dropProps}>
@@ -346,7 +353,9 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
                   setPhoto(null)
                   if (already?.id !== r.id) setAlready(null)
                 }}
-                onDoubleClick={() => onConfirm({ id: r.id, name: r.name, page: pageNo, role: role.trim() })}
+                onDoubleClick={() =>
+                  box && r.id === box.id ? onConfirm({ ...box, name: r.name, role: role.trim() }) : onConfirm({ id: r.id, name: r.name, page: pageNo, role: role.trim() })
+                }
                 className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm ${picked === r.id && !photo ? 'bg-brand-50 text-brand-800' : 'hover:bg-ink-50'}`}
               >
                 <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-ink-400" fill="none" stroke="currentColor" strokeWidth="2">
@@ -364,17 +373,49 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
             </li>
           ))}
         </ul>
-        <label className={`mt-3 flex items-center gap-2 text-sm text-ink-600 ${photo ? 'hidden' : ''}`}>
-          열 페이지
-          <input
-            inputMode="numeric"
-            value={page}
-            onChange={(e) => setPage(e.target.value.replace(/[^0-9]/g, ''))}
-            onFocus={(e) => e.target.select()}
-            className="w-16 rounded-md border border-ink-300 px-2 py-1 text-center"
-          />
-          <span className="text-xs text-ink-400">쪽 (없는 페이지면 마지막 쪽)</span>
-        </label>
+        {box ? (
+          <div className="mt-3 flex items-center gap-2 rounded-md border border-brand-300 bg-brand-50 px-2.5 py-2 text-sm">
+            <BoxIcon className="h-4 w-4 shrink-0 text-brand-600" />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-medium text-brand-800">{box.itemName || '고른 박스'}</span>
+              <span className="block text-xs text-ink-500">누르면 이 박스로 확대해 깜빡여요 · {box.page || 1}쪽</span>
+            </span>
+            {onPickBox && (
+              <button type="button" onClick={pickBox} className="shrink-0 rounded px-2 py-1 text-xs text-ink-600 hover:bg-surface">
+                다른 박스
+              </button>
+            )}
+            <button type="button" onClick={() => setKeepBox(false)} className="shrink-0 rounded px-2 py-1 text-xs text-ink-500 hover:bg-surface hover:text-danger-600" title="박스 없이 페이지로만 연결">
+              ✕
+            </button>
+          </div>
+        ) : (
+          <div className={`mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 ${photo ? 'hidden' : ''}`}>
+            <label className="flex items-center gap-2 text-sm text-ink-600">
+              열 페이지
+              <input
+                inputMode="numeric"
+                value={page}
+                onChange={(e) => setPage(e.target.value.replace(/[^0-9]/g, ''))}
+                onFocus={(e) => e.target.select()}
+                className="w-16 rounded-md border border-ink-300 px-2 py-1 text-center"
+              />
+              <span className="text-xs text-ink-400">쪽</span>
+            </label>
+            {onPickBox && (
+              <button
+                type="button"
+                onClick={pickBox}
+                disabled={!chosen || photoBusy}
+                title="그 도면을 열고 연결할 박스(메모 범위·Equipment·도형 등)를 눌러 고르기"
+                className="ml-auto flex items-center gap-1.5 rounded-md border border-brand-300 px-2.5 py-1 text-sm font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-40"
+              >
+                <BoxIcon className="h-4 w-4" />
+                박스 고르기
+              </button>
+            )}
+          </div>
+        )}
         <RoleChips roles={docRoleList(lib.docRoles)} role={role} setRole={setRole} onSetRoles={onSetRoles} />
         <div className="mt-4 flex items-center gap-2">
           {onUnlink && (
@@ -537,3 +578,4 @@ function RoleChips({ roles, role, setRole, onSetRoles }) {
     </div>
   )
 }
+

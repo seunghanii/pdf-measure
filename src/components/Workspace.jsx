@@ -17,10 +17,13 @@ import Sidebar from './Sidebar'
 import CalibrationDialog from './CalibrationDialog'
 import DocSearch from './DocSearch'
 import LinkPicker from './LinkPicker'
+import BoxIcon from './BoxIcon'
 import { DEFAULT_MEMO_COLOR, isLinkOnly, memoPhotoIds, memosAt } from '../lib/memo'
+import { itemLabel, itemRect } from '../lib/activity'
+import { backlinksFor } from '../lib/backlinks'
 import { memoFileIds } from '../lib/excel'
 import { DEFAULT_STATUS, cardBoxFor, donePatch, doneUpTo, guessKind, isInst, itemGroup, linksPatch, memoLinkPhotoIds, memoLinks, statusOf } from '../lib/instrument'
-import { liveItemTrash, pushItems } from '../lib/trash'
+import { liveItemTrash, pushItems, withoutTrashed } from '../lib/trash'
 import { MAX_ZOOM, MIN_ZOOM } from '../lib/zoom'
 import { adaptState, newRevKey } from '../lib/revision'
 import { loadUncalHidden } from '../lib/scalePanel'
@@ -33,7 +36,10 @@ const InstrumentPanel = lazy(() => import('./InstrumentPanel'))
 const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`
 
 // 도면 하나(탭 하나)의 작업 공간. 탭을 바꿔도 마운트된 채로 남아서 상태가 유지됩니다.
-export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenLink, library, onImportFile, onReviseDoc, pendingRevision, onPendingRevisionDone, onReplaceFile, sidebarOpen, setSidebarOpen, instKinds, onAddKind, onSetDocRoles }) {
+// boxPick: 이 도면에서 연결할 박스를 고르는 중 { from, memoId, target } (App 이 보관)
+// boxPickResult: 이 도면의 메모가 박스 고르기를 끝냄 { memoId, index, fresh, result: { link } | { cancelled } }
+// onStartBoxPick(요청), onFinishBoxPick(결과), onBoxPickApplied(): 다른(또는 같은) 도면 탭을 오가며 박스 고르기
+export default function Workspace({ doc, active, onOpenFile, searchJump: rawSearchJump, onOpenLink, boxPick, boxPickResult, onStartBoxPick, onFinishBoxPick, onBoxPickApplied, library, onImportFile, onReviseDoc, pendingRevision, onPendingRevisionDone, onReplaceFile, sidebarOpen, setSidebarOpen, instKinds, onAddKind, onSetDocRoles }) {
   const { pdfDoc, name: fileName } = doc
   const saved = doc.savedState
   const [pageNum, setPageNum] = useState(() => Math.min(saved?.pageNum ?? 1, pdfDoc.numPages))
@@ -102,6 +108,18 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
       setJump({ page: hit.page, rect: hit.rect, peekId: hit.hidden ? hit.itemId : null, nonce: Date.now() + Math.random() }),
     [],
   )
+  // 박스 연결로 왔으면 그 박스의 지금 자리로 (고른 뒤 옮겼어도). 박스가 지워졌으면 고를 때의 쪽만
+  const searchJump = useMemo(() => {
+    if (!rawSearchJump?.item) return rawSearchJump
+    const m = measurements.find((x) => x.id === rawSearchJump.item)
+    if (!m) return { ...rawSearchJump, rect: null, missing: true }
+    return { ...rawSearchJump, page: m.page ?? 1, rect: itemRect(m) ?? rawSearchJump.rect, peekId: m.hidden ? m.id : null }
+    // 이동 요청(nonce)마다 한 번만 정함
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawSearchJump])
+  useEffect(() => {
+    if (searchJump?.missing) setNotice('연결한 박스가 이 도면에서 지워져서, 고를 때의 쪽만 열었어요.')
+  }, [searchJump])
   // 홈 화면 검색에서 고른 위치 ({ page, rect, nonce }) 와 이 화면의 이동 요청 중 나중 것
   const pickedJump = searchJump && (!jump || searchJump.nonce > jump.nonce) ? searchJump : jump
   const clampedJump = pickedJump && pickedJump.page > pdfDoc.numPages ? { ...pickedJump, page: pdfDoc.numPages } : pickedJump
@@ -501,6 +519,51 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
   const memoItem = memoOpen && measurements.find((m) => m.id === memoOpen.id && m.type === 'memo' && !m.hidden)
   const linkItem = linkPicking && measurements.find((m) => m.id === linkPicking.id)
 
+  // ---------- 박스 고르기 (도면 연결이 다른 박스를 가리키게) ----------
+  // 이 도면의 메모가 연결할 박스를 고르고 돌아옴: 연결을 더하거나 바꿈. 취소면 방금 그린 빈 범위는 지움
+  useEffect(() => {
+    if (!boxPickResult) return
+    const { memoId, index, fresh, result } = boxPickResult
+    onBoxPickApplied?.()
+    const memo = measurementsRef.current.find((m) => m.id === memoId)
+    if (!memo) return
+    const links = memoLinks(memo)
+    if (result?.link) {
+      const next = index != null && links[index] ? links.map((l, i) => (i === index ? result.link : l)) : [...links, result.link]
+      editMemo(memo.id, linksPatch(next))
+      setNotice(`"${result.link.itemName}" 박스를 연결했어요. 누르면 그 박스로 가요.`)
+      // 메모·계기 카드였으면 메모장을 다시 열어 둠 (연결만 있는 범위는 그대로)
+      if (memo.inst || String(memo.text ?? '').trim() || memoPhotoIds(memo).length || links.length) setMemoOpen({ id: memo.id, others: [] })
+    } else if (fresh && !links.length && !memo.inst && !String(memo.text ?? '').trim()) deleteItems([memo.id], { keep: false })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boxPickResult])
+
+  // 이 도면에서 박스를 고르는 중 (다른 도면, 또는 이 도면의 메모가 이 도면 박스를 고름)
+  const pickItem = useCallback(
+    (id) => {
+      if (!boxPick) return
+      const m = measurementsRef.current.find((x) => x.id === id)
+      if (!m) return
+      if (boxPick.from === doc.id && id === boxPick.memoId) {
+        setNotice('연결 박스 자신은 고를 수 없어요. 다른 박스를 눌러 주세요.')
+        return
+      }
+      onFinishBoxPick({ link: { ...boxPick.target, page: m.page ?? 1, item: m.id, itemName: itemLabel(m), rect: itemRect(m) } })
+    },
+    [boxPick, doc.id, onFinishBoxPick],
+  )
+  useEffect(() => {
+    if (!boxPick || !active) return
+    const down = (e) => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      e.stopPropagation()
+      onFinishBoxPick({ cancelled: true })
+    }
+    window.addEventListener('keydown', down, true)
+    return () => window.removeEventListener('keydown', down, true)
+  }, [boxPick, active, onFinishBoxPick])
+
   // ---------- 계기 카드 ----------
   const instCount = useMemo(() => measurements.filter(isInst).length, [measurements])
   // 목록에서 이 도면 카드로: 그 자리로 이동(확대·깜빡임)하고 선택. open: 카드(메모장)도 엶 (두 번 누름)
@@ -852,6 +915,22 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
 
   const visibleMeasurements = useMemo(() => measurements.filter((m) => !m.hidden), [measurements])
 
+  // ---------- 여기로 연결한 박스 (양방향 연결) ----------
+  // 다른 도면의 요약은 이 탭을 볼 때마다 다시 받음 (목록은 잠깐 모아 두고 저장할 때 고쳐지므로 가벼움)
+  const [otherDocs, setOtherDocs] = useState(null)
+  useEffect(() => {
+    if (!active) return
+    let cancelled = false
+    store
+      .listRecent()
+      .then((rows) => !cancelled && setOtherDocs(withoutTrashed(rows)))
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [active, store, rawSearchJump])
+  const backlinks = useMemo(() => backlinksFor(doc.id, fileName, measurements, otherDocs), [doc.id, fileName, measurements, otherDocs])
+
   // 눈 아이콘: 화면에서 숨기기/보이기 (값은 그대로 남음)
   // 숨긴 항목은 선택에서도 빠짐 (보이지 않는 것이 함께 지워지거나 옮겨지지 않도록)
   const toggleHidden = (id) => {
@@ -1000,10 +1079,10 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
             fitKey={fitKey}
             fittedKey={fittedKey}
             onFitted={setFittedKey}
-            tool={tool}
+            tool={boxPick ? 'pan' : tool}
             measurements={visibleMeasurements}
             calibration={calibration?.mode === 'line' && !calibration.hidden ? calibration : null}
-            selectedIds={selectedIds}
+            selectedIds={boxPick ? NO_IDS : selectedIds}
             onSelect={setSelectedIds}
             onComplete={onComplete}
             onMovePoint={onMovePoint}
@@ -1022,7 +1101,12 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
             onDelete={deleteItems}
             onDuplicate={duplicateItems}
             textIndex={textIndex}
+            onPickItem={boxPick ? pickItem : undefined}
+            backlinks={boxPick ? null : backlinks}
+            onOpenLink={onOpenLink}
+            library={library}
           />
+          {boxPick && <BoxPickBar from={boxPick.fromName} same={boxPick.from === doc.id} onCancel={() => onFinishBoxPick({ cancelled: true })} />}
           {instPanel && (
             <Suspense fallback={null}>
               <InstrumentPanel
@@ -1060,6 +1144,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
                   deleteItems([memoItem.id])
                 }}
                 onOpenLink={onOpenLink}
+                backlinks={backlinks.get(memoItem.id)}
                 onPickLink={(index) => setLinkPicking({ id: memoItem.id, index })}
                 store={store}
                 library={library}
@@ -1145,6 +1230,15 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
           onImportFile={onImportFile}
           onReviseDoc={onReviseDoc}
           onSetRoles={onSetDocRoles}
+          onPickBox={
+            onStartBoxPick
+              ? (target) => {
+                  onStartBoxPick({ from: doc.id, fromName: fileName, memoId: linkItem.id, index: linkPicking.index ?? null, fresh: !!linkPicking.fresh, target })
+                  setLinkPicking(null)
+                  setMemoOpen(null)
+                }
+              : null
+          }
           initial={linkPicking.index != null ? memoLinks(linkItem)[linkPicking.index] : null}
           onCancel={() => {
             // 방금 그린 범위에서 연결을 취소하면 빈 범위는 남기지 않음
@@ -1214,5 +1308,24 @@ function SidebarToggle({ open, onClick }) {
         <path d={open ? 'M6 6l6 6-6 6M13 6l6 6-6 6' : 'M18 6l-6 6 6 6M11 6l-6 6 6 6'} />
       </svg>
     </button>
+  )
+}
+
+const NO_IDS = []
+
+// 박스 고르기 안내 (도면 위쪽 가운데). 항목을 누르면 고르고, Esc·취소로 그만둠
+function BoxPickBar({ from, same, onCancel }) {
+  return (
+    <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center px-4">
+      <div className="pointer-events-auto flex max-w-full items-center gap-3 rounded-full bg-brand-700 py-1.5 pr-1.5 pl-4 text-sm text-white shadow-lg">
+        <BoxIcon className="h-4 w-4 shrink-0" />
+        <span className="min-w-0 truncate">
+          연결할 박스를 누르세요 <span className="text-white/70">(메모 범위·Equipment·도형 등{same ? '' : from ? ` → "${from}" 로 돌아가요` : ''})</span>
+        </span>
+        <button onClick={onCancel} className="shrink-0 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold hover:bg-white/25" title="박스 고르기 그만두기 (Esc)">
+          취소
+        </button>
+      </div>
+    </div>
   )
 }
