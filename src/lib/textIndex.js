@@ -118,57 +118,145 @@ export const isValidIndex = (index, numPages) =>
 const isWord = (ch) => /[\p{L}\p{N}]/u.test(ch)
 const norm = (s) => [...s.toLowerCase()].filter(isWord).join('')
 
+// 검색어를 띄어쓰기로 나눈 조각들 (Everything 처럼 "flo pu" → flocculant pump)
+// 조각마다 띄어쓰기·기호는 무시, 순서는 상관없이 모든 조각이 들어 있으면 찾음
+export function queryTokens(query) {
+  const out = []
+  for (const part of (query ?? '').split(/\s+/)) {
+    const t = norm(part)
+    if (t && !out.includes(t)) out.push(t)
+  }
+  // 긴 조각부터 (짧은 조각이 긴 조각 안에 들어가면 같은 자리를 두 번 잡지 않게)
+  return out.sort((a, b) => b.length - a.length)
+}
+
+// 글 → { t: norm 글자, map: norm 글자 → 원래 글자 위치, starts: 낱말 첫 글자인 norm 위치 }
+// 낱말 첫 글자: 앞이 기호·띄어쓰기, 글자↔숫자 바뀜(FT101 의 1), 소문자→대문자(camelCase)
+function prepare(text) {
+  const map = []
+  const starts = new Set()
+  let t = ''
+  let prev = ''
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (!isWord(ch)) {
+      prev = ''
+      continue
+    }
+    const low = ch.toLowerCase()
+    const digit = /\p{N}/u.test(ch)
+    if (
+      !prev ||
+      digit !== /\p{N}/u.test(prev) ||
+      (ch !== low && prev === prev.toLowerCase() && prev !== prev.toUpperCase())
+    )
+      starts.add(t.length)
+    // toLowerCase 가 글자 수를 바꾸는 드문 경우(İ 등)도 위치가 맞게 한 글자씩
+    for (const c of low) {
+      map.push(i)
+      t += c
+    }
+    prev = ch
+  }
+  return { t, map, starts }
+}
+
+// 조각 하나의 자리: 낱말 첫머리에서 시작하는 곳을 먼저, 없으면 처음 나오는 곳
+function findToken(t, starts, tok) {
+  let first = -1
+  for (let at = t.indexOf(tok); at >= 0; at = t.indexOf(tok, at + 1)) {
+    if (starts.has(at)) return { at, head: true }
+    if (first < 0) first = at
+  }
+  return first < 0 ? null : { at: first, head: false }
+}
+
+// 글에서 모든 조각 찾기 → null 또는 { t, map, spans: [[norm 시작, norm 끝]], head: 모든 조각이 낱말 첫머리 }
+// 빠르게: norm 글자에 조각이 다 있는지 먼저 보고, 있을 때만 자세히
+function matchText(text, tokens, quick) {
+  const q = quick ?? norm(text)
+  for (const tok of tokens) if (!q.includes(tok)) return null
+  const { t, map, starts } = prepare(text)
+  const spans = []
+  let head = true
+  for (const tok of tokens) {
+    const f = findToken(t, starts, tok)
+    if (!f) return null
+    spans.push([f.at, f.at + tok.length])
+    head &&= f.head
+  }
+  return { t, map, spans, head }
+}
+
+// 낱말 첫머리에서 맞은 결과를 앞으로 (같은 무리 안에서는 원래 순서 그대로)
+const byHead = (hits) => [...hits.filter((h) => h.head), ...hits.filter((h) => !h.head)]
+
 // → [{ page, text, rect: {x,y,w,h}, ocr }]  rect 는 찾은 글자 부분만 (가로쓰기면 비율로 잘라 냄)
 export function searchIndex(index, query, limit = 200) {
-  const q = norm(query)
-  if (!q || !index) return []
+  const tokens = queryTokens(query)
+  if (!tokens.length || !index) return []
   const hits = []
-  index.pages.forEach((p, pi) => {
+  let heads = 0
+  for (let pi = 0; pi < index.pages.length && heads < limit; pi++) {
+    const p = index.pages[pi]
     for (const [s, x, y, w, h] of p.items) {
-      const t = norm(s)
-      const at = t.indexOf(q)
-      if (at < 0) continue
-      const rect =
-        w >= h && t.length > 1 ? { x: x + (w * at) / t.length, y, w: (w * q.length) / t.length, h } : { x, y, w, h }
-      hits.push({ page: pi + 1, text: s, rect, ocr: !!p.ocr })
-      if (hits.length >= limit) return
+      const m = matchText(s, tokens)
+      if (!m) continue
+      const n = m.t.length
+      const a = Math.min(...m.spans.map((sp) => sp[0]))
+      const b = Math.max(...m.spans.map((sp) => sp[1]))
+      const rect = w >= h && n > 1 ? { x: x + (w * a) / n, y, w: (w * (b - a)) / n, h } : { x, y, w, h }
+      hits.push({ page: pi + 1, text: s, rect, ocr: !!p.ocr, head: m.head })
+      if ((m.head && ++heads >= limit) || hits.length >= limit * 4) break
     }
-  })
-  return hits
+    if (hits.length >= limit * 4) break
+  }
+  return byHead(hits).slice(0, limit)
 }
 
 // 직접 넣은 글(notes.js noteItems) 에서 찾기 → [{ page, text, rect, note: 'text'|'memo'|'measure', itemId, hidden }]  rect 는 상자 전체
 export function searchNotes(notes, query, limit = 200) {
-  const q = norm(query)
-  if (!q || !notes) return []
+  const tokens = queryTokens(query)
+  if (!tokens.length || !notes) return []
   const hits = []
   for (const [s, x, y, w, h, page, kind, itemId, hidden] of notes) {
-    if (!norm(s).includes(q)) continue
-    hits.push({ page, text: s, rect: { x, y, w, h }, note: kind, itemId, hidden: !!hidden })
-    if (hits.length >= limit) break
+    const m = matchText(s, tokens)
+    if (!m) continue
+    hits.push({ page, text: s, rect: { x, y, w, h }, note: kind, itemId, hidden: !!hidden, head: m.head })
   }
-  return hits
+  return byHead(hits).slice(0, limit)
 }
 
-// 검색어 부분을 강조하려고 나눔 → [앞, 찾은 부분, 뒤] (띄어쓰기·기호 무시하고 찾은 것도 처리)
-// 글에 찾는 말이 들어 있는지 (띄어쓰기·기호·대소문자 무시, 검색 색인과 같은 규칙)
+// 글에 찾는 말이 들어 있는지 (띄어쓰기·기호·대소문자 무시, 조각은 순서 상관없이, 검색 색인과 같은 규칙)
 export function textHas(text, query) {
-  const q = norm(query)
-  return !!q && norm(text ?? '').includes(q)
+  const tokens = queryTokens(query)
+  if (!tokens.length) return false
+  const t = norm(text ?? '')
+  return tokens.every((tok) => t.includes(tok))
 }
 
+// 검색어 부분을 강조하려고 나눔 → [[글, 찾은 부분인지], ...] (조각 여러 개, 띄어쓰기·기호 무시하고 찾은 것도 처리)
 export function splitMatch(text, query) {
-  const q = norm(query)
-  if (!q) return [text, '', '']
-  const map = [] // norm 글자 → 원래 글자 위치
-  const low = text.toLowerCase()
-  for (let i = 0; i < low.length; i++) if (isWord(low[i])) map.push(i)
-  const at = map
-    .map((i) => low[i])
-    .join('')
-    .indexOf(q)
-  if (at < 0) return [text, '', '']
-  const start = map[at]
-  const end = map[at + q.length - 1] + 1
-  return [text.slice(0, start), text.slice(start, end), text.slice(end)]
+  const tokens = queryTokens(query)
+  const m = tokens.length ? matchText(text ?? '', tokens) : null
+  if (!m) return [[text, false]]
+  // 원래 글자 위치로 바꾸고 겹치는 곳은 합침
+  const ranges = m.spans
+    .map(([a, b]) => [m.map[a], m.map[b - 1] + 1])
+    .sort((p, q) => p[0] - q[0])
+    .reduce((acc, r) => {
+      const last = acc[acc.length - 1]
+      if (last && r[0] <= last[1]) last[1] = Math.max(last[1], r[1])
+      else acc.push(r)
+      return acc
+    }, [])
+  const out = []
+  let pos = 0
+  for (const [a, b] of ranges) {
+    if (a > pos) out.push([text.slice(pos, a), false])
+    out.push([text.slice(a, b), true])
+    pos = b
+  }
+  if (pos < text.length) out.push([text.slice(pos), false])
+  return out
 }
