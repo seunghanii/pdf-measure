@@ -22,7 +22,7 @@ export function normalizeActivity(list) {
 
 // 종류 이름: 계기 카드 / 메모 / 도면 연결 / 텍스트 / 원 / 길이 …
 function whatOf(m) {
-  if (isInst(m)) return '계기 카드'
+  if (isInst(m)) return 'Equipment'
   if (m.type === 'memo') return isLinkOnly(m) ? '도면 연결' : '메모'
   return TYPE_INFO[m.type] ? kindName(m, TYPE_INFO) : '항목'
 }

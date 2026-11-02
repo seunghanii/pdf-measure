@@ -134,10 +134,10 @@ export default function Sidebar({
           <circle cx="12" cy="12" r="8" />
           <path d="M4 12h16" />
         </svg>
-        <span className="text-xs font-semibold tracking-wide text-ink-500">계기</span>
+        <span className="text-xs font-semibold tracking-wide text-ink-500">Equipment</span>
         <span className="text-xs text-ink-400 tabular-nums">{instCount}개</span>
         <button onClick={() => onOpenInstruments?.('list')} className="ml-auto rounded-md px-2 py-0.5 text-xs font-medium text-ink-700 ring-1 ring-ink-300 hover:bg-ink-100">
-          계기 목록
+          Equipment 목록
         </button>
         <button onClick={() => onOpenInstruments?.('find')} className="rounded-md px-2 py-0.5 text-xs font-medium text-ink-700 ring-1 ring-ink-300 hover:bg-ink-100" title="도면 글자에서 FT-1001 같은 태그를 찾아 카드 만들기">
           태그 찾기
@@ -315,7 +315,7 @@ export default function Sidebar({
           actions={
             <button
               className="text-danger-500 hover:underline"
-              onClick={() => window.confirm('모든 마크업을 지울까요? 계기 카드는 지우지 않고, 지운 마크업은 휴지통에 7일 동안 남아요.') && onClear('markup')}
+              onClick={() => window.confirm('모든 마크업을 지울까요? Equipment는 지우지 않고, 지운 마크업은 휴지통에 7일 동안 남아요.') && onClear('markup')}
             >
               전체 삭제
             </button>
@@ -325,13 +325,13 @@ export default function Sidebar({
         />
         {/* 계기 카드는 마크업과 따로: "마크업 전체 삭제"에 들어가지 않음, 한꺼번에 지우는 버튼도 없음 */}
         <ItemSection
-          title="계기 카드"
+          title="Equipment"
           items={cards}
-          empty="메모 범위 도구에서 '계기 카드'를 고르거나, 위 '태그 찾기'로 만들어요."
+          empty="메모 범위 도구에서 'Equipment'를 고르거나, 위 '태그 찾기'로 만들어요."
           group="inst"
           {...rowProps}
           actions={
-            <button className="text-ink-500 hover:underline" onClick={() => setLabelsOff((v) => !v)} title="도면 위 계기 박스 이름표를 모두 숨기거나 보이기 (모든 도면)">
+            <button className="text-ink-500 hover:underline" onClick={() => setLabelsOff((v) => !v)} title="도면 위 Equipment 박스 이름표를 모두 숨기거나 보이기 (모든 도면)">
               {labelsOff ? '이름표 보이기' : '이름표 숨기기'}
             </button>
           }
@@ -348,7 +348,7 @@ export default function Sidebar({
           <li>기준 길이 숫자는 오른쪽 축척 칸에서 바로 고치거나, 선택 도구로 기준선을 더블클릭해서 고쳐요</li>
           <li>선택 도구로 점이나 도형을 끌어 옮기고, Delete 로 삭제</li>
           <li>선택 도구로 빈 곳을 끌면 상자 안의 항목을 한꺼번에 선택, Shift/Ctrl+클릭으로 하나씩 더하거나 빼기, Ctrl+A 전체 선택</li>
-          <li>고른 항목 Ctrl+C 복사 · Ctrl+X 잘라내기 · Ctrl+V 붙여넣기 (마우스 자리에, 다른 도면에도. 메모는 글·사진·엑셀·계기 정보까지 함께)</li>
+          <li>고른 항목 Ctrl+C 복사 · Ctrl+X 잘라내기 · Ctrl+V 붙여넣기 (마우스 자리에, 다른 도면에도. 메모는 글·사진·엑셀·Equipment 정보까지 함께)</li>
           <li>텍스트: 클릭한 곳에 입력, Enter 완료 · Shift+Enter 줄바꿈, 선택 도구로 더블클릭하면 고치기</li>
           <li>형광펜·펜·사각형·화살표: 누른 채 끌어서 그리기</li>
           <li>사진: 사진 버튼(I 키)으로 고르거나, 복사한 사진을 Ctrl+V 로 붙여넣거나, 사진 파일을 도면에 끌어다 놓기. 모서리를 끌면 비율 유지(Shift: 자유롭게), 더블클릭하면 자르기</li>
@@ -877,7 +877,7 @@ function TrashSection({ trash, onRestore, onPurge }) {
       {open && (
         <div className="px-2 pb-3">
           {trash.length === 0 ? (
-            <p className="px-2 py-3 text-center text-sm text-ink-400">비어 있어요. 지운 측정·마크업·메모·계기 카드가 여기 {TRASH_DAYS}일 동안 남아요.</p>
+            <p className="px-2 py-3 text-center text-sm text-ink-400">비어 있어요. 지운 측정·마크업·메모·Equipment가 여기 {TRASH_DAYS}일 동안 남아요.</p>
           ) : (
             <>
               <div className="flex justify-end gap-3 px-2 pb-1 text-xs">
@@ -928,7 +928,7 @@ function TrashSection({ trash, onRestore, onPurge }) {
   )
 }
 
-const trashKind = (m) => (itemGroup(m) === 'inst' ? '계기 카드' : TYPE_INFO[m.type] ? kindName(m, TYPE_INFO) : m.type)
+const trashKind = (m) => (itemGroup(m) === 'inst' ? 'Equipment' : TYPE_INFO[m.type] ? kindName(m, TYPE_INFO) : m.type)
 
 function TrashCan({ className }) {
   return (

@@ -540,7 +540,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
       }))
       commit((prev) => [...prev, ...cards])
       setSelectedIds(cards.map((c) => c.id))
-      setNotice(`계기 카드 ${cards.length}개를 만들었어요. 잘못 만든 것은 Ctrl+Z 로 한 번에 되돌릴 수 있어요.`)
+      setNotice(`Equipment ${cards.length}개를 만들었어요. 잘못 만든 것은 Ctrl+Z 로 한 번에 되돌릴 수 있어요.`)
     },
     [commit, instKinds],
   )

@@ -35,7 +35,7 @@ export default function InstrumentPanel({
     >
       <div className="flex items-center gap-1 border-b border-ink-100 px-2 py-1.5">
         {[
-          ['list', '계기 목록'],
+          ['list', 'Equipment 목록'],
           ['find', '태그 찾기'],
         ].map(([id, label]) => (
           <button
@@ -190,21 +190,21 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
-        {scope === 'all' && others === null && <p className="px-3 py-6 text-center text-sm text-ink-400">다른 도면의 계기 불러오는 중…</p>}
+        {scope === 'all' && others === null && <p className="px-3 py-6 text-center text-sm text-ink-400">다른 도면의 Equipment 불러오는 중…</p>}
         {rows.length === 0 && (scope === 'doc' || others !== null) && (
           <div className="px-4 py-8 text-center text-sm text-ink-500">
             {all.length === 0 ? (
               <>
-                아직 계기 카드가 없어요.
+                아직 Equipment가 없어요.
                 <br />
-                메모 도구(N)에서 <b>계기 카드</b>를 골라 계기 자리에 범위를 그리거나,
+                메모 도구(N)에서 <b>Equipment</b>를 골라 Equipment 자리에 범위를 그리거나,
                 <button onClick={onFind} className="mx-1 font-semibold text-brand-700 hover:underline">
                   태그 찾기
                 </button>
                 로 도면 글자에서 한꺼번에 만들 수 있어요.
               </>
             ) : (
-              '조건에 맞는 계기가 없어요'
+              '조건에 맞는 Equipment가 없어요'
             )}
           </div>
         )}
@@ -286,7 +286,7 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
       </div>
 
       <div className="flex items-center gap-2 border-t border-ink-100 px-3 py-1.5">
-        <span className="text-xs text-ink-400">{scope === 'all' ? '최근 연 도면 전체' : '이 도면'} · 누르면 그 자리로, 두 번 누르면 카드 열기</span>
+        <span className="text-xs text-ink-400">{scope === 'all' ? '최근 열어본 도면 전체' : '이 도면'} · 누르면 그 자리로, 두 번 누르면 카드 열기</span>
         <button
           disabled={!rows.length}
           onClick={() => downloadInstCsv(rows, scope === 'all' ? '전체' : docName.replace(/\.pdf$/i, ''))}
@@ -364,7 +364,7 @@ function TagFinder({ docId, kinds, measurements, textIndex, onPreview, onCreate,
     <>
       <div className="flex flex-col gap-1.5 border-b border-ink-100 px-3 py-2">
         <p className="text-xs text-ink-500">
-          도면 글자에서 <b>FT-1001</b>, <b>PT 101</b>, 동그라미 안 두 줄(<b>TT</b>/<b>2001</b>) 같은 태그를 찾았어요. 고른 태그 자리에 계기 카드가 생겨요.
+          도면 글자에서 <b>FT-1001</b>, <b>PT 101</b>, 동그라미 안 두 줄(<b>TT</b>/<b>2001</b>) 같은 태그를 찾았어요. 고른 태그 자리에 Equipment가 생겨요.
         </p>
         <div className="flex items-center gap-2">
           <input

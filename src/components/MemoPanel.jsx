@@ -281,13 +281,13 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
         <button
           onClick={toggleInst}
           className={`flex shrink-0 items-center gap-1 rounded px-1.5 py-1 text-xs font-medium ${memo.inst ? 'text-ink-400 hover:bg-ink-100 hover:text-ink-700' : 'text-brand-700 hover:bg-brand-50'}`}
-          title={memo.inst ? '계기 정보 칸 빼기 (글·사진·연결은 남아요)' : '태그·종류·상태 칸이 있는 계기 카드로 만들기'}
+          title={memo.inst ? 'Equipment 정보 칸 빼기 (글·사진·연결은 남아요)' : '태그·종류·상태 칸이 있는 Equipment로 만들기'}
         >
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="8" />
             <path d="M4 12h16" />
           </svg>
-          {memo.inst ? '' : '계기 카드'}
+          {memo.inst ? '' : 'Equipment'}
         </button>
         <button
           onClick={() => setMemoDock(bottom ? 'right' : 'bottom')}

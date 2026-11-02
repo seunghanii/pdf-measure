@@ -170,7 +170,7 @@ export default function RevisionDialog({ pdfDoc, store, docId, current, revision
         <div className="border-b border-ink-100 px-5 py-4">
           <h2 className="text-lg font-bold text-ink-900">{pick?.newPdf ? '개정판으로 바꾸기' : '도면 개정'}</h2>
           <p className="mt-1 text-sm text-ink-500">
-            PDF 만 새 판으로 바꾸고 마크업·측정·메모·계기 카드·별명·폴더·연결은 그대로 둬요.
+            PDF 만 새 판으로 바꾸고 마크업·측정·메모·Equipment·별명·폴더·연결은 그대로 둬요.
           </p>
         </div>
 
