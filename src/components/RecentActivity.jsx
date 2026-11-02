@@ -71,12 +71,13 @@ export default function RecentActivity({ list, library, onGo }) {
       {!hidden &&
         (rows.length === 0 ? (
           <div className="rounded-xl bg-surface px-4 py-5 text-center text-sm text-pretty text-ink-400 shadow-xs ring-1 ring-ink-200">
-            도면에 계기 카드·메모·마크업을 넣거나 고치면 여기에 기록돼요.
+            도면에 Equipment·메모·마크업을 넣거나 고치면 여기에 기록돼요.
           </div>
         ) : (
           <>
             <ul className="divide-y divide-ink-100 overflow-hidden rounded-xl bg-surface shadow-sm">
-              {shown.map(({ doc, ev }, i) => {
+              {shown.map(({ doc, ev: raw }, i) => {
+                const ev = raw.w === '계기 카드' ? { ...raw, w: 'Equipment' } : raw // 예전 기록의 종류 이름도 새 이름으로
                 const title = ev.cnt ? `${ev.w} ${ev.cnt}개` : ev.n || ev.w
                 const sub = ev.cnt || !ev.n || ev.n.startsWith(ev.w) ? '' : ev.w // "사각형 1 · 사각형" 처럼 겹치면 뺌
                 return (

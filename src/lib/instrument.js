@@ -298,7 +298,7 @@ export function downloadInstCsv(rows, fileBase) {
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }) // 엑셀에서 한글이 깨지지 않게 BOM
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = `${fileBase || '계기'}_계기목록.csv`
+  a.download = `${fileBase || 'Equipment'}_Equipment_List.csv`
   a.click()
   setTimeout(() => URL.revokeObjectURL(a.href), 1000)
 }
