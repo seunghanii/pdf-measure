@@ -20,9 +20,10 @@ import LinkPicker from './LinkPicker'
 import BoxIcon from './BoxIcon'
 import { DEFAULT_MEMO_COLOR, isLinkOnly, memoPhotoIds, memosAt } from '../lib/memo'
 import { itemLabel, itemRect } from '../lib/activity'
+import { backlinksFor } from '../lib/backlinks'
 import { memoFileIds } from '../lib/excel'
 import { DEFAULT_STATUS, cardBoxFor, donePatch, doneUpTo, guessKind, isInst, itemGroup, linksPatch, memoLinkPhotoIds, memoLinks, statusOf } from '../lib/instrument'
-import { liveItemTrash, pushItems } from '../lib/trash'
+import { liveItemTrash, pushItems, withoutTrashed } from '../lib/trash'
 import { MAX_ZOOM, MIN_ZOOM } from '../lib/zoom'
 import { adaptState, newRevKey } from '../lib/revision'
 import { loadUncalHidden } from '../lib/scalePanel'
@@ -914,6 +915,22 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
 
   const visibleMeasurements = useMemo(() => measurements.filter((m) => !m.hidden), [measurements])
 
+  // ---------- 여기로 연결한 박스 (양방향 연결) ----------
+  // 다른 도면의 요약은 이 탭을 볼 때마다 다시 받음 (목록은 잠깐 모아 두고 저장할 때 고쳐지므로 가벼움)
+  const [otherDocs, setOtherDocs] = useState(null)
+  useEffect(() => {
+    if (!active) return
+    let cancelled = false
+    store
+      .listRecent()
+      .then((rows) => !cancelled && setOtherDocs(withoutTrashed(rows)))
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [active, store, rawSearchJump])
+  const backlinks = useMemo(() => backlinksFor(doc.id, fileName, measurements, otherDocs), [doc.id, fileName, measurements, otherDocs])
+
   // 눈 아이콘: 화면에서 숨기기/보이기 (값은 그대로 남음)
   // 숨긴 항목은 선택에서도 빠짐 (보이지 않는 것이 함께 지워지거나 옮겨지지 않도록)
   const toggleHidden = (id) => {
@@ -1085,6 +1102,9 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
             onDuplicate={duplicateItems}
             textIndex={textIndex}
             onPickItem={boxPick ? pickItem : undefined}
+            backlinks={boxPick ? null : backlinks}
+            onOpenLink={onOpenLink}
+            library={library}
           />
           {boxPick && <BoxPickBar from={boxPick.fromName} same={boxPick.from === doc.id} onCancel={() => onFinishBoxPick({ cancelled: true })} />}
           {instPanel && (
@@ -1124,6 +1144,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
                   deleteItems([memoItem.id])
                 }}
                 onOpenLink={onOpenLink}
+                backlinks={backlinks.get(memoItem.id)}
                 onPickLink={(index) => setLinkPicking({ id: memoItem.id, index })}
                 store={store}
                 library={library}

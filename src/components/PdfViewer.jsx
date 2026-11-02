@@ -9,6 +9,7 @@ import { isTypingTarget } from '../lib/dom'
 import { DRAG_TOOLS, textMetricsOf, minTextBoxWidth, FONT_FAMILY, itemCorners, rectOf, resizeRect, isMarkup, cropOf, cropResize, fullImageRect, resizeKeepAspect } from '../lib/markup'
 import { isImageFile } from '../lib/images'
 import { memoDrawOrder } from '../lib/memo'
+import { itemRect } from '../lib/activity'
 import { SNAP_KINDS, findRaySnap, findSnap, loadSnapIndex } from '../lib/snap'
 import { useSnapEnabled } from '../lib/snapSetting'
 import { MAX_ZOOM, MIN_ZOOM } from '../lib/zoom'
@@ -82,6 +83,9 @@ export default function PdfViewer({
   onDuplicate, // (ids) 선택 상자의 복제 단추
   textIndex, // 도면 글자 색인 (글자 복사 도구)
   onPickItem, // (id) 박스 고르기 중: 누른 항목. 있으면 항목을 누르면 고르고, 빈 곳을 끌면 화면 이동만 함
+  backlinks, // Map(항목 id → 여기로 연결한 박스들) 양방향 연결: 그 항목 왼쪽 위에 되돌아가기 단추
+  onOpenLink,
+  library,
 }) {
   const containerRef = useRef(null)
   const pageEls = useRef([])
@@ -1222,6 +1226,9 @@ export default function PdfViewer({
                     />
                   )}
                 </svg>
+                {backlinks?.size > 0 && (
+                  <BacklinkBadges items={byPage.get(page)} backlinks={backlinks} zoom={zoom} onOpenLink={onOpenLink} library={library} />
+                )}
                 {sizes.length > 1 && (
                   <div className="pointer-events-none absolute -bottom-px left-1/2 translate-y-full -translate-x-1/2 pt-0.5 text-[11px] text-ink-500">
                     {page} / {sizes.length}
@@ -1358,3 +1365,66 @@ function TextCopyHint({ ready, copied, picked }) {
     </div>
   )
 }
+
+// 양방향 연결: 다른 박스가 이 항목으로 연결해 두었으면 항목 왼쪽 위에 작은 되돌아가기 단추.
+// 하나면 누르면 바로 그 박스로, 여러 개면 목록을 펼침
+const BacklinkBadges = memo(function BacklinkBadges({ items, backlinks, zoom, onOpenLink, library }) {
+  const [open, setOpen] = useState(null) // 목록을 펼친 항목 id
+  useEffect(() => {
+    if (!open) return
+    const close = (e) => !e.target.closest?.('[data-backlinks]') && setOpen(null)
+    window.addEventListener('pointerdown', close, true)
+    return () => window.removeEventListener('pointerdown', close, true)
+  }, [open])
+  if (!items) return null
+  const go = (l) => {
+    setOpen(null)
+    onOpenLink?.(l)
+  }
+  const docLabel = (l) => (l.here ? '이 도면' : (library?.aliases?.[l.id] ?? l.name))
+  return items.map((m) => {
+    const links = backlinks.get(m.id)
+    const r = links && itemRect(m)
+    if (!r) return null
+    const title = links.map((l) => `← ${l.itemName} (${docLabel(l)}${l.page > 1 ? ` ${l.page}쪽` : ''})`).join('\n')
+    return (
+      <div
+        key={m.id}
+        data-backlinks=""
+        className="absolute z-10"
+        style={{ left: r.x * zoom - 11, top: r.y * zoom - 11 }}
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={() => (links.length === 1 ? go(links[0]) : setOpen((o) => (o === m.id ? null : m.id)))}
+          title={`여기로 연결한 박스로 돌아가기\n${title}`}
+          aria-label="여기로 연결한 박스로 돌아가기"
+          className="flex h-[22px] min-w-[22px] items-center justify-center gap-0.5 rounded-full bg-brand-600 px-1 text-[11px] font-semibold text-white shadow ring-2 ring-white hover:bg-brand-press"
+        >
+          <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 14L4 9l5-5M4 9h10a6 6 0 010 12h-3" />
+          </svg>
+          {links.length > 1 && links.length}
+        </button>
+        {open === m.id && (
+          <ul className="absolute top-full left-0 mt-1 w-64 overflow-hidden rounded-lg border border-ink-200 bg-surface py-1 text-sm text-ink-800 shadow-xl">
+            <li className="px-3 pt-1 pb-1.5 text-xs font-semibold text-ink-500">여기로 연결한 박스</li>
+            {links.map((l, i) => (
+              <li key={`${l.id}-${l.item}-${i}`}>
+                <button onClick={() => go(l)} className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-brand-50">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{l.itemName}</span>
+                    <span className="block truncate text-xs text-ink-500">
+                      {docLabel(l)}
+                      {l.page > 1 ? ` · ${l.page}쪽` : ''}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    )
+  })
+})

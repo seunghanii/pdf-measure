@@ -10,6 +10,7 @@ import { loadLocalCal, saveLocalCal } from './calEvents'
 import { noteItems } from './notes'
 import { instRows } from './instrument'
 import { SUMMARY_ACTIVITY, normalizeActivity } from './activity'
+import { boxLinkRows } from './backlinks'
 
 const DB_NAME = 'pdf-measure'
 const DB_VERSION = 4
@@ -130,6 +131,9 @@ export function summarize(state) {
     inst: instRows(state?.measurements), // 모든 도면 계기 목록용
     activity: normalizeActivity(state?.activity).slice(0, SUMMARY_ACTIVITY), // 홈 '최근 수정' (lib/activity.js)
     rev: state?.rev?.label ?? null, // 개정판으로 바꾼 도면의 지금 판 이름 (lib/revision.js)
+    // 다른 도면 박스로 가는 박스 연결 (반대쪽 도면에 "여기로 연결한 박스"로 보임, lib/backlinks.js).
+    // 이 기능 전에는 박스 연결이 없었으니 판(v)은 올리지 않음: 예전 요약에 없으면 연결도 없는 것
+    boxLinks: boxLinkRows(state?.measurements),
   }
 }
 
