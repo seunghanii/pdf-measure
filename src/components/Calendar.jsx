@@ -119,8 +119,8 @@ export default function HomeCalendar({ store, list = [], library, onOpenEquip })
     }
   }, [store])
 
-  const saveEvents = (events) => {
-    const next = { events, at: Date.now() }
+  const saveCal = (patch) => {
+    const next = { ...cal, ...patch, at: Date.now() }
     setCal(next)
     setSaveError(false)
     store
@@ -131,6 +131,9 @@ export default function HomeCalendar({ store, list = [], library, onOpenEquip })
       })
   }
 
+  const saveEvents = (events) => saveCal({ events })
+  const holidays = useMemo(() => new Set(cal.holidays ?? []), [cal.holidays])
+  const toggleHoliday = (key) => saveCal({ holidays: holidays.has(key) ? [...holidays].filter((k) => k !== key) : [...holidays, key].sort() })
   const equip = useMemo(() => equipByDay(list), [list])
   const changeWeekend = (days) => {
     setWeekend(days)
@@ -169,7 +172,7 @@ export default function HomeCalendar({ store, list = [], library, onOpenEquip })
           </button>
         </div>
         <div ref={gridRef} title="마우스 휠로 이전·다음 달">
-          <MonthGrid month={month} today={today} weekend={weekend} events={cal.events} equip={equip} onPick={(d) => setBig(d)} />
+          <MonthGrid month={month} today={today} weekend={weekend} holidays={holidays} events={cal.events} equip={equip} onPick={(d) => setBig(d)} />
         </div>
       </div>
       {big && (
@@ -180,6 +183,8 @@ export default function HomeCalendar({ store, list = [], library, onOpenEquip })
           onWeekend={changeWeekend}
           events={cal.events}
           onSaveEvents={saveEvents}
+          holidays={holidays}
+          onToggleHoliday={toggleHoliday}
           equip={equip}
           library={library}
           onOpenEquip={(item) => {
@@ -200,7 +205,7 @@ const dayTone = (isToday, off, inMonth) =>
   isToday ? 'bg-brand-600 font-semibold text-white' : off ? (inMonth ? 'text-danger-600' : 'text-danger-300') : inMonth ? 'text-ink-700' : 'text-ink-300'
 
 // 작은 달력 칸: 일정·Equipment 가 있는 날은 숫자 아래 작은 점. 누르면 그날로 큰 창
-function MonthGrid({ month, today, weekend, events, equip, onPick }) {
+function MonthGrid({ month, today, weekend, holidays, events, equip, onPick }) {
   const order = weekdayOrder()
   const cells = useMemo(() => monthGrid(month), [month])
   const evMap = useMemo(() => eventsByDay(events, cells.map((c) => c.key)), [events, cells])
@@ -213,10 +218,11 @@ function MonthGrid({ month, today, weekend, events, equip, onPick }) {
       ))}
       {cells.map(({ date, key, inMonth }) => {
         const isToday = sameDay(date, today)
-        const off = weekend.includes(date.getDay())
+        const holiday = holidays.has(key)
+        const off = holiday || weekend.includes(date.getDay())
         const ev = evMap.get(key)?.length ?? 0
         const eq = equip.get(key)?.length ?? 0
-        const tip = [isToday && '오늘', ev && `일정 ${ev}개`, eq && `Equipment ${eq}개`].filter(Boolean).join(' · ')
+        const tip = [isToday && '오늘', holiday && '휴무', ev && `일정 ${ev}개`, eq && `Equipment ${eq}개`].filter(Boolean).join(' · ')
         return (
           <button key={key} onClick={() => onPick(date)} title={tip || undefined} className="group relative flex items-center justify-center py-0.5">
             <span className={`flex h-7 w-7 items-center justify-center rounded-full transition-colors ${dayTone(isToday, off, inMonth)} ${isToday ? '' : 'group-hover:bg-ink-100'}`}>
@@ -236,7 +242,7 @@ function MonthGrid({ month, today, weekend, events, equip, onPick }) {
 }
 
 // 크게 보기 Calendar 창
-function CalendarDialog({ initial, today, weekend, onWeekend, events, onSaveEvents, equip, library, onOpenEquip, onClose }) {
+function CalendarDialog({ initial, today, weekend, onWeekend, holidays, onToggleHoliday, events, onSaveEvents, equip, library, onOpenEquip, onClose }) {
   const [month, setMonth] = useState(() => startOfMonth(initial))
   const [selected, setSelected] = useState(initial)
   const [settings, setSettings] = useState(false)
@@ -386,7 +392,7 @@ function CalendarDialog({ initial, today, weekend, onWeekend, events, onSaveEven
                   equip={equip.get(cell.key) ?? []}
                   isToday={sameDay(cell.date, today)}
                   isSelected={sameDay(cell.date, selected)}
-                  off={weekend.includes(cell.date.getDay())}
+                  off={holidays.has(cell.key) || weekend.includes(cell.date.getDay())}
                   onSelect={() => {
                     setSelected(cell.date)
                     setEditing(null)
@@ -415,6 +421,8 @@ function CalendarDialog({ initial, today, weekend, onWeekend, events, onSaveEven
                 day={selected}
                 today={today}
                 weekend={weekend}
+                holiday={holidays.has(dayKey(selected))}
+                onToggleHoliday={() => onToggleHoliday(dayKey(selected))}
                 events={events.filter((e) => eventOn(e, dayKey(selected)))}
                 equip={equip.get(dayKey(selected)) ?? []}
                 library={library}
@@ -489,8 +497,9 @@ function DayCell({ date, inMonth, isToday, isSelected, off, slots, equip, lines,
   )
 }
 
-function DayPanel({ day, today, weekend, events, equip, library, onAdd, onEdit, onOpenEquip }) {
-  const off = weekend.includes(day.getDay())
+function DayPanel({ day, today, weekend, holiday, onToggleHoliday, events, equip, library, onAdd, onEdit, onOpenEquip }) {
+  const weekly = weekend.includes(day.getDay())
+  const off = holiday || weekly
   const hijri = hijriLabel(day)
   return (
     <>
@@ -503,6 +512,24 @@ function DayPanel({ day, today, weekend, events, equip, library, onAdd, onEdit, 
         {off && <span className="ml-1.5 text-danger-500">휴무</span>}
       </div>
       {hijri && <div className="mt-1 text-xs text-ink-400">{hijri} (Hijri)</div>}
+      {weekly ? (
+        <p className="mt-3 text-xs text-ink-400">주말 요일이라 늘 휴무예요 (위 주말 설정에서 바꿔요)</p>
+      ) : (
+        <button
+          onClick={onToggleHoliday}
+          aria-pressed={holiday}
+          className={`mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium ring-1 transition-colors ${
+            holiday ? 'bg-danger-50 text-danger-600 ring-danger-200 hover:bg-danger-100' : 'text-ink-600 ring-ink-200 hover:bg-ink-50'
+          }`}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="5" width="18" height="16" rx="2" />
+            <path d="M3 10h18M8 3v4M16 3v4" />
+            {holiday ? <path d="M9 14l6 4M15 14l-6 4" /> : <path d="M12 13v6M9 16h6" />}
+          </svg>
+          {holiday ? '휴무 해제' : '이 날 휴무 지정'}
+        </button>
+      )}
 
       <div className="mt-4 flex items-center">
         <h4 className="text-xs font-semibold tracking-wide text-ink-500">일정</h4>

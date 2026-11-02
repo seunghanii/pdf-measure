@@ -1,5 +1,6 @@
 // 달력 일정 (등록·수정·삭제) 과 Equipment 작업 완료 날짜 모으기.
-// 저장 모양: { events: [{ id, date 'YYYY-MM-DD', end?, time?, title, memo?, color }], at: 마지막으로 고친 시각(ms) }
+// 저장 모양: { events: [{ id, date 'YYYY-MM-DD', end?, time?, title, memo?, color }], holidays: ['YYYY-MM-DD'], at: 마지막으로 고친 시각(ms) }
+// holidays: 주말 요일 말고 따로 지정한 휴무일 (빨간 숫자)
 // 로그인했으면 documents 특별한 줄 __calendar__ (스키마 변경 없음), 아니면 이 브라우저.
 // 이 브라우저에도 늘 사본을 둠 (서버에 못 올린 일정을 지키고 다음에 다시 올림) — 홈 메모장(lib/homeNote.js)과 같은 방식.
 import { dayKey } from './calendar'
@@ -8,7 +9,7 @@ import { INST_STATUSES, statusOf } from './instrument'
 const KEY = 'pdf-measure:cal-events'
 
 export const EVENT_COLORS = ['#2a4fe0', '#16a34a', '#d97706', '#dc2626', '#7c3aed', '#64748b']
-export const EMPTY_CAL = { events: [], at: 0 }
+export const EMPTY_CAL = { events: [], holidays: [], at: 0 }
 
 const isDay = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s)
 
@@ -23,7 +24,8 @@ function cleanEvent(e) {
 
 export function normalizeCal(c) {
   if (!c || !Array.isArray(c.events)) return EMPTY_CAL
-  return { events: c.events.map(cleanEvent).filter(Boolean), at: Number(c.at) || 0 }
+  const holidays = Array.isArray(c.holidays) ? [...new Set(c.holidays.filter(isDay))].sort() : []
+  return { events: c.events.map(cleanEvent).filter(Boolean), holidays, at: Number(c.at) || 0 }
 }
 
 export const newerCal = (a, b) => (normalizeCal(b).at > normalizeCal(a).at ? normalizeCal(b) : normalizeCal(a))
