@@ -486,3 +486,10 @@ body.folder-reordering * {
     display: none;
   }
 }
+
+/* 오른쪽 목록 넓이를 끄는 동안: 어디서든 좌우 화살표 커서, 글자 선택 안 됨 */
+html.sidebar-resizing,
+html.sidebar-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
