@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { Suspense, lazy, useRef, useState } from 'react'
 import { AuthPanel, MigrationCard } from './Account'
 import Library, { FolderDialog, FolderIcon } from './Library'
 import RecentDocs from './RecentDocs'
@@ -6,6 +6,9 @@ import RecentActivity from './RecentActivity'
 import HomeCalendar from './Calendar'
 import { addFolder, editFolder } from '../lib/library'
 import { TRASH_DAYS, leftLabel } from '../lib/trash'
+
+// 메모장 편집기는 처음 홈을 그릴 때 기다리지 않게 따로 불러옴
+const HomeNotepad = lazy(() => import('./HomeNotepad'))
 
 const STEPS = [
   { n: 1, title: 'PDF 도면 열기', text: '버튼을 누르거나 파일을 화면에 끌어다 놓으세요.' },
@@ -55,6 +58,9 @@ export default function EmptyState({
       <div className="mx-auto flex w-full max-w-[100rem] flex-col lg:flex-row lg:items-start lg:gap-6">
         <aside className="order-last mt-8 min-w-0 space-y-8 lg:order-first lg:mt-0 lg:w-64 lg:shrink-0 xl:w-72">
           <HomeCalendar />
+          <Suspense fallback={<div className="h-[28rem] rounded-xl bg-surface ring-1 ring-ink-200" />}>
+            <HomeNotepad store={store} className="h-[28rem]" />
+          </Suspense>
         </aside>
         <div
           className={

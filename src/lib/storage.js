@@ -5,6 +5,7 @@
 // 여기의 'cache' 저장소는 서버에서 받은 PDF 를 다시 받지 않도록 임시 보관하는 데만 씁니다.
 
 import { EMPTY_LIBRARY, normalizeLibrary } from './library'
+import { loadLocalNote, saveLocalNote } from './homeNote'
 import { noteItems } from './notes'
 import { instRows } from './instrument'
 import { SUMMARY_ACTIVITY, normalizeActivity } from './activity'
@@ -296,6 +297,8 @@ export const localStore = {
   listImages,
   getLibrary: async () => getLibrary(),
   saveLibrary: async (lib) => saveLibrary(lib),
+  getHomeNote: async () => loadLocalNote(),
+  saveHomeNote: async (note) => saveLocalNote(note),
 }
 
 // scope: 로그인한 사용자 id (없으면 이 브라우저 전용)
