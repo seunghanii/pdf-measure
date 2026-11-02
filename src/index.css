@@ -205,6 +205,12 @@
 [data-delete]:hover .selection-delete {
   fill: var(--color-danger-700);
 }
+.selection-duplicate {
+  transition: fill 0.12s;
+}
+[data-duplicate]:hover .selection-duplicate {
+  fill: var(--color-brand-700);
+}
 
 /* 메모장 글: 쓰는 자리에서 바로 꾸며지는 마크다운 (components/MemoEditor.jsx) */
 .memo-doc {

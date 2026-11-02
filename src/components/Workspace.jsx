@@ -10,7 +10,7 @@ import { toggleSnap } from '../lib/snapSetting'
 import { useAutosave } from '../lib/autosave'
 import { useDocIndex } from '../lib/indexer'
 import { isTypingTarget } from '../lib/dom'
-import { clipFor, clipboardMarker, copyItems, currentClip, pasteItems } from '../lib/itemClipboard'
+import { clipFor, clipboardMarker, copyItems, currentClip, makeClip, pasteItems } from '../lib/itemClipboard'
 import PdfViewer from './PdfViewer'
 import Toolbar from './Toolbar'
 import Sidebar from './Sidebar'
@@ -561,6 +561,8 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
   // ---------- 항목 복사·붙여넣기 (Ctrl/Cmd+C, X, V) — lib/itemClipboard.js ----------
   const categoriesRef = useRef(categories)
   categoriesRef.current = categories
+  const selectedIdsRef = useRef(selectedIds)
+  selectedIdsRef.current = selectedIds
   const addCategoryRef = useRef(addCategory)
   addCategoryRef.current = addCategory
   const copySelected = useCallback(
@@ -578,15 +580,16 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
     [deleteItems, doc.id, selectedIds, store],
   )
   const pasting = useRef(false)
+  // here: false 면 마우스 자리를 보지 않고 원래 자리 옆에 (복제 단추)
   const pasteClip = useCallback(
-    async (c) => {
+    async (c, { here = true } = {}) => {
       if (pasting.current) return
       pasting.current = true
       try {
         const { items, failed } = await pasteItems(c, {
           docId: doc.id,
           store,
-          spot: placeRef.current?.(),
+          spot: here ? placeRef.current?.() : undefined,
           numPages: pdfDoc.numPages,
           counters: counters.current,
           categories: categoriesRef.current,
@@ -607,6 +610,19 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
       }
     },
     [commit, doc.id, jumpTo, pageNum, pdfDoc, store],
+  )
+
+  // 복제: 고른 항목(메모·계기 카드는 글·사진·엑셀·계기 정보·관련 도면까지)을 원래 자리 살짝 옆에 하나 더.
+  // 복사·붙여넣기와 같은 길을 쓰되, Ctrl+C 로 복사해 둔 것은 그대로 둠
+  const duplicateItems = useCallback(
+    (ids) => {
+      const set = new Set(ids)
+      const items = measurementsRef.current.filter((m) => set.has(m.id) && m.id !== 'calibration' && !m.hidden)
+      if (!items.length) return
+      const c = makeClip(items, { categories: categoriesRef.current, store, docId: doc.id })
+      pasteClip(c, { here: false })
+    },
+    [doc.id, pasteClip, store],
   )
 
   // 키보드 자리: 글 입력 중이거나 화면 글자를 드래그로 골라 둔 경우는 브라우저 기본 복사·붙여넣기
@@ -649,7 +665,12 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
     const onKey = (e) => {
       if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.repeat) return
       if (itemKeysOff(e) || textSelected()) return
-      if (e.code === 'KeyC' || e.code === 'KeyX') {
+      if (e.code === 'KeyD') {
+        // Ctrl/Cmd+D: 고른 항목 복제 (브라우저 즐겨찾기 대신)
+        if (!selectedIdsRef.current.length) return
+        e.preventDefault()
+        duplicateItems(selectedIdsRef.current)
+      } else if (e.code === 'KeyC' || e.code === 'KeyX') {
         const c = copySelected({ cut: e.code === 'KeyX' })
         if (!c) return
         lastCopy.current = { clip: c, at: Date.now() }
@@ -679,7 +700,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
       window.removeEventListener('keydown', onKey)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, copySelected, insertImages, pasteClip, pendingCalibration])
+  }, [active, copySelected, duplicateItems, insertImages, pasteClip, pendingCalibration])
 
   // 휴지통에서 되살리기: 원래 자리(같은 페이지·좌표)로 돌아감
   const restoreItems = useCallback(
@@ -998,6 +1019,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
             placeRef={placeRef}
             onOpenMemo={openMemoAt}
             onDelete={deleteItems}
+            onDuplicate={duplicateItems}
             textIndex={textIndex}
           />
           {instPanel && (
