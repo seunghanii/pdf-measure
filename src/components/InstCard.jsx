@@ -1,9 +1,109 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { INST_STATUSES, DEFAULT_STATUS, guessKind, memoLinks, linksPatch, normTag, statusOf } from '../lib/instrument'
 import { isDefaultName } from '../lib/categories'
+import { convertTyped, hasHangul } from '../lib/hangulKeys'
 
 // 메모장 안의 계기 카드 칸: Tag. No, Description, 종류, 상태
 // onChange(patch): 메모 항목에 합칠 값. kinds: 계기 종류 목록, onAddKind(약어): 목록에 더하기 (모든 도면 공통)
+// Tag. No 칸: 기본은 영어 입력. 한글 자판 상태로 쳐도 영문 자판 글자로 바꿔 넣음 (ㄹㅅ → FT).
+// 오른쪽 A/한 버튼으로 한글 그대로 쓰기. 웹페이지는 입력기(한/영)를 직접 바꿀 수 없어서 이렇게 함.
+export function TagInput({ tag, onTag }) {
+  const [lang, setLang] = useState(() => (hasHangul(tag) ? 'ko' : 'en'))
+  const ref = useRef(null)
+  const composing = useRef(false)
+  const base = useRef(null) // 조합(한글 입력) 시작 전 값
+  const latest = useRef({ tag, onTag, lang })
+  useEffect(() => {
+    latest.current = { tag, onTag, lang }
+  })
+
+  const putCaret = (el, at) =>
+    requestAnimationFrame(() => {
+      if (document.activeElement === el) el.setSelectionRange(at, at)
+    })
+
+  // 조합이 끝난 뒤 새로 친 한글만 영문으로
+  const convertNow = () => {
+    const el = ref.current
+    const { tag: cur, onTag: set, lang: l } = latest.current
+    if (composing.current) return
+    if (!el || l !== 'en') {
+      base.current = null
+      return
+    }
+    const before = base.current ?? cur
+    base.current = null
+    const { value, caret } = convertTyped(before, el.value)
+    if (value !== el.value || value !== cur) set(value)
+    if (value !== el.value) putCaret(el, caret)
+  }
+
+  const onChange = (e) => {
+    const v = e.target.value
+    if (composing.current || e.nativeEvent.isComposing) return onTag(v)
+    if (lang !== 'en') {
+      base.current = null
+      onTag(v)
+      return
+    }
+    const { value, caret } = convertTyped(base.current ?? tag, v)
+    base.current = null
+    onTag(value)
+    if (value !== v) putCaret(e.target, caret)
+  }
+
+  const toggle = () => {
+    base.current = null
+    setLang((l) => (l === 'en' ? 'ko' : 'en'))
+    ref.current?.focus()
+  }
+
+  const en = lang === 'en'
+  return (
+    <div className="flex min-w-0 flex-1 items-center gap-1">
+      <input
+        ref={ref}
+        value={tag}
+        lang={en ? 'en' : 'ko'}
+        autoCapitalize="characters"
+        autoCorrect="off"
+        autoComplete="off"
+        spellCheck={false}
+        onChange={onChange}
+        onCompositionStart={() => {
+          composing.current = true
+          if (base.current == null) base.current = latest.current.tag
+        }}
+        onCompositionEnd={() => {
+          composing.current = false
+          // 다음 글자 조합이 바로 이어지면 그때 함께 바꿈 (조합 중 값을 바꾸면 입력기가 꼬임)
+          setTimeout(convertNow, 0)
+        }}
+        onBlur={(e) => {
+          let v = e.target.value
+          if (en) v = convertTyped(base.current ?? latest.current.tag, v).value
+          base.current = null
+          if (v) onTag(normTag(v))
+        }}
+        placeholder="FT-1001"
+        className="min-w-0 flex-1 rounded-md border border-ink-200 px-2 py-1 text-sm font-semibold tabular-nums outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+        autoFocus={!tag}
+      />
+      <button
+        type="button"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={toggle}
+        aria-pressed={!en}
+        aria-label={en ? 'Tag. No 영어 입력 중, 누르면 한글 입력' : 'Tag. No 한글 입력 중, 누르면 영어 입력'}
+        title={en ? '영어 입력 (한글 자판으로 쳐도 영문으로 바뀜). 누르면 한글 그대로 쓰기' : '한글 입력. 누르면 영어 입력'}
+        className={`w-7 shrink-0 rounded py-1 text-xs font-semibold ${en ? 'text-ink-600 ring-1 ring-ink-200 hover:bg-ink-50' : 'bg-ink-800 text-white'}`}
+      >
+        {en ? 'A' : '한'}
+      </button>
+    </div>
+  )
+}
+
 export function InstFields({ memo, onChange, kinds, onAddKind }) {
   const inst = memo.inst
   const [adding, setAdding] = useState(false)
@@ -42,14 +142,7 @@ export function InstFields({ memo, onChange, kinds, onAddKind }) {
     <div className="flex flex-col gap-2 border-b border-ink-100 px-3 py-2">
       <label className="flex items-center gap-2">
         <span className={`${label} w-20 shrink-0`}>Tag. No</span>
-        <input
-          value={inst.tag ?? ''}
-          onChange={(e) => setTag(e.target.value)}
-          onBlur={(e) => e.target.value && setTag(normTag(e.target.value))}
-          placeholder="FT-1001"
-          className="min-w-0 flex-1 rounded-md border border-ink-200 px-2 py-1 text-sm font-semibold tabular-nums outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
-          autoFocus={!inst.tag}
-        />
+        <TagInput tag={inst.tag ?? ''} onTag={setTag} />
       </label>
       <label className="flex items-center gap-2">
         <span className={`${label} w-20 shrink-0`}>Description</span>
