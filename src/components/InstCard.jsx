@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { INST_STATUSES, DEFAULT_STATUS, guessKind, memoLinks, linksPatch, normTag, statusOf } from '../lib/instrument'
+import { INST_STATUSES, DEFAULT_STATUS, doneDates, donePatch, fmtDay, guessKind, instDone, memoLinks, linksPatch, normTag } from '../lib/instrument'
 import { isDefaultName } from '../lib/categories'
 import { convertTyped, hasHangul } from '../lib/hangulKeys'
 import { useImageUrl } from '../lib/images'
@@ -122,7 +122,7 @@ export function InstFields({ memo, onChange, kinds, onAddKind }) {
   }
   const setDesc = (desc) => onChange({ inst: { ...inst, desc } })
   const setKind = (kind) => onChange({ inst: { ...inst, kind } })
-  const setStatus = (status) => onChange({ inst: { ...inst, status }, color: statusOf(status).color })
+  const setDone = (done) => onChange(donePatch(inst, done))
 
   const addKind = () => {
     const k = newKind.trim().toUpperCase()
@@ -135,7 +135,8 @@ export function InstFields({ memo, onChange, kinds, onAddKind }) {
   }
 
   const label = 'text-[11px] font-semibold tracking-wide text-ink-500'
-  const status = inst.status ?? DEFAULT_STATUS
+  const done = instDone(inst)
+  const dated = doneDates(done)
   // 예전에 적은 종류(목록에 없는 글)도 고른 상태로 보이게
   const options = inst.kind && !kinds.includes(inst.kind) ? [...kinds, inst.kind] : kinds
 
@@ -199,34 +200,121 @@ export function InstFields({ memo, onChange, kinds, onAddKind }) {
       </div>
       <div className="flex items-start gap-2">
         <span className={`${label} w-20 shrink-0 pt-1`}>상태</span>
-        <StatusPicker value={status} onChange={setStatus} className="min-w-0 flex-1" />
+        <StatusPicker done={done} onChange={setDone} className="min-w-0 flex-1" />
       </div>
+      {/* 완료 날짜가 있는 작업만 카드 아래에 작게 */}
+      {dated.length > 0 && (
+        <div className="flex flex-wrap gap-x-3 gap-y-0.5 pl-[5.5rem] text-[11px] text-ink-500" aria-label="완료 날짜">
+          {dated.map((d) => (
+            <span key={d.id} className="flex items-center gap-1 whitespace-nowrap">
+              <span className="h-1.5 w-1.5 rounded-full" style={{ background: d.color }} />
+              {d.label} <span className="tabular-nums text-ink-600">{fmtDay(d.date)}</span>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
-// 상태 고르기 (설치 전 → 설치 → 결선 → 루프 체크 완료)
-export function StatusPicker({ value, onChange, className = '', small = false }) {
+// 상태(작업) 고르기: Hook-up · Cable Pulling · Termination · Loop Check 를 여러 개 고름.
+// 고를 때(또는 고른 것을 다시 누를 때) 아래에 완료 날짜 칸이 열림. Not Installed 는 고른 것을 모두 지움.
+// done: { 작업 id: 'YYYY-MM-DD' | '' }, onChange(done)
+const today = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+export function StatusPicker({ done, onChange, className = '' }) {
+  const [editing, setEditing] = useState(null) // 날짜 칸을 연 작업 id
+  const none = Object.keys(done).length === 0
+  const open = editing && editing in done ? INST_STATUSES.find((s) => s.id === editing) : null
+
+  const press = (id) => {
+    if (id === DEFAULT_STATUS) {
+      setEditing(null)
+      if (!none) onChange({})
+      return
+    }
+    if (!(id in done)) {
+      onChange({ ...done, [id]: '' })
+      setEditing(id)
+    } else setEditing((cur) => (cur === id ? null : id))
+  }
+  const setDate = (id, date) => onChange({ ...done, [id]: date })
+  const unpick = (id) => {
+    const next = { ...done }
+    delete next[id]
+    onChange(next)
+    setEditing(null)
+  }
+
   return (
-    <div className={`flex flex-wrap gap-1 ${className}`} role="group" aria-label="상태">
-      {INST_STATUSES.map((s) => {
-        const on = value === s.id
-        return (
-          <button
-            key={s.id}
-            type="button"
-            aria-pressed={on}
-            onClick={() => onChange(s.id)}
-            className={`flex items-center gap-1 rounded-full font-medium whitespace-nowrap ${small ? 'px-1.5 py-0 text-[11px]' : 'px-2 py-0.5 text-xs'} ${
-              on ? 'text-white' : 'text-ink-600 ring-1 ring-ink-200 hover:bg-ink-50'
-            }`}
-            style={on ? { background: s.color } : undefined}
-          >
-            {!on && <span className="h-2 w-2 rounded-full" style={{ background: s.color }} />}
-            {s.label}
+    <div className={`flex flex-col gap-1.5 ${className}`}>
+      <div className="flex flex-wrap gap-1" role="group" aria-label="상태 (여러 개 고르기)">
+        {INST_STATUSES.map((s) => {
+          const on = s.id === DEFAULT_STATUS ? none : s.id in done
+          const date = done[s.id]
+          return (
+            <button
+              key={s.id}
+              type="button"
+              aria-pressed={on}
+              aria-expanded={s.id === DEFAULT_STATUS ? undefined : open?.id === s.id}
+              onClick={() => press(s.id)}
+              title={s.id === DEFAULT_STATUS ? '고른 작업 모두 지우기' : on ? `${s.label} 완료 날짜 바꾸기·선택 해제` : `${s.label} 완료로 표시하고 날짜 고르기`}
+              className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${on ? 'text-white' : 'text-ink-600 ring-1 ring-ink-200 hover:bg-ink-50'} ${
+                open?.id === s.id ? 'ring-2 ring-offset-1 ring-offset-surface' : ''
+              }`}
+              style={on ? { background: s.color, '--tw-ring-color': s.color } : undefined}
+            >
+              {!on && <span className="h-2 w-2 rounded-full" style={{ background: s.color }} />}
+              {on && s.id !== DEFAULT_STATUS && (
+                <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M5 12l5 5 9-10" />
+                </svg>
+              )}
+              {s.label}
+              {date && <span className="sr-only"> {fmtDay(date)}</span>}
+            </button>
+          )
+        })}
+      </div>
+      {open && (
+        <div
+          className="flex flex-wrap items-center gap-1.5 rounded-md bg-ink-50 px-2 py-1.5 text-xs"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape' || e.key === 'Enter') {
+              e.preventDefault()
+              e.stopPropagation()
+              setEditing(null)
+            }
+          }}
+        >
+          <span className="flex items-center gap-1 font-semibold text-ink-700">
+            <span className="h-2 w-2 rounded-full" style={{ background: open.color }} />
+            {open.label} 완료일
+          </span>
+          <input
+            type="date"
+            autoFocus
+            value={done[open.id] ?? ''}
+            onChange={(e) => setDate(open.id, e.target.value)}
+            className="rounded border border-ink-200 bg-surface px-1.5 py-0.5 text-xs tabular-nums text-ink-800 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+            aria-label={`${open.label} 완료 날짜`}
+          />
+          <button type="button" onClick={() => setDate(open.id, today())} className="rounded px-1.5 py-0.5 text-brand-700 hover:bg-brand-50">
+            오늘
           </button>
-        )
-      })}
+          <span className="flex-1" />
+          <button type="button" onClick={() => unpick(open.id)} className="rounded px-1.5 py-0.5 text-ink-500 hover:bg-ink-100 hover:text-ink-700" title="이 작업을 고른 것에서 빼기">
+            선택 해제
+          </button>
+          <button type="button" onClick={() => setEditing(null)} className="rounded bg-ink-800 px-2 py-0.5 font-medium text-surface hover:bg-ink-700">
+            확인
+          </button>
+        </div>
+      )}
     </div>
   )
 }

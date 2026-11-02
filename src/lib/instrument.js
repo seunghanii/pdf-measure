@@ -1,5 +1,5 @@
 // 계기 카드: 메모 범위 하나를 계기(태그) 하나로 씁니다.
-// 메모 항목에 inst: { tag, kind, status } 를 더하면 계기 카드가 됨 (없으면 예전 메모 그대로)
+// 메모 항목에 inst: { tag, kind, status, done } 를 더하면 계기 카드가 됨 (없으면 예전 메모 그대로)
 // kind 는 계기 종류 약어(FT, PT …). 목록은 KIND_PRESETS + 사용자가 더한 것(폴더 정보 library.kinds, 모든 도면 공통)
 // (PR #44 판에 있던 service·loop 는 화면에서 뺐고, 이미 적힌 값은 검색에만 남음)
 // 관련 문서(Hook-up, 데이터시트 …)는 links: [{ id, name, page, role }] 로 여러 개.
@@ -9,7 +9,8 @@
 import { isMarkup, rectOf } from './markup'
 
 export const INST_STATUSES = [
-  { id: 'pre', label: '설치 전', color: '#64748b' },
+  { id: 'pre', label: 'Not Installed', color: '#64748b' },
+  { id: 'hookup', label: 'Hook-up', color: '#7c3aed' },
   // id 는 PR #44 판 그대로 (설치·결선·루프 체크 완료 → 이름만 현장 용어로)
   { id: 'installed', label: 'Cable Pulling', color: '#2563eb' },
   { id: 'wired', label: 'Termination', color: '#d97706' },
@@ -17,6 +18,41 @@ export const INST_STATUSES = [
 ]
 export const DEFAULT_STATUS = 'pre'
 export const statusOf = (id) => INST_STATUSES.find((s) => s.id === id) ?? INST_STATUSES[0]
+
+// ---------- 작업(상태) 여러 개 + 완료 날짜 ----------
+// inst.done = { hookup: '2026-11-01', installed: '' … } : 고른 작업과 완료 날짜(YYYY-MM-DD, 비우면 날짜 없음)
+// inst.status 는 고른 작업 중 가장 뒤 단계 (없으면 'pre'). 목록·색·필터·예전 판은 이 값을 씀.
+// 예전 데이터(done 없음)는 status 하나만 고른 것으로 읽음.
+const STEP_IDS = INST_STATUSES.filter((s) => s.id !== DEFAULT_STATUS).map((s) => s.id)
+export function instDone(inst) {
+  if (inst?.done && typeof inst.done === 'object') {
+    const out = {}
+    for (const id of STEP_IDS) if (id in inst.done) out[id] = typeof inst.done[id] === 'string' ? inst.done[id] : ''
+    return out
+  }
+  const st = inst?.status
+  return st && st !== DEFAULT_STATUS && STEP_IDS.includes(st) ? { [st]: '' } : {}
+}
+export const statusFromDone = (done) => [...STEP_IDS].reverse().find((id) => id in done) ?? DEFAULT_STATUS
+// inst 에 합칠 값과 색 (항목 patch)
+export function donePatch(inst, done) {
+  const status = statusFromDone(done)
+  return { inst: { ...inst, done, status }, color: statusOf(status).color }
+}
+// 목록의 상태 고르기(하나만 고르는 칸): 그 단계까지 고른 작업·날짜는 두고, 뒤 단계는 뺌
+export function doneUpTo(inst, status) {
+  const cur = instDone(inst)
+  if (status === DEFAULT_STATUS) return {}
+  const upto = STEP_IDS.indexOf(status)
+  const out = {}
+  for (const id of STEP_IDS.slice(0, upto + 1)) if (id in cur) out[id] = cur[id]
+  if (!(status in out)) out[status] = ''
+  return out
+}
+// 날짜 표시: 2026-11-02 → 2026.11.02
+export const fmtDay = (d) => (d ? d.replaceAll('-', '.') : '')
+// 날짜가 있는 작업 [{ id, label, color, date }] (단계 순서)
+export const doneDates = (done) => STEP_IDS.filter((id) => done?.[id]).map((id) => ({ ...statusOf(id), date: done[id] }))
 
 // 관련 문서 종류 기본 목록. 사용자가 고치면 library.docRoles 에 목록 전체를 저장(모든 도면 공통)
 // 목록에서 빼거나 이름을 바꿔도 이미 연결한 문서의 role 글은 그대로 남아 보임
@@ -219,6 +255,7 @@ export function instRows(measurements) {
       desc: i.desc ?? '',
       kind: i.kind ?? '',
       status: i.status ?? DEFAULT_STATUS,
+      done: instDone(i),
       docs: memoLinks(m).map((l) => (l.photo ? { photo: 1, name: l.name, page: 1, role: l.role ?? '' } : { id: l.id, name: l.name, page: l.page ?? 1, role: l.role ?? '' })),
       hidden: m.hidden ? 1 : 0,
     })
@@ -230,12 +267,18 @@ export function instRows(measurements) {
 const collator = new Intl.Collator('ko', { numeric: true, sensitivity: 'base' })
 export const compareTags = (a, b) => collator.compare(a.tag || '￿', b.tag || '￿') || a.page - b.page
 
+// CSV '완료 작업' 칸: Hook-up 2026.11.01; Cable Pulling
+const doneText = (r) => {
+  const done = r.done ?? instDone(r)
+  return STEP_IDS.filter((id) => id in done).map((id) => `${statusOf(id).label}${done[id] ? ` ${fmtDay(done[id])}` : ''}`).join('; ')
+}
+
 // CSV 한 칸
 const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
 
 export function downloadInstCsv(rows, fileBase) {
-  const head = ['Tag. No', 'Description', '종류', '상태', '도면', '페이지', '관련 문서']
-  const lines = [head, ...rows.map((r) => [r.tag, r.desc ?? '', r.kind, statusOf(r.status).label, r.docName, r.page, r.docs.map((d) => `${d.role ? `${d.role}: ` : ''}${d.name}${d.photo ? ' (사진)' : d.page > 1 ? ` (${d.page}쪽)` : ''}`).join('; ')])]
+  const head = ['Tag. No', 'Description', '종류', '상태', '완료 작업', '도면', '페이지', '관련 문서']
+  const lines = [head, ...rows.map((r) => [r.tag, r.desc ?? '', r.kind, statusOf(r.status).label, doneText(r), r.docName, r.page, r.docs.map((d) => `${d.role ? `${d.role}: ` : ''}${d.name}${d.photo ? ' (사진)' : d.page > 1 ? ` (${d.page}쪽)` : ''}`).join('; ')])]
   const csv = lines.map((l) => l.map(cell).join(',')).join('\r\n')
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }) // 엑셀에서 한글이 깨지지 않게 BOM
   const a = document.createElement('a')

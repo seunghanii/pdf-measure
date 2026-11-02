@@ -1,6 +1,6 @@
 import { withoutTrashed } from '../lib/trash'
 import { useEffect, useMemo, useState } from 'react'
-import { INST_STATUSES, compareTags, downloadInstCsv, findTags, guessKind, instRows, kindDesc, statusOf, tagKey } from '../lib/instrument'
+import { INST_STATUSES, compareTags, doneDates, fmtDay, instDone, downloadInstCsv, findTags, guessKind, instRows, kindDesc, statusOf, tagKey } from '../lib/instrument'
 import { textHas } from '../lib/textIndex'
 import { useIndexerStatus } from '../lib/indexer'
 
@@ -58,6 +58,21 @@ export default function InstrumentPanel({
       ) : (
         <TagFinder docId={docId} kinds={kinds} measurements={measurements} textIndex={textIndex} onPreview={onPreview} onCreate={onCreateCards} onDone={() => onTab('list')} />
       )}
+    </div>
+  )
+}
+
+// 상태 아래 작은 줄: 날짜를 넣은 작업 (예: Hook-up 2026.11.01)
+function DoneDates({ row }) {
+  const dated = doneDates(row.done ?? instDone(row))
+  if (!dated.length) return null
+  return (
+    <div className="mt-0.5 flex flex-col text-[10px] leading-tight text-ink-400" title={dated.map((d) => `${d.label} ${fmtDay(d.date)}`).join('\n')}>
+      {dated.map((d) => (
+        <span key={d.id} className="whitespace-nowrap">
+          {d.label} <span className="tabular-nums">{fmtDay(d.date)}</span>
+        </span>
+      ))}
     </div>
   )
 }
@@ -256,6 +271,7 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
                           {statusOf(r.status).label}
                         </span>
                       )}
+                      <DoneDates row={r} />
                     </td>
                     <td className="max-w-36 px-2 py-1.5 align-top text-xs text-ink-500">
                       {scope === 'all' && <div className="truncate" title={r.docName}>{r.docName}</div>}
