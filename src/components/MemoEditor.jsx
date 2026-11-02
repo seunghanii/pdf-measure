@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { clipPictureCandidates, clipPictureUrls, fetchPictures, readClipboardPictures } from '../lib/clipPicture'
 import { htmlToMarkdown, inlineHtml, isSheetHtml, markdownToHtml, photoHtml, rowsToMarkdown, tableRows, tsvRows, xlsFromPaste, xlsTableHtml } from '../lib/memoMarkdown'
 
 // 메모 글 상자. 쓰는 그 자리에서 마크다운이 바로 적용됩니다 (예: "# " 를 치면 그 줄이 제목으로).
@@ -206,7 +207,8 @@ function xlsEdgeCell(editor, e) {
 
 // apiRef.current.insertPhotos(ids): 커서 자리(없으면 맨 끝)에 사진 넣기
 // loadPhoto(id) → Promise<주소>, onOpenPhoto(ids, i): 사진 크게 보기
-export default function MemoEditor({ initial, editorRef, apiRef, onEdit, onPasteFiles, loadPhoto, onOpenPhoto, autoFocus }) {
+// onPasteFail(types): 붙여넣은 것에서 글도 그림도 못 찾았을 때 (types: 클립보드에 있던 형식)
+export default function MemoEditor({ initial, editorRef, apiRef, onEdit, onPasteFiles, onPasteFail, loadPhoto, onOpenPhoto, autoFocus }) {
   const [empty, setEmpty] = useState(!String(initial ?? '').trim())
   const [inTable, setInTable] = useState(false)
   const history = useRef({ undo: [], redo: [], typingAt: 0 })
@@ -619,16 +621,24 @@ export default function MemoEditor({ initial, editorRef, apiRef, onEdit, onPaste
     const cd = e.clipboardData
     if (!cd) return
     e.stopPropagation() // 도면의 Ctrl+V 사진 넣기까지 가지 않게
-    const files = [...(cd.files ?? [])].filter((f) => f.type.startsWith('image/'))
     const html = cd.getData('text/html')
     const plain = cd.getData('text/plain')
-    // 사진만 복사한 경우 (엑셀은 표와 함께 그림도 주므로 표가 있으면 표가 먼저)
-    if (files.length && !/<table/i.test(html)) {
+    const types = [...(cd.types ?? [])]
+    // 그림 (비트맵 사진, 엑셀 "그림으로 복사"의 PDF·벡터 그림, 그림만 있는 HTML)
+    const files = clipPictureCandidates(cd)
+    const hasTable = /<table/i.test(html)
+    // 사진만 복사한 경우 (엑셀 셀 복사는 표와 함께 그림도 주므로 표가 있으면 표가 먼저)
+    if (files.length && !hasTable) {
       e.preventDefault()
       onPasteFiles(files)
       return
     }
     e.preventDefault()
+    const urls = hasTable ? [] : clipPictureUrls(cd)
+    if (urls.length) {
+      fetchPictures(urls).then((b) => (b.length ? onPasteFiles(b) : onPasteFail?.(types)))
+      return
+    }
     const el = editorRef.current
     const cell = cellAt(el, window.getSelection().focusNode)
     let rows = null
@@ -650,7 +660,13 @@ export default function MemoEditor({ initial, editorRef, apiRef, onEdit, onPaste
       md = rows[0][0].replace(/<br>/g, ' ')
       rows = null
     }
-    if (!rows && !md) return
+    if (!rows && !md) {
+      // 붙여넣기 이벤트에 읽을 것이 없음: 시스템 클립보드를 직접 읽어 그림을 찾아 봄
+      if (!plain.trim()) {
+        readClipboardPictures().then(({ blobs, types: more }) => (blobs.length ? onPasteFiles(blobs) : onPasteFail?.([...new Set([...types, ...more])])))
+      }
+      return
+    }
     record()
     if (xls && !cell) insertBlocks(xlsTableHtml(xls))
     else if (rows && cell?.closest('table')?.dataset.xls) exec('insertText', rows.map((r) => r.join(' ')).join(' ').replace(/<br>/g, ' '))

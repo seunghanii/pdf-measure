@@ -3,6 +3,7 @@ import { cachedImageUrl, getImageBlob, isImageFile, newImageId, prepareImage, re
 import { memoSummary, migrateMemo } from '../lib/memo'
 import { setMemoDock, useMemoDock } from '../lib/memoDock'
 import { htmlToMarkdown } from '../lib/memoMarkdown'
+import { toPictureFile } from '../lib/clipPicture'
 import MemoEditor, { MemoHelp } from './MemoEditor'
 import PhotoViewer from './PhotoViewer'
 import DocPreview from './DocPreview'
@@ -97,14 +98,15 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
   }
 
   // 사진 넣기 (도면 사진과 같은 방식으로 줄여서 따로 저장)
+  // files: 사진 파일, 또는 붙여넣은 그림(엑셀 "그림으로 복사"의 PDF 그림 등, lib/clipPicture.js 가 사진으로 바꿈)
   const addImages = async (files) => {
-    const list = files.filter(isImageFile)
+    const list = files.filter((f) => isImageFile(f) || !f.type || f.type === 'application/pdf')
     if (!list.length) return
     setBusy((n) => n + list.length)
     const added = []
     for (const file of list) {
       try {
-        const img = await prepareImage(file, { maxSide: MEMO_PHOTO_SIDE })
+        const img = await prepareImage(await toPictureFile(file), { maxSide: MEMO_PHOTO_SIDE })
         const imageId = newImageId()
         rememberImage(imageId, img.blob)
         store.saveImage(docId, imageId, img.blob).catch((e) => {
@@ -350,6 +352,12 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
             apiRef={editorApi}
             onEdit={onEdit}
             onPasteFiles={addImages}
+            onPasteFail={(types) => {
+              console.warn('붙여넣기: 읽을 수 있는 글·그림 없음', types)
+              onNotice(
+                `붙여넣은 그림 형식을 브라우저가 읽지 못했어요${types.length ? ` (${types.join(', ')})` : ''}. 엑셀 "그림으로 복사"에서 형식을 '비트맵'으로 골라 다시 복사해 주세요.`,
+              )
+            }}
             loadPhoto={loadPhoto}
             onOpenPhoto={(ids, index) => setViewing({ ids, index })}
             autoFocus={!initialText}
