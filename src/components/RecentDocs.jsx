@@ -62,7 +62,7 @@ export default function RecentDocs({ list, library, openIds, onOpen }) {
         </svg>
       </button>
       {!hidden && (
-        <ul className="divide-y divide-ink-100 overflow-hidden rounded-xl bg-surface shadow-sm">
+        <ul className="divide-y divide-ink-100 rounded-xl bg-surface shadow-sm max-h-80 overflow-y-auto overscroll-contain lg:max-h-[max(12rem,calc((100dvh-15rem)/2))]">
           {items.map((item) => {
             const alias = library.aliases?.[item.id]
             const path = folderPath(library, library.assign[item.id])
