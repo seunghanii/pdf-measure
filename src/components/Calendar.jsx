@@ -18,7 +18,7 @@ import {
   startOfMonth,
   weekdayOrder,
 } from '../lib/calendar'
-import { EMPTY_CAL, EVENT_COLORS, equipByDay, eventOn, eventsByDay, newEventId } from '../lib/calEvents'
+import { EMPTY_CAL, EVENT_COLORS, equipByDay, eventOn, eventsByDay, newEventId, weekLanes } from '../lib/calEvents'
 import { displayName } from '../lib/library'
 
 // 오늘 날짜: 자정이 지나거나 창으로 돌아오면 새로 고침
@@ -245,7 +245,15 @@ function CalendarDialog({ initial, today, weekend, onWeekend, events, onSaveEven
   const lines = useCellLines()
   const order = weekdayOrder()
   const cells = useMemo(() => monthGrid(month), [month])
-  const evMap = useMemo(() => eventsByDay(events, cells.map((c) => c.key)), [events, cells])
+  // 주마다 일정 줄 배치 (여러 날 일정이 이어진 막대로 보이게)
+  const slotMap = useMemo(() => {
+    const map = new Map()
+    for (let w = 0; w < cells.length; w += 7) {
+      const keys = cells.slice(w, w + 7).map((c) => c.key)
+      weekLanes(keys, events).forEach((col, i) => map.set(keys[i], col))
+    }
+    return map
+  }, [events, cells])
   useWheelMonth(gridRef, (n) => setMonth((m) => addMonths(m, n)))
 
   const closeRef = useRef(null)
@@ -374,7 +382,7 @@ function CalendarDialog({ initial, today, weekend, onWeekend, events, onSaveEven
                   key={cell.key}
                   {...cell}
                   lines={lines}
-                  events={evMap.get(cell.key) ?? []}
+                  slots={slotMap.get(cell.key) ?? []}
                   equip={equip.get(cell.key) ?? []}
                   isToday={sameDay(cell.date, today)}
                   isSelected={sameDay(cell.date, selected)}
@@ -424,11 +432,11 @@ function CalendarDialog({ initial, today, weekend, onWeekend, events, onSaveEven
 
 const timeOf = (e) => (e.time ? `${e.time} ` : '')
 
-function DayCell({ date, inMonth, isToday, isSelected, off, events, equip, lines, onSelect, onAdd, onEdit }) {
-  const all = [...events.map((e) => ({ type: 'ev', e })), ...equip.map((q) => ({ type: 'eq', q }))]
-  // 다 들어가면 그대로, 넘치면 마지막 줄을 +N 자리로
-  const fit = all.length <= lines ? all.length : Math.max(lines - 1, 0)
-  const rest = all.length - fit
+function DayCell({ date, inMonth, isToday, isSelected, off, slots, equip, lines, onSelect, onAdd, onEdit }) {
+  // 일정 줄(빈 줄 포함, 주 안에서 같은 일정은 같은 줄) 다음에 Equipment. 다 들어가면 그대로, 넘치면 마지막 줄을 +N 자리로
+  const rows = [...slots.map((s) => (s ? { type: 'ev', s } : { type: 'gap' })), ...equip.map((q) => ({ type: 'eq', q }))]
+  const fit = rows.length <= lines ? rows.length : Math.max(lines - 1, 0)
+  const rest = rows.slice(fit).filter((r) => r.type !== 'gap').length
   return (
     <div
       role="button"
@@ -438,40 +446,45 @@ function DayCell({ date, inMonth, isToday, isSelected, off, events, equip, lines
       onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onSelect())}
       aria-current={isToday ? 'date' : undefined}
       aria-pressed={isSelected}
-      className={`flex h-20 min-w-0 cursor-pointer flex-col items-stretch gap-px p-1 text-left transition-colors select-none sm:h-24 lg:h-28 ${
+      className={`relative flex h-20 min-w-0 cursor-pointer flex-col items-stretch gap-px py-1 text-left transition-colors select-none sm:h-24 lg:h-28 ${
         inMonth ? 'bg-surface' : 'bg-ink-50'
-      } ${isSelected ? 'ring-2 ring-brand-500 ring-inset' : 'hover:bg-brand-50/60'}`}
+      } ${isSelected ? 'after:pointer-events-none after:absolute after:inset-0 after:z-10 after:ring-2 after:ring-brand-500 after:ring-inset' : 'hover:bg-brand-50/60'}`}
     >
-      <span className={`mb-0.5 flex h-6 min-w-6 shrink-0 items-center justify-center self-start rounded-full px-1 text-sm tabular-nums ${dayTone(isToday, off, inMonth)}`}>
+      <span className={`mx-1 mb-0.5 flex h-6 min-w-6 shrink-0 items-center justify-center self-start rounded-full px-1 text-sm tabular-nums ${dayTone(isToday, off, inMonth)}`}>
         {date.getDate()}
       </span>
-      {all.slice(0, fit).map((it) =>
-        it.type === 'ev' ? (
-          <button
-            key={it.e.id}
-            onClick={(e) => {
-              e.stopPropagation()
-              onEdit(it.e)
-            }}
-            onDoubleClick={(e) => e.stopPropagation()}
-            title={`${timeOf(it.e)}${it.e.title}`}
-            className="truncate rounded px-1 text-left text-[11px] leading-4 font-medium text-white"
-            style={{ backgroundColor: it.e.color }}
-          >
-            {timeOf(it.e)}
-            {it.e.title || '(제목 없음)'}
-          </button>
-        ) : (
-          <span key={it.q.key} title={`${it.q.tag} - ${it.q.label}${it.q.desc ? ` (${it.q.desc})` : ''}`} className="flex min-w-0 items-center gap-1 px-0.5 text-[11px] leading-4 text-ink-700">
-            <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: it.q.color }} />
-            <span className="truncate">
-              <span className="font-medium">{it.q.tag}</span>
-              <span className="text-ink-500"> - {it.q.label}</span>
+      {rows.slice(0, fit).map((r, i) => {
+        if (r.type === 'gap') return <span key={`g${i}`} className="h-4 shrink-0" aria-hidden="true" />
+        if (r.type === 'eq')
+          return (
+            <span key={r.q.key} title={`${r.q.tag} - ${r.q.label}${r.q.desc ? ` (${r.q.desc})` : ''}`} className="mx-1 flex min-w-0 items-center gap-1 px-0.5 text-[11px] leading-4 text-ink-700">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: r.q.color }} />
+              <span className="truncate">
+                <span className="font-medium">{r.q.tag}</span>
+                <span className="text-ink-500"> - {r.q.label}</span>
+              </span>
             </span>
-          </span>
-        ),
-      )}
-      {rest > 0 && <span className="px-1 text-[11px] leading-4 font-medium text-ink-500">+{rest}</span>}
+          )
+        const { e, contLeft, contRight, showTitle } = r.s
+        return (
+          <button
+            key={e.id}
+            onClick={(ev) => {
+              ev.stopPropagation()
+              onEdit(e)
+            }}
+            onDoubleClick={(ev) => ev.stopPropagation()}
+            title={`${timeOf(e)}${e.title}${e.end ? ` (${e.date.slice(5).replace('-', '/')}~${e.end.slice(5).replace('-', '/')})` : ''}`}
+            className={`relative h-4 shrink-0 truncate px-1 text-left text-[11px] leading-4 font-medium text-white ${
+              contLeft ? '-ml-px rounded-l-none' : 'ml-1 rounded-l'
+            } ${contRight ? 'rounded-r-none' : 'mr-1 rounded-r'}`}
+            style={{ backgroundColor: e.color }}
+          >
+            {showTitle ? `${timeOf(e)}${e.title || '(제목 없음)'}` : '\u00a0'}
+          </button>
+        )
+      })}
+      {rest > 0 && <span className="mx-1 px-1 text-[11px] leading-4 font-medium text-ink-500">+{rest}</span>}
     </div>
   )
 }

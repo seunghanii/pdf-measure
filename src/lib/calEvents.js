@@ -86,3 +86,40 @@ export function equipByDay(list) {
 }
 
 export const todayKey = () => dayKey(new Date())
+
+// 한 주(7칸) 일정 줄 배치: 여러 날 일정이 칸마다 같은 줄에 오게 해서 막대로 이어 보이게 함.
+// 돌려주는 값: 7칸 각각의 줄 목록 [{ e, contLeft, contRight, showTitle } | null] (null = 빈 줄, 위아래 맞춤용)
+export function weekLanes(keys, events) {
+  const first = keys[0]
+  const last = keys[keys.length - 1]
+  const span = (e) => {
+    let s = -1
+    let t = -1
+    keys.forEach((k, i) => {
+      if (eventOn(e, k)) {
+        if (s < 0) s = i
+        t = i
+      }
+    })
+    return [s, t]
+  }
+  const list = events
+    .filter((e) => (e.end ?? e.date) >= first && e.date <= last)
+    .map((e) => ({ e, r: span(e) }))
+    .filter((x) => x.r[0] >= 0)
+    .sort((a, b) => a.r[0] - b.r[0] || b.r[1] - b.r[0] - (a.r[1] - a.r[0]) || byTime(a.e, b.e))
+  const lanes = []
+  for (const { e, r } of list) {
+    let lane = lanes.find((l) => l.slice(r[0], r[1] + 1).every((x) => !x))
+    if (!lane) lanes.push((lane = Array(keys.length).fill(null)))
+    for (let i = r[0]; i <= r[1]; i++) {
+      const contLeft = e.date < keys[i]
+      lane[i] = { e, contLeft, contRight: (e.end ?? e.date) > keys[i], showTitle: !contLeft || i === 0 }
+    }
+  }
+  return keys.map((_, i) => {
+    const col = lanes.map((l) => l[i])
+    while (col.length && !col[col.length - 1]) col.pop()
+    return col
+  })
+}
