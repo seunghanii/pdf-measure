@@ -3,6 +3,7 @@ import { INST_LABELS, INST_STATUSES, DEFAULT_STATUS, doneDates, donePatch, fmtDa
 import { isDefaultName } from '../lib/categories'
 import { convertTyped, hasHangul } from '../lib/hangulKeys'
 import { useImageUrl } from '../lib/images'
+import BoxIcon from './BoxIcon'
 
 // 메모장 안의 계기 카드 칸: Tag. No, Description, 종류, 상태
 // onChange(patch): 메모 항목에 합칠 값. kinds: 계기 종류 목록, onAddKind(약어): 목록에 더하기 (모든 도면 공통)
@@ -365,7 +366,7 @@ export function RelatedDocs({ memo, library, onChange, onOpen, onPick }) {
               <button
                 onClick={() => onOpen(l)}
                 className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md bg-brand-50 px-2 py-1 text-left text-brand-700 hover:bg-brand-100"
-                title="이 도면 미리보기 (파일 열기 버튼으로 탭 열기)"
+                title={l.item ? '이 도면 미리보기 (파일 열기 버튼으로 탭을 열고 그 박스로 가요)' : '이 도면 미리보기 (파일 열기 버튼으로 탭 열기)'}
               >
                 {l.role && <span className="shrink-0 rounded bg-surface px-1.5 py-px text-[11px] font-semibold text-brand-800 ring-1 ring-brand-200">{l.role}</span>}
                 {library?.aliases?.[l.id] ? (
@@ -379,6 +380,12 @@ export function RelatedDocs({ memo, library, onChange, onOpen, onPick }) {
                   <span className="truncate font-medium">{l.name}</span>
                 )}
                 {l.page > 1 && <span className="shrink-0 text-brand-500">{l.page}쪽</span>}
+                {l.item && (
+                  <span className="flex min-w-0 shrink items-center gap-1 rounded bg-surface px-1.5 py-px text-[11px] text-brand-700 ring-1 ring-brand-200" title={`이 도면의 "${l.itemName}" 박스로 가요`}>
+                    <BoxIcon className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{l.itemName || '박스'}</span>
+                  </span>
+                )}
                 <svg viewBox="0 0 24 24" className="ml-auto h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" />
                   <circle cx="12" cy="12" r="3" />

@@ -118,3 +118,16 @@ export function trackActivity(prev, next, activity, now = Date.now()) {
 }
 
 export const ACTION_LABEL = { add: '추가', edit: '수정', del: '삭제' }
+
+// 도면 연결 박스가 가리키는 항목: 자리 { x, y, w, h } 와 한 줄 이름 ("Equipment · FT-1001")
+export function itemRect(m) {
+  const r = rectOfItem(m)
+  return r ? { x: r[0], y: r[1], w: Math.max(r[2], 1), h: Math.max(r[3], 1) } : null
+}
+export function itemLabel(m) {
+  const what = whatOf(m)
+  const name = nameOf(m)
+  // "사각형 · 사각형 1" 처럼 겹치면 이름만
+  if (!name || name === what) return what
+  return name.startsWith(what) ? name : `${what} · ${name}`
+}

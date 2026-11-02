@@ -90,6 +90,16 @@ export const memoLinks = (m) => (Array.isArray(m?.links) ? m.links : m?.link ? [
 export const linksPatch = (links) => ({ links, link: links.find((l) => !l.photo) ?? null })
 // 사진 연결인지, 메모에 연결된 사진 id 들 (정리·복사 때 씀)
 export const isPhotoLink = (l) => !!l?.photo
+// 박스 연결: 도면 연결에 그 도면의 항목 하나를 더 가리킴 { id, name, page, item: 항목 id, itemName, rect }
+// 누르면 그 도면을 열고 그 박스로 확대해 깜빡임. page·rect 는 고를 때 자리 (박스가 옮겨졌으면 열 때 지금 자리로 감)
+export const isBoxLink = (l) => !!l?.item && !l.photo
+export function unboxLink(l) {
+  const out = { ...l }
+  delete out.item
+  delete out.itemName
+  delete out.rect
+  return out
+}
 export const memoLinkPhotoIds = (m) => memoLinks(m).filter(isPhotoLink).map((l) => l.photo)
 
 // 태그 모양 맞추기: 대문자, 띄어쓰기 → '-' ("ft 1001" → "FT-1001")

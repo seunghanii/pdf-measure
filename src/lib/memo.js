@@ -49,7 +49,11 @@ export function memoSummary(m) {
   const photos = memoPhotoIds(m).length
   if (photos) return `사진 ${photos}장`
   const links = memoLinks(m)
-  if (links.length) return `→ ${links[0].name}${!links[0].photo && links[0].page > 1 ? ` ${links[0].page}쪽` : ''}${links.length > 1 ? ` 외 ${links.length - 1}개` : ''}`
+  if (links.length) {
+    const l = links[0]
+    const box = !l.photo && l.item && l.itemName ? ` › ${l.itemName}` : ''
+    return `→ ${l.name}${!l.photo && l.page > 1 ? ` ${l.page}쪽` : ''}${box}${links.length > 1 ? ` 외 ${links.length - 1}개` : ''}`
+  }
   return ''
 }
 

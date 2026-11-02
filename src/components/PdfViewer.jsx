@@ -81,6 +81,7 @@ export default function PdfViewer({
   onDelete, // (ids) 선택 상자의 × 단추
   onDuplicate, // (ids) 선택 상자의 복제 단추
   textIndex, // 도면 글자 색인 (글자 복사 도구)
+  onPickItem, // (id) 박스 고르기 중: 누른 항목. 있으면 항목을 누르면 고르고, 빈 곳을 끌면 화면 이동만 함
 }) {
   const containerRef = useRef(null)
   const pageEls = useRef([])
@@ -602,7 +603,7 @@ export default function PdfViewer({
 
   const onPointerDown = (e, page) => {
     // 손가락은 잠깐 미뤄 둠: 곧 두 번째 손가락이 닿으면 핀치라서 점을 찍거나 그리지 않음
-    if (e.pointerType === 'touch' && !e.replay && !panning) {
+    if (e.pointerType === 'touch' && !e.replay && (!panning || onPickItem)) {
       const svg = e.currentTarget
       clearPendingTouch()
       pendingTouchRef.current = {
@@ -611,6 +612,18 @@ export default function PdfViewer({
         timer: setTimeout(() => touchHandlersRef.current.flush(), TOUCH_DELAY),
       }
       return
+    }
+    // 박스 고르기: 누른 자리의 항목 (기준선은 빼고)
+    if (onPickItem && e.button === 0 && !spaceDown) {
+      const shape = document
+        .elementsFromPoint(e.clientX, e.clientY)
+        .map((el) => el.closest?.('[data-shape]'))
+        .find((el) => el && el.dataset.shape !== 'calibration')
+      if (shape) {
+        e.preventDefault()
+        onPickItem(shape.dataset.shape)
+        return
+      }
     }
     if (e.button === 1 || (e.button === 0 && panning)) {
       e.preventDefault()
@@ -1099,7 +1112,7 @@ export default function PdfViewer({
                 <svg
                   width={w}
                   height={h}
-                  className={`absolute inset-0 touch-none select-none ${tool === 'select' || tool === 'memo' || panning ? 'memo-hover' : ''}`}
+                  className={`absolute inset-0 touch-none select-none ${onPickItem ? 'box-pick' : tool === 'select' || tool === 'memo' || panning ? 'memo-hover' : ''}`}
                   style={{ cursor: cursorStyle }}
                   onPointerDown={(e) => onPointerDown(e, page)}
                   onPointerMove={(e) => onPointerMove(e, page)}
