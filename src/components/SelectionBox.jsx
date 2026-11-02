@@ -7,6 +7,7 @@ const BLUE = 'var(--color-brand-600)'
 const RED = 'var(--color-danger-600)'
 const BTN_R = 11 // 보이는 × 단추 반지름(px)
 const HIT_R = 16 // 손가락으로도 누르기 쉽게 잡히는 반지름(px)
+const GAP = 30 // 복제 단추와 × 단추 사이(가운데끼리, px)
 const OFFSET = 20 // 상자 모서리에서 바깥으로 띄운 거리: 모서리 크기 손잡이와 겹치지 않게
 const RESIZABLE = new Set(['highlight', 'rect', 'memo', 'text', 'image'])
 
@@ -48,14 +49,49 @@ export function groupBox(items, selectedIds, zoom, editingId) {
   return { x: x1 - 4, y: y1 - 4, w: x2 - x1 + 8, h: y2 - y1 + 8 }
 }
 
-const SelectionBox = memo(function SelectionBox({ items, selectedIds, zoom, width, height, editingId, canDelete, onDelete, isPinching }) {
+// 상자 오른쪽 위의 둥근 단추 하나(삭제·복제). 누른 자리에서 뗄 때만 동작해 끌기·핀치와 섞이지 않음
+function RoundButton({ cx, cy, color, className, label, title, onPress, isPinching, data, children }) {
   const downRef = useRef(null)
+  return (
+    <g
+      {...data}
+      pointerEvents="auto"
+      role="button"
+      aria-label={label}
+      style={{ cursor: 'pointer' }}
+      // 도면 쪽 동작(끌기·상자 선택)이 시작되지 않게 여기서 멈춤
+      onPointerDown={(e) => {
+        if (e.button !== 0) return
+        e.stopPropagation()
+        e.preventDefault()
+        downRef.current = { id: e.pointerId, x: e.clientX, y: e.clientY }
+      }}
+      onPointerUp={(e) => {
+        const d = downRef.current
+        downRef.current = null
+        if (!d || d.id !== e.pointerId) return
+        e.stopPropagation()
+        if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 12 || isPinching?.(e.pointerId)) return
+        onPress()
+      }}
+      onPointerCancel={() => (downRef.current = null)}
+    >
+      <title>{title}</title>
+      <circle cx={cx} cy={cy} r={HIT_R} fill="transparent" />
+      <circle cx={cx} cy={cy} r={BTN_R + 2} fill="white" />
+      <circle className={className} cx={cx} cy={cy} r={BTN_R} fill={color} />
+      {children}
+    </g>
+  )
+}
+
+const SelectionBox = memo(function SelectionBox({ items, selectedIds, zoom, width, height, editingId, canDelete, onDelete, onDuplicate, isPinching }) {
   if (!items || !selectedIds.length) return null
   const picked = items.filter((m) => m.id !== editingId && selectedIds.includes(m.id) && m.points?.length)
   if (!picked.length) return null
   const boxes = picked.map((m) => boxOf(m, zoom))
 
-  // 여러 개를 골랐으면 모두를 감싸는 상자의 오른쪽 위에 × 하나
+  // 여러 개를 골랐으면 모두를 감싸는 상자의 오른쪽 위에 단추 한 벌
   let left = Infinity
   let top = Infinity
   let right = -Infinity
@@ -65,10 +101,13 @@ const SelectionBox = memo(function SelectionBox({ items, selectedIds, zoom, widt
     right = Math.max(right, b.x + b.w)
   }
   const deletable = canDelete && picked.some((m) => m.id !== 'calibration')
-  // 페이지 밖으로 나가 잘리지 않게
-  const cx = Math.min(Math.max(right + OFFSET, BTN_R + 2), width - BTN_R - 2)
+  const dupable = deletable && !!onDuplicate
+  // 페이지 밖으로 나가 잘리지 않게 (복제 단추는 × 왼쪽에 붙으므로 그 자리까지 남겨 둠)
+  const minX = BTN_R + 2 + (dupable ? GAP : 0)
+  const cx = Math.max(Math.min(right + OFFSET, width - BTN_R - 2), minX)
   const cy = Math.max(Math.min(top - OFFSET, height - BTN_R - 2), BTN_R + 2)
-  const ids = picked.map((m) => m.id)
+  const ids = picked.map((m) => m.id).filter((id) => id !== 'calibration')
+  const dx = cx - GAP
 
   return (
     <g pointerEvents="none">
@@ -83,36 +122,37 @@ const SelectionBox = memo(function SelectionBox({ items, selectedIds, zoom, widt
         // 안쪽 빈 곳에서도 '옮기기' 커서가 보이게 (실제 잡기는 PdfViewer 가 좌표로 판단)
         <rect x={left - 4} y={top - 4} width={right - left + 8} height={Math.max(...boxes.map((b) => b.y + b.h)) - top + 8} rx={3} fill="transparent" stroke={BLUE} strokeWidth={1} strokeDasharray="5 3" pointerEvents="all" style={{ cursor: 'move' }} />
       )}
-      {deletable && (
-        <g
-          data-delete=""
-          pointerEvents="auto"
-          role="button"
-          aria-label="선택한 항목 삭제"
-          style={{ cursor: 'pointer' }}
-          // 도면 쪽 동작(끌기·상자 선택)이 시작되지 않게 여기서 멈춤. 실제 삭제는 같은 자리에서 뗄 때
-          onPointerDown={(e) => {
-            if (e.button !== 0) return
-            e.stopPropagation()
-            e.preventDefault()
-            downRef.current = { id: e.pointerId, x: e.clientX, y: e.clientY }
-          }}
-          onPointerUp={(e) => {
-            const d = downRef.current
-            downRef.current = null
-            if (!d || d.id !== e.pointerId) return
-            e.stopPropagation()
-            if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 12 || isPinching?.(e.pointerId)) return
-            onDelete(ids)
-          }}
-          onPointerCancel={() => (downRef.current = null)}
+      {dupable && (
+        <RoundButton
+          cx={dx}
+          cy={cy}
+          color={BLUE}
+          className="selection-duplicate"
+          data={{ 'data-duplicate': '' }}
+          label="선택한 항목 복제"
+          title="복제 (Ctrl+D) · 내용까지 함께 복사해 옆에 하나 더"
+          onPress={() => onDuplicate(ids)}
+          isPinching={isPinching}
         >
-          <title>삭제 (Delete)</title>
-          <circle cx={cx} cy={cy} r={HIT_R} fill="transparent" />
-          <circle cx={cx} cy={cy} r={BTN_R + 2} fill="white" />
-          <circle className="selection-delete" cx={cx} cy={cy} r={BTN_R} fill={RED} />
+          {/* 겹친 네모 두 개 */}
+          <rect x={dx - 4.5} y={cy - 4.5} width={6.5} height={6.5} rx={1.2} fill="none" stroke="white" strokeWidth={1.5} />
+          <rect x={dx - 1.5} y={cy - 1.5} width={6.5} height={6.5} rx={1.2} fill={BLUE} stroke="white" strokeWidth={1.5} />
+        </RoundButton>
+      )}
+      {deletable && (
+        <RoundButton
+          cx={cx}
+          cy={cy}
+          color={RED}
+          className="selection-delete"
+          data={{ 'data-delete': '' }}
+          label="선택한 항목 삭제"
+          title="삭제 (Delete)"
+          onPress={() => onDelete(ids)}
+          isPinching={isPinching}
+        >
           <path d={`M${cx - 4} ${cy - 4}L${cx + 4} ${cy + 4}M${cx + 4} ${cy - 4}L${cx - 4} ${cy + 4}`} stroke="white" strokeWidth={2} strokeLinecap="round" />
-        </g>
+        </RoundButton>
       )}
     </g>
   )

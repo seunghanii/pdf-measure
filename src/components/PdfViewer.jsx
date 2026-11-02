@@ -79,6 +79,7 @@ export default function PdfViewer({
   placeRef, // 사진 넣을 자리 계산 함수를 여기에 넣어 줌
   onOpenMemo, // (id, page, point, { force }) 메모 범위를 누름
   onDelete, // (ids) 선택 상자의 × 단추
+  onDuplicate, // (ids) 선택 상자의 복제 단추
   textIndex, // 도면 글자 색인 (글자 복사 도구)
 }) {
   const containerRef = useRef(null)
@@ -1153,6 +1154,7 @@ export default function PdfViewer({
                       editingId={editing?.page === page ? editing.id : null}
                       canDelete={!marquee}
                       onDelete={onDelete}
+                      onDuplicate={onDuplicate}
                       isPinching={isPinching}
                     />
                   )}

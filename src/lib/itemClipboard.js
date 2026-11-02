@@ -20,11 +20,11 @@ const newToken = () => `jcp-${Date.now().toString(36)}${Math.random().toString(3
 
 export const clipboardMarker = (c) => `[JCP 도면 관리] 항목 ${c.items.length}개 복사 (${c.token})`
 
-// spot: 복사할 때 마우스 자리 (그대로 붙여넣으면 원래 자리 옆에 놓으려고)
-export function copyItems(items, { categories, store, docId, spot }) {
+// 복사본 만들기 (앱 안 보관함은 건드리지 않음). 복제 단추는 이걸 바로 pasteItems 에 넘깁니다
+export function makeClip(items, { categories, store, docId, spot }) {
   const usedCats = new Set(items.map((m) => m.cat).filter(Boolean))
   const pages = new Set(items.map((m) => m.page))
-  clip = {
+  return {
     token: newToken(),
     items: structuredClone(items),
     categories: categories.filter((c) => usedCats.has(c.id)),
@@ -32,6 +32,11 @@ export function copyItems(items, { categories, store, docId, spot }) {
     last: pages.size === 1 ? { docId, page: items[0].page, box: boxOf(items) } : null,
     cursor: spot?.pointer ? { docId, page: spot.page, x: spot.x, y: spot.y } : null,
   }
+}
+
+// spot: 복사할 때 마우스 자리 (그대로 붙여넣으면 원래 자리 옆에 놓으려고)
+export function copyItems(items, opts) {
+  clip = makeClip(items, opts)
   return clip
 }
 
