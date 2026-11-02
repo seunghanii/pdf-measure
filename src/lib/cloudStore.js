@@ -10,15 +10,18 @@
 // 보관함이 아직 그 종류를 받지 않게 설정돼 있으면(설정 SQL 을 다시 실행하기 전) 예전처럼 state 에 base64 로 넣고,
 // 예전에 base64 로 넣은 사진·엑셀은 열 때 보관함으로 옮겨 DB 공간을 비웁니다.
 // 개정판으로 바꾼 도면의 예전 판 PDF 는 "사용자id/rev/파일이름의 해시/판 key.pdf" (lib/revision.js).
+// 홈 메모장 글도 특별한 한 줄(file_key = NOTE_KEY)의 state 에 { text, at } 로 보관.
 // 특별한 줄은 모두 size 가 0 이라 실제 도면(size > 0)과 구분됩니다.
 import { cacheDelete, cacheGet, cachePrune, cachePut, summarize, SUMMARY_VERSION } from './storage'
 import { normalizeLibrary } from './library'
+import { loadLocalNote, newerNote, normalizeNote, saveLocalNote } from './homeNote'
 import { base64ToBlob, blobToBase64 } from './images'
 
 export const BUCKET = 'pdfs'
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024 // Supabase 무료 플랜의 파일 하나 최대 크기
 const MAX_RECENT = 200
 const LIBRARY_KEY = '__library__'
+const NOTE_KEY = '__home_note__' // 홈 메모장 (lib/homeNote.js)
 const TEXT_PREFIX = '@text|'
 const IMAGE_PREFIX = '@img|'
 const COLS = 'file_key, name, size, storage_path, has_file, state, last_opened'
@@ -333,6 +336,22 @@ export function createCloudStore(supabase, user) {
 
     saveLibrary(lib) {
       return track(upsertSpecial(LIBRARY_KEY, '폴더 정보', lib))
+    },
+
+    // 홈 메모장: 서버 글과 이 브라우저 사본 중 나중에 고친 것 (사본이 더 새로우면 = 못 올린 글, 다시 올림)
+    async getHomeNote() {
+      const local = loadLocalNote(uid)
+      const row = check(await table().select('state').eq('user_id', uid).eq('file_key', NOTE_KEY).maybeSingle())
+      const server = normalizeNote(row?.state)
+      const note = newerNote(server, local)
+      if (note !== server && note.at) track(upsertSpecial(NOTE_KEY, '홈 메모장', note)).catch((e) => console.warn('메모장 다시 올리기 실패', e))
+      else saveLocalNote(server, uid)
+      return note
+    },
+
+    saveHomeNote(note) {
+      saveLocalNote(note, uid)
+      return track(upsertSpecial(NOTE_KEY, '홈 메모장', note))
     },
 
     // 개정판으로 바꾸기: 같은 자리(경로)에 새 PDF 를 덮어 올림. keepKey 가 있으면 지금 PDF 를 예전 판 자리에 복사해 둠.

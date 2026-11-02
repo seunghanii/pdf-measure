@@ -208,7 +208,8 @@ function xlsEdgeCell(editor, e) {
 // apiRef.current.insertPhotos(ids): 커서 자리(없으면 맨 끝)에 사진 넣기
 // loadPhoto(id) → Promise<주소>, onOpenPhoto(ids, i): 사진 크게 보기
 // onPasteFail(types): 붙여넣은 것에서 글도 그림도 못 찾았을 때 (types: 클립보드에 있던 형식)
-export default function MemoEditor({ initial, editorRef, apiRef, onEdit, onPasteFiles, onPasteFail, loadPhoto, onOpenPhoto, autoFocus }) {
+// placeholder: 비었을 때 보이는 안내 글 (없으면 메모 안내), label: 읽어 주는 이름
+export default function MemoEditor({ initial, editorRef, apiRef, onEdit, onPasteFiles, onPasteFail, loadPhoto, onOpenPhoto, autoFocus, placeholder, label = '메모 내용' }) {
   const [empty, setEmpty] = useState(!String(initial ?? '').trim())
   const [inTable, setInTable] = useState(false)
   const history = useRef({ undo: [], redo: [], typingAt: 0 })
@@ -751,7 +752,7 @@ export default function MemoEditor({ initial, editorRef, apiRef, onEdit, onPaste
     <div className="relative">
       {empty && (
         <div className="pointer-events-none absolute top-3 right-4 left-4 text-sm leading-relaxed text-ink-400">
-          메모를 적어 주세요. "# " 제목, "- " 목록처럼 바로 꾸며지고, 엑셀 표는 붙여넣으면 표가 돼요.
+          {placeholder ?? '메모를 적어 주세요. "# " 제목, "- " 목록처럼 바로 꾸며지고, 엑셀 표는 붙여넣으면 표가 돼요.'}
         </div>
       )}
       <div
@@ -760,7 +761,7 @@ export default function MemoEditor({ initial, editorRef, apiRef, onEdit, onPaste
         suppressContentEditableWarning
         role="textbox"
         aria-multiline="true"
-        aria-label="메모 내용"
+        aria-label={label}
         spellCheck={false}
         className="memo-doc min-h-24 px-4 py-3 outline-none"
         onInput={onInput}
