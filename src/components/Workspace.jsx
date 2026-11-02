@@ -118,7 +118,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
   const store = doc.store
   const cloud = store.kind === 'cloud'
   const textIndex = useDocIndex(store, doc.id) // 도면 글자 (글자 복사 도구)
-  const syncStatus = useAutosave({ store, docId: doc.id, measurements, categories, calibration, unit, markupStyle, counters, pageNum, trash, revs, controlRef: autosaveCtl })
+  const syncStatus = useAutosave({ store, docId: doc.id, measurements, categories, calibration, unit, markupStyle, counters, pageNum, trash, revs, controlRef: autosaveCtl, activity: saved?.activity })
 
   // 축척: PDF 1pt 가 실제 몇 mm 인지
   const mmPerPt = useMemo(() => {
@@ -894,6 +894,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
       pageNum: Math.min(pageNum, newPdf.numPages),
       rev: { label, name: file.name, size: file.size, at: now },
       revisions: [{ ...currentRev, key: keepKey, file: kept, replacedAt: now }, ...rest],
+      activity: autosaveCtl.current?.activity?.() ?? [],
     })
     const parts = [`"${label}" 판으로 ${fromRev ? '되돌렸어요' : '바꿨어요'}.`]
     if (fit && report.scaled.length) parts.push('쪽 크기가 바뀌어 마크업과 축척을 새 크기에 맞췄어요.')
