@@ -77,6 +77,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
   const [restored, setRestored] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false) // 홈 화면 돋보기
   const [searchJump, setSearchJump] = useState(null) // 검색에서 고른 위치 { id, page, rect }
+  const [pendingRev, setPendingRev] = useState(null) // 열자마자 개정판 바꾸기 창을 띄울 도면 { id, file, nonce }
   const docsRef = useRef(docs)
   const opening = useRef(new Set())
 
@@ -277,7 +278,9 @@ function Session({ store, user, onLogout, onChangePassword }) {
       const { id, stale } = resolveFile(libraryRef.current, file)
       const record = stale ? await s.touchFile(id) : await s.rememberFile(id, file)
       if (record?.upload) watchUpload(record.upload, file.name)
-      if (folderId) updateLibrary((lib) => (lib.folders.some((f) => f.id === folderId) ? moveDoc(lib, id, folderId) : lib))
+      // 이미 폴더에 정리돼 있던 도면은 그 자리 그대로 (새로 올린 도면만 고른 폴더로)
+      if (folderId)
+        updateLibrary((lib) => (lib.folders.some((f) => f.id === folderId) && !lib.assign[id] ? moveDoc(lib, id, folderId) : lib))
       // 휴지통에 있던 같은 PDF 를 다시 올리면 휴지통에서 꺼냄
       if (libraryRef.current.trash?.[id]) updateLibrary((lib) => untrashDoc(lib, id))
       // 검색용 글자 색인은 뒤에서 (파일은 저장소에서 다시 읽음)
@@ -343,6 +346,15 @@ function Session({ store, user, onLogout, onChangePassword }) {
       // rect: 계기 목록에서 다른 도면의 카드로 갈 때 그 자리 (검색 이동처럼 확대하고 깜빡임)
       if (link.rect || docsRef.current.some((d) => d.id === link.id) || link.page > 1)
         setSearchJump({ id: link.id, page: Math.max(1, link.page || 1), rect: link.rect, nonce: Date.now() })
+    },
+    [openRecent],
+  )
+
+  // 관련 도면 연결에서 같은 도면 번호의 PDF 를 고르고 "개정판으로 바꾸기": 그 도면 탭을 열고 개정 창에 이 파일을 넣어 둠
+  const reviseLinked = useCallback(
+    async (doc, file) => {
+      await openRecent({ id: doc.id, name: doc.name })
+      setPendingRev({ id: doc.id, file, nonce: Date.now() }) // 못 열었으면 Workspace 가 없어 쓰이지 않고, 1분 뒤엔 무시됨
     },
     [openRecent],
   )
@@ -592,6 +604,9 @@ function Session({ store, user, onLogout, onChangePassword }) {
           onOpenLink={openLinked}
           library={library}
           onImportFile={importFile}
+          onReviseDoc={reviseLinked}
+          pendingRevision={pendingRev?.id === doc.id ? pendingRev : null}
+          onPendingRevisionDone={() => setPendingRev(null)}
           instKinds={instKinds}
           onAddKind={addKind}
           onSetDocRoles={setDocRoles}

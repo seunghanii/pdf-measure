@@ -33,7 +33,7 @@ const InstrumentPanel = lazy(() => import('./InstrumentPanel'))
 const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`
 
 // 도면 하나(탭 하나)의 작업 공간. 탭을 바꿔도 마운트된 채로 남아서 상태가 유지됩니다.
-export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenLink, library, onImportFile, onReplaceFile, sidebarOpen, setSidebarOpen, instKinds, onAddKind, onSetDocRoles }) {
+export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenLink, library, onImportFile, onReviseDoc, pendingRevision, onPendingRevisionDone, onReplaceFile, sidebarOpen, setSidebarOpen, instKinds, onAddKind, onSetDocRoles }) {
   const { pdfDoc, name: fileName } = doc
   const saved = doc.savedState
   const [pageNum, setPageNum] = useState(() => Math.min(saved?.pageNum ?? 1, pdfDoc.numPages))
@@ -79,6 +79,16 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
   // 개정판: 지금 판 { label, name, size, at } 과 예전 판 목록 (lib/revision.js). 바꾼 적 없으면 비어 있음
   const [revs, setRevs] = useState(() => ({ rev: saved?.rev ?? null, revisions: saved?.revisions ?? [] }))
   const [revisionOpen, setRevisionOpen] = useState(false)
+  const [revisionFile, setRevisionFile] = useState(null) // 개정 창을 열며 바로 고를 PDF (관련 도면 연결에서 넘어옴)
+  // 다른 도면의 관련 도면 연결에서 "개정판으로 바꾸기"를 고르면 이 도면이 열리고 개정 창에 그 PDF 가 들어감
+  useEffect(() => {
+    if (!pendingRevision) return
+    onPendingRevisionDone?.()
+    if (!onReplaceFile || Date.now() - pendingRevision.nonce > 60_000) return
+    setRevisionFile(pendingRevision.file)
+    setRevisionOpen(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingRevision?.nonce])
   const autosaveCtl = useRef(null)
   // 툴바·목록에서 특정 페이지로 이동 요청 (뷰어가 스크롤)
   const [jump, setJump] = useState(null)
@@ -1108,6 +1118,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
           currentName={fileName}
           library={library}
           onImportFile={onImportFile}
+          onReviseDoc={onReviseDoc}
           onSetRoles={onSetDocRoles}
           initial={linkPicking.index != null ? memoLinks(linkItem)[linkPicking.index] : null}
           onCancel={() => {
@@ -1142,7 +1153,11 @@ export default function Workspace({ doc, active, onOpenFile, searchJump, onOpenL
           items={[...measurements, ...trash.map((t) => t.item)]}
           calibrated={!!calibration}
           calPage={calibration?.mode === 'line' ? calibration.page : null}
-          onCancel={() => setRevisionOpen(false)}
+          initialFile={revisionFile}
+          onCancel={() => {
+            setRevisionOpen(false)
+            setRevisionFile(null)
+          }}
           onApply={applyRevision}
           onRemoveRev={removeRevision}
         />
