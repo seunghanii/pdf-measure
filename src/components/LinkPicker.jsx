@@ -407,12 +407,17 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
                 type="button"
                 onClick={pickBox}
                 disabled={!chosen || photoBusy}
-                title="그 도면을 열고 연결할 박스(메모 범위·Equipment·도형 등)를 눌러 고르기"
-                className="ml-auto flex items-center gap-1.5 rounded-md border border-brand-300 px-2.5 py-1 text-sm font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-40"
+                title="그 도면을 열고 연결할 박스(메모 범위·Equipment·도형 등)를 누르거나 새로 그려서 연결"
+                className="ml-auto flex items-center gap-1.5 rounded-md border border-brand-300 bg-brand-50 px-2.5 py-1 text-sm font-semibold text-brand-700 hover:bg-brand-100 disabled:opacity-40"
               >
                 <BoxIcon className="h-4 w-4" />
-                박스 고르기
+                박스 고르기·그리기
               </button>
+            )}
+            {onPickBox && chosen && (
+              <p className="w-full text-xs text-ink-500">
+                '박스 고르기·그리기'를 누르면 그 도면이 열려요. 있는 박스를 누르거나 빈 곳을 끌어 새 박스를 그리면 그 박스로 연결돼요.
+              </p>
             )}
           </div>
         )}

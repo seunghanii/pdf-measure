@@ -552,6 +552,17 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
     },
     [boxPick, doc.id, onFinishBoxPick],
   )
+  // 박스 고르기 중 빈 곳을 끌면: 그 자리에 새 메모 범위를 만들고 그것을 연결
+  const pickNewBox = useCallback(
+    (type, points, page) => {
+      if (!boxPick || type !== 'memo') return
+      counters.current.memo = (counters.current.memo ?? 0) + 1
+      const m = { id: newId(), type: 'memo', page, points, name: `메모 ${counters.current.memo}`, color: DEFAULT_MEMO_COLOR, text: '' }
+      commit((prev) => [...prev, m])
+      onFinishBoxPick({ link: { ...boxPick.target, page, item: m.id, itemName: itemLabel(m), rect: itemRect(m) } })
+    },
+    [boxPick, commit, onFinishBoxPick],
+  )
   useEffect(() => {
     if (!boxPick || !active) return
     const down = (e) => {
@@ -1079,12 +1090,12 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
             fitKey={fitKey}
             fittedKey={fittedKey}
             onFitted={setFittedKey}
-            tool={boxPick ? 'pan' : tool}
+            tool={boxPick ? 'memo' : tool}
             measurements={visibleMeasurements}
             calibration={calibration?.mode === 'line' && !calibration.hidden ? calibration : null}
             selectedIds={boxPick ? NO_IDS : selectedIds}
             onSelect={setSelectedIds}
-            onComplete={onComplete}
+            onComplete={boxPick ? pickNewBox : onComplete}
             onMovePoint={onMovePoint}
             onSetPoints={onSetPoints}
             onBeginEdit={beginEdit}
@@ -1320,7 +1331,8 @@ function BoxPickBar({ from, same, onCancel }) {
       <div className="pointer-events-auto flex max-w-full items-center gap-3 rounded-full bg-brand-700 py-1.5 pr-1.5 pl-4 text-sm text-white shadow-lg">
         <BoxIcon className="h-4 w-4 shrink-0" />
         <span className="min-w-0 truncate">
-          연결할 박스를 누르세요 <span className="text-white/70">(메모 범위·Equipment·도형 등{same ? '' : from ? ` → "${from}" 로 돌아가요` : ''})</span>
+          연결할 박스를 누르거나, 빈 곳을 끌어 새 박스를 그리세요{' '}
+          <span className="text-white/70">({same ? '메모 범위·Equipment·도형 등' : from ? `고르면 "${from}" 로 돌아가요` : '메모 범위·Equipment·도형 등'})</span>
         </span>
         <button onClick={onCancel} className="shrink-0 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold hover:bg-white/25" title="박스 고르기 그만두기 (Esc)">
           취소
