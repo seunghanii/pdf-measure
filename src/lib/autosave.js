@@ -23,8 +23,8 @@ const shape = (s) => ({
   trash: s.trash,
   rev: s.rev ?? null,
   revisions: s.revisions ?? [],
-  pageNum: s.pageNum,
   pageLog: s.pageLog,
+  pageNum: s.pageNum,
   activity: s.activity,
 })
 
