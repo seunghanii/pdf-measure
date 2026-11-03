@@ -47,7 +47,7 @@ const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slic
 // boxPick: 이 도면에서 연결할 박스를 고르는 중 { from, memoId, target } (App 이 보관)
 // boxPickResult: 이 도면의 메모가 박스 고르기를 끝냄 { memoId, index, fresh, result: { link } | { cancelled } }
 // onStartBoxPick(요청), onFinishBoxPick(결과), onBoxPickApplied(): 다른(또는 같은) 도면 탭을 오가며 박스 고르기
-export default function Workspace({ doc, active, searchJump: rawSearchJump, onOpenLink, boxPick, boxPickResult, onStartBoxPick, onFinishBoxPick, onBoxPickApplied, library, onImportFile, onReviseDoc, pendingRevision, onPendingRevisionDone, onReplaceFile, sidebarOpen, setSidebarOpen, notepadOpen, setNotepadOpen, instKinds, onAddKind, onSetDocRoles }) {
+export default function Workspace({ doc, active, searchJump: rawSearchJump, onOpenLink, boxPick, boxPickResult, onStartBoxPick, onFinishBoxPick, onBoxPickApplied, library, onImportFile, onReviseDoc, pendingRevision, onPendingRevisionDone, onReplaceFile, onReloadDoc, sidebarOpen, setSidebarOpen, notepadOpen, setNotepadOpen, instKinds, onAddKind, onSetDocRoles }) {
   const { pdfDoc, name: fileName } = doc
   const saved = doc.savedState
   const [pageNum, setPageNum] = useState(() => Math.min(saved?.pageNum ?? 1, pdfDoc.numPages))
@@ -156,7 +156,40 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
   const store = doc.store
   const cloud = store.kind === 'cloud'
   const textIndex = useDocIndex(store, doc.id) // 도면 글자 (글자 복사 도구)
-  const syncStatus = useAutosave({ store, docId: doc.id, measurements, categories, calibration, unit, markupStyle, counters, pageNum, trash, revs, controlRef: autosaveCtl, activity: saved?.activity })
+  // 다른 기기(창)에서 고친 것을 합친 상태를 화면에 반영 (되돌리기 목록은 그대로)
+  const applyRemote = useCallback((st) => {
+    const items = st.measurements ?? []
+    setMeasurements(items)
+    setTrash(liveItemTrash(st.trash))
+    setCategories(st.categories ?? [])
+    setCalibration(st.calibration ?? null)
+    if (st.unit) setUnit(st.unit)
+    if (st.markupStyle) setMarkupStyle((prev) => ({ ...prev, ...st.markupStyle }))
+    counters.current = { ...counters.current, ...st.counters }
+    setRevs({ rev: st.rev ?? null, revisions: st.revisions ?? [] })
+    const live = new Set(items.map((m) => m.id))
+    setSelectedIds((ids) => (ids.every((id) => live.has(id)) ? ids : ids.filter((id) => live.has(id))))
+  }, [])
+  const syncStatus = useAutosave({
+    store,
+    docId: doc.id,
+    measurements,
+    categories,
+    calibration,
+    unit,
+    markupStyle,
+    counters,
+    pageNum,
+    trash,
+    revs,
+    controlRef: autosaveCtl,
+    saved,
+    stamp: doc.savedStamp,
+    size: doc.savedSize,
+    active,
+    onRemote: applyRemote,
+    onReload: onReloadDoc,
+  })
 
   // 축척: PDF 1pt 가 실제 몇 mm 인지
   const mmPerPt = useMemo(() => {
