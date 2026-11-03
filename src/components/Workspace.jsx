@@ -558,6 +558,12 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
       if (!boxPick || type !== 'memo') return
       counters.current.memo = (counters.current.memo ?? 0) + 1
       const m = { id: newId(), type: 'memo', page, points, name: `메모 ${counters.current.memo}`, color: DEFAULT_MEMO_COLOR, text: '' }
+      // '도면 열기' 박스에서 왔으면 새 박스도 그 박스로 돌아가는 '도면 열기' 박스 (같은 색)
+      if (boxPick.back) {
+        const { color, ...back } = boxPick.back
+        if (color) m.color = color
+        Object.assign(m, linksPatch([back]))
+      }
       commit((prev) => [...prev, m])
       onFinishBoxPick({ link: { ...boxPick.target, page, item: m.id, itemName: itemLabel(m), rect: itemRect(m) } })
     },
@@ -1244,7 +1250,12 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
           onPickBox={
             onStartBoxPick
               ? (target) => {
-                  onStartBoxPick({ from: doc.id, fromName: fileName, memoId: linkItem.id, index: linkPicking.index ?? null, fresh: !!linkPicking.fresh, target })
+                  // 연결 박스가 '도면 열기' 박스(글·사진·계기 카드 없음)면, 대상 도면에 새로 그린 박스도 이 박스로 돌아오는 '도면 열기' 박스로 만듦
+                  const linkBox = !linkItem.inst && !String(linkItem.text ?? '').trim() && !memoPhotoIds(linkItem).length
+                  const back = linkBox
+                    ? { id: doc.id, name: fileName, page: linkItem.page ?? 1, item: linkItem.id, itemName: itemLabel(linkItem), rect: itemRect(linkItem), color: linkItem.color }
+                    : null
+                  onStartBoxPick({ from: doc.id, fromName: fileName, memoId: linkItem.id, index: linkPicking.index ?? null, fresh: !!linkPicking.fresh, target, back })
                   setLinkPicking(null)
                   setMemoOpen(null)
                 }

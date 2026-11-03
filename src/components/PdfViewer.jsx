@@ -10,6 +10,7 @@ import { DRAG_TOOLS, textMetricsOf, minTextBoxWidth, FONT_FAMILY, itemCorners, r
 import { isImageFile } from '../lib/images'
 import { memoDrawOrder } from '../lib/memo'
 import { itemRect } from '../lib/activity'
+import { memoLinks } from '../lib/instrument'
 import { SNAP_KINDS, findRaySnap, findSnap, loadSnapIndex } from '../lib/snap'
 import { useSnapEnabled } from '../lib/snapSetting'
 import { MAX_ZOOM, MIN_ZOOM } from '../lib/zoom'
@@ -1383,7 +1384,11 @@ const BacklinkBadges = memo(function BacklinkBadges({ items, backlinks, zoom, on
   }
   const docLabel = (l) => (l.here ? '이 도면' : (library?.aliases?.[l.id] ?? l.name))
   return items.map((m) => {
-    const links = backlinks.get(m.id)
+    // 이 항목이 이미 그 박스로 가는 '도면 열기' 박스면 (서로 연결) 되돌아가기 단추는 겹치므로 뺌
+    const own = m.type === 'memo' ? memoLinks(m) : []
+    const all = backlinks.get(m.id)
+    const links = all && own.length ? all.filter((l) => !own.some((o) => o.id === l.id && o.item === l.item)) : all
+    if (!links?.length) return null
     const r = links && itemRect(m)
     if (!r) return null
     const title = links.map((l) => `← ${l.itemName} (${docLabel(l)}${l.page > 1 ? ` ${l.page}쪽` : ''})`).join('\n')
