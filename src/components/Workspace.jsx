@@ -47,6 +47,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
   const [zoom, setZoom] = useState(1)
   const [fitKey, setFitKey] = useState(1)
   const [fittedKey, setFittedKey] = useState(0)
+  const viewRef = useRef(null) // 보던 자리 (탭을 떠나면 PdfViewer 가 사라지므로 여기 보관)
   // 기준 길이 없는 도면은 기준선 긋기로 시작 (오른쪽 축척 칸을 접어 두었으면 선택 도구로)
   const [tool, setTool] = useState(() => (saved?.calibration ? 'length' : loadUncalHidden() ? 'select' : 'calibrate'))
   const [measurements, setMeasurements] = useState(saved?.measurements ?? [])
@@ -1105,6 +1106,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
             fitKey={fitKey}
             fittedKey={fittedKey}
             onFitted={setFittedKey}
+            viewRef={viewRef}
             tool={boxPick ? 'memo' : tool}
             measurements={visibleMeasurements}
             calibration={calibration?.mode === 'line' && !calibration.hidden ? calibration : null}

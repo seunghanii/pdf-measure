@@ -61,6 +61,7 @@ export default function PdfViewer({
   fitKey,
   fittedKey,
   onFitted,
+  viewRef, // 탭을 떠났다 돌아와도 보던 자리로: { anchor, jump } (Workspace 가 보관)
   tool,
   measurements,
   calibration,
@@ -315,9 +316,28 @@ export default function PdfViewer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitKey, fittedKey, sizes])
 
+  // ---------- 탭에 돌아오면 보던 자리로 (박스 고르기에서 돌아올 때 등) ----------
+  const restoredRef = useRef(false)
+  const lastJump = useRef(viewRef?.current?.jump ?? null) // 이미 처리한 이동 요청 (돌아와서 다시 하지 않게)
+  useLayoutEffect(() => {
+    if (restoredRef.current || !sizes || fitKey !== fittedKey) return
+    restoredRef.current = true
+    const saved = viewRef?.current?.anchor
+    if (!saved) return
+    restoreAnchor(saved, zoom)
+    viewAnchorRef.current = anchorAt() ?? saved
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sizes, fitKey, fittedKey])
+  useEffect(() => {
+    if (!viewRef) return
+    return () => {
+      // 다 그려지기 전에 떠나면 예전 자리를 그대로 둠
+      if (restoredRef.current) viewRef.current = { anchor: viewAnchorRef.current, jump: lastJump.current }
+    }
+  }, [viewRef])
+
   // ---------- 페이지 이동 요청(툴바, 측정 목록, 검색) ----------
   // 검색 결과(rect 가 있음)는 그 글자가 화면 가운데 읽을 만한 크기로 오게 확대하고 잠깐 표시
-  const lastJump = useRef(null)
   const [flash, setFlash] = useState(null) // { page, rect }
   useEffect(() => {
     if (!sizes || !jump || lastJump.current === jump.nonce || fitKey !== fittedKey) return
