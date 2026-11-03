@@ -23,7 +23,7 @@ import { itemLabel, itemRect } from '../lib/activity'
 import { backlinksFor, refreshLinkNames } from '../lib/backlinks'
 import { linkBoxName } from '../lib/drawingNo'
 import { memoFileIds } from '../lib/excel'
-import { DEFAULT_STATUS, cardBoxFor, donePatch, doneUpTo, guessKind, tagPatch, isInst, itemGroup, linksPatch, memoLinkPhotoIds, memoLinks, statusOf } from '../lib/instrument'
+import { DEFAULT_STATUS, cardBoxFor, donePatch, doneUpTo, instForTag, tagPatch, isInst, itemGroup, linksPatch, memoLinkPhotoIds, memoLinks, statusOf } from '../lib/instrument'
 import { liveItemTrash, pushItems, withoutTrashed } from '../lib/trash'
 import { MAX_ZOOM, MIN_ZOOM } from '../lib/zoom'
 import { adaptState, newRevKey } from '../lib/revision'
@@ -654,7 +654,7 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
       if (!force && cur.inst.tag?.trim()) return
       if (hit.tag === cur.inst.tag) return
       if (force) beginEdit()
-      updateItem(id, tagPatch(cur, hit.tag, instKinds))
+      updateItem(id, tagPatch(cur, hit.tag, instKinds, { canon: true }))
     },
     [pdfDoc, instKinds, beginEdit, updateItem],
   )
@@ -669,16 +669,10 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
     (hits) => {
       if (!hits.length) return
       const color = statusOf(DEFAULT_STATUS).color
-      const cards = hits.map((h, i) => ({
-        id: `${newId()}${i}`,
-        type: 'memo',
-        page: h.page,
-        points: cardBoxFor(h.rect),
-        name: h.tag,
-        text: '',
-        color,
-        inst: { tag: h.tag, kind: guessKind(h.tag, instKinds), status: DEFAULT_STATUS },
-      }))
+      const cards = hits.map((h, i) => {
+        const inst = instForTag(h.tag, instKinds, DEFAULT_STATUS)
+        return { id: `${newId()}${i}`, type: 'memo', page: h.page, points: cardBoxFor(h.rect), name: inst.tag, text: '', color, inst }
+      })
       commit((prev) => [...prev, ...cards])
       setSelectedIds(cards.map((c) => c.id))
       setNotice(`Equipment ${cards.length}개를 만들었어요. 잘못 만든 것은 Ctrl+Z 로 한 번에 되돌릴 수 있어요.`)

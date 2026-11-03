@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { INST_LABELS, INST_STATUSES, DEFAULT_STATUS, doneDates, donePatch, fmtDay, instDone, memoLinks, linksPatch, normTag, tagPatch } from '../lib/instrument'
+import { INST_LABELS, INST_STATUSES, DEFAULT_STATUS, doneDates, donePatch, fmtDay, instDone, listDiff, memoLinks, linksPatch, normTag, tagPatch } from '../lib/instrument'
+import { useInstList } from '../lib/instList'
 import { convertTyped, hasHangul } from '../lib/hangulKeys'
 import { useImageUrl } from '../lib/images'
 import BoxIcon from './BoxIcon'
@@ -117,6 +118,8 @@ export function InstFields({ memo, onChange, kinds, onAddKind, reading, onReadTa
   const setDone = (done) => onChange(donePatch(inst, done))
   const setLabel = (label) => onChange({ inst: { ...inst, label } })
   const labelMode = inst.label ?? 'desc'
+  const instList = useInstList() // 목록이 바뀌면 아래 '목록' 줄도 다시 그림
+  const listed = instList.rows.length && inst.tag?.trim() ? listDiff(inst) : null
 
   const addKind = () => {
     const k = newKind.trim().toUpperCase()
@@ -152,6 +155,27 @@ export function InstFields({ memo, onChange, kinds, onAddKind, reading, onReadTa
           </button>
         )}
       </label>
+      {instList.rows.length > 0 && inst.tag?.trim() && (
+        <div className="-mt-1 flex items-center gap-2 pl-[5.5rem] text-[11px]" aria-live="polite">
+          {listed ? (
+            <>
+              <span className="font-medium text-ok-700">✓ Inst list 에 있음</span>
+              {listed.diff && (
+                <button
+                  type="button"
+                  onClick={() => onChange(tagPatch(memo, listed.hit.tag, kinds, { canon: true }))}
+                  title={`Inst list 값: ${listed.hit.tag} · ${listed.hit.desc || '(Description 없음)'} · ${listed.hit.type || '(Type 없음)'}`}
+                  className="rounded px-1.5 py-0.5 font-semibold text-brand-700 ring-1 ring-ink-200 hover:bg-brand-50"
+                >
+                  목록 값으로 채우기
+                </button>
+              )}
+            </>
+          ) : (
+            <span className="text-ink-400">Inst list 에 없는 Tag. No</span>
+          )}
+        </div>
+      )}
       <label className="flex items-center gap-2">
         <span className={`${label} w-20 shrink-0`}>Description</span>
         <input

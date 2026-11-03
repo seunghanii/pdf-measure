@@ -16,6 +16,7 @@ import { cacheDelete, cacheGet, cachePrune, cachePut, summarize, SUMMARY_VERSION
 import { normalizeLibrary } from './library'
 import { loadLocalNote, newerNote, normalizeNote, saveLocalNote } from './homeNote'
 import { loadLocalCal, newerCal, normalizeCal, saveLocalCal } from './calEvents'
+import { loadLocalInstList, newerInstList, normalizeInstList, saveLocalInstList } from './instList'
 import { base64ToBlob, blobToBase64 } from './images'
 
 export const BUCKET = 'pdfs'
@@ -24,6 +25,7 @@ const MAX_RECENT = 200
 const LIBRARY_KEY = '__library__'
 const NOTE_KEY = '__home_note__' // 홈 메모장 (lib/homeNote.js)
 const CAL_KEY = '__calendar__' // 달력 일정 (lib/calEvents.js)
+const INST_LIST_KEY = '__inst_list__' // Inst list: 올린 계기 목록 (lib/instList.js)
 const TEXT_PREFIX = '@text|'
 const IMAGE_PREFIX = '@img|'
 const COLS = 'file_key, name, size, storage_path, has_file, state, last_opened'
@@ -370,6 +372,22 @@ export function createCloudStore(supabase, user) {
     saveCalendar(cal) {
       saveLocalCal(cal, uid)
       return track(upsertSpecial(CAL_KEY, '달력 일정', cal))
+    },
+
+    // Inst list: 달력과 같은 방식 (서버와 이 브라우저 사본 중 나중에 올린 것)
+    async getInstList() {
+      const local = loadLocalInstList(uid)
+      const row = check(await table().select('state').eq('user_id', uid).eq('file_key', INST_LIST_KEY).maybeSingle())
+      const server = normalizeInstList(row?.state)
+      const list = newerInstList(server, local)
+      if (list !== server && list.at) track(upsertSpecial(INST_LIST_KEY, 'Inst list', list)).catch((e) => console.warn('Inst list 다시 올리기 실패', e))
+      else saveLocalInstList(server, uid)
+      return list
+    },
+
+    saveInstList(list) {
+      saveLocalInstList(list, uid)
+      return track(upsertSpecial(INST_LIST_KEY, 'Inst list', list))
     },
 
     // 개정판으로 바꾸기: 같은 자리(경로)에 새 PDF 를 덮어 올림. keepKey 가 있으면 지금 PDF 를 예전 판 자리에 복사해 둠.

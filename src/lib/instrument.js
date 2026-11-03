@@ -8,6 +8,7 @@
 // 상태 색은 분류처럼 항목 color 에 함께 넣어 두어 그리기 코드가 상태 목록을 몰라도 되게 함.
 import { isMarkup, rectOf } from './markup'
 import { isDefaultName } from './categories'
+import { lookupTag } from './instList'
 
 export const INST_STATUSES = [
   { id: 'pre', label: 'Not Installed', color: '#64748b' },
@@ -113,14 +114,38 @@ export function normTag(s) {
 // Tag. No 를 바꿀 때 메모 항목에 합칠 값.
 // 종류를 비워 뒀거나 태그로 짐작한 값 그대로면 새 태그로 다시 짐작 (FT-1001 → FT),
 // 메모 이름이 기본 이름이거나 예전 태그와 같으면 이름도 태그로
-export function tagPatch(memo, raw, kinds) {
+// Tag. No 바꾸기. Inst list(lib/instList.js)에 있는 태그면 Description 과 Type 도 목록 값으로 채움.
+// 목록에 없는 태그로 바뀌면 목록에서 채웠던 Description 은 비우고 Type 은 태그 글자로 짐작.
+// 손으로 적은 Description(목록 값과 다른 것)은 목록에 없는 태그일 때 그대로 둠.
+// canon: 박스 읽기·태그 찾기처럼 기계가 읽은 태그면 목록의 정식 Tag. No 로 바꿔 넣음 (번호만 읽힌 경우 등)
+export function tagPatch(memo, raw, kinds, { canon = false } = {}) {
   const inst = memo.inst
-  const tag = String(raw ?? '').toUpperCase()
+  let tag = String(raw ?? '').toUpperCase()
+  const prev = lookupTag(inst.tag)
+  const hit = lookupTag(tag)
+  if (hit && canon) tag = hit.tag
   const next = { ...inst, tag }
-  if (!inst.kind?.trim() || inst.kind === guessKind(inst.tag, kinds)) next.kind = guessKind(tag, kinds)
+  const autoKind = !inst.kind?.trim() || inst.kind === guessKind(inst.tag, kinds) || (prev?.type && inst.kind === prev.type)
+  if (hit?.type) next.kind = hit.type
+  else if (autoKind) next.kind = guessKind(tag, kinds)
+  if (hit?.desc) next.desc = hit.desc
+  else if (prev?.desc && inst.desc === prev.desc) next.desc = ''
   const patch = { inst: next }
   if (isDefaultName(memo.name) || !memo.name?.trim() || memo.name === inst.tag) patch.name = tag || memo.name
   return patch
+}
+
+// 새 Equipment 의 inst (태그 찾기 등): 목록에 있으면 Description·Type 도
+export function instForTag(tag, kinds, status) {
+  return tagPatch({ inst: { tag: '', kind: '', status } }, tag, kinds, { canon: true }).inst
+}
+
+// 목록 값과 다른 칸 (Equipment 칸에 '목록 값으로' 단추를 보일지): 목록에 없으면 null
+export function listDiff(inst) {
+  const hit = lookupTag(inst?.tag)
+  if (!hit) return null
+  const diff = (hit.tag !== String(inst.tag ?? '').toUpperCase()) || (hit.desc && hit.desc !== inst.desc) || (hit.type && hit.type !== inst.kind)
+  return { hit, diff: !!diff }
 }
 
 // 비교용: 기호 모두 뺌 ("FT-1001" = "FT1001")

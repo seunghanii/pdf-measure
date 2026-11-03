@@ -6,9 +6,11 @@ import RecentActivity from './RecentActivity'
 import HomeCalendar from './Calendar'
 import { addFolder, editFolder } from '../lib/library'
 import { TRASH_DAYS, leftLabel } from '../lib/trash'
+import { useInstList } from '../lib/instList'
 
 // 메모장 편집기는 처음 홈을 그릴 때 기다리지 않게 따로 불러옴
 const HomeNotepad = lazy(() => import('./HomeNotepad'))
+const InstListDialog = lazy(() => import('./InstListDialog'))
 
 const STEPS = [
   { n: 1, title: '도면 열기', text: '위 칸을 누르거나 PDF 파일을 화면에 끌어다 놓으세요.' },
@@ -39,6 +41,8 @@ export default function EmptyState({
 }) {
   const inputRef = useRef(null)
   const [folderDialog, setFolderDialog] = useState(null) // {} = 새 폴더, 폴더 객체 = 고치기
+  const [instListOpen, setInstListOpen] = useState(false)
+  const instCount = useInstList().rows.length
   const fetching = recent === null // 서버에서 목록을 불러오는 중
   const list = recent ?? []
   const openFolder = library.folders.find((f) => f.id === openFolderId) ?? null
@@ -70,6 +74,17 @@ export default function EmptyState({
               <path d="M15 2v5h5M12 11v6M9 14l3-3 3 3" />
             </svg>
             도면 열기
+            <button
+              onClick={() => setInstListOpen(true)}
+              title="CSV 계기 목록을 올려 Equipment Tag. No 로 Description·Type 자동 채우기"
+              className="-my-1 ml-auto flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm font-medium tracking-normal text-brand-600 transition-colors hover:bg-brand-50"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+              </svg>
+              Inst list setting
+              {instCount > 0 && <span className="rounded bg-brand-50 px-1.5 text-xs tabular-nums text-brand-700">{instCount.toLocaleString()}</span>}
+            </button>
           </div>
           <div
             className={`group cursor-pointer rounded-2xl border border-dashed border-ink-300 bg-surface/90 px-6 text-center shadow-sm transition-colors hover:border-brand-400 hover:bg-brand-50/60 ${
@@ -193,6 +208,11 @@ export default function EmptyState({
           </Suspense>
         </aside>
       </div>
+      {instListOpen && (
+        <Suspense fallback={null}>
+          <InstListDialog store={store} onClose={() => setInstListOpen(false)} />
+        </Suspense>
+      )}
       {folderDialog && (
         <FolderDialog
           folder={folderDialog}

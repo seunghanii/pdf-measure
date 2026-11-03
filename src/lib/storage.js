@@ -7,6 +7,7 @@
 import { EMPTY_LIBRARY, normalizeLibrary } from './library'
 import { loadLocalNote, saveLocalNote } from './homeNote'
 import { loadLocalCal, saveLocalCal } from './calEvents'
+import { loadLocalInstList, saveLocalInstList } from './instList'
 import { noteItems } from './notes'
 import { instRows } from './instrument'
 import { SUMMARY_ACTIVITY, normalizeActivity } from './activity'
@@ -308,6 +309,8 @@ export const localStore = {
   saveHomeNote: async (note) => saveLocalNote(note),
   getCalendar: async () => loadLocalCal(),
   saveCalendar: async (cal) => saveLocalCal(cal),
+  getInstList: async () => loadLocalInstList(),
+  saveInstList: async (list) => saveLocalInstList(list),
 }
 
 // scope: 로그인한 사용자 id (없으면 이 브라우저 전용)
