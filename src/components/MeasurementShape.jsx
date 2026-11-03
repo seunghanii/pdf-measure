@@ -6,6 +6,7 @@ import { DEFAULT_BOX_OPACITY, FONT_FAMILY, RESIZE_DIRS, cropOf, fullImageRect, i
 import { useImageUrl } from '../lib/images'
 import { isLinkOnly, memoSummary } from '../lib/memo'
 import { instLabelText } from '../lib/instrument'
+import { EQUIP_ICON, LINK_ICON, MEMO_ICON } from '../lib/boxKinds'
 
 function Label({ x, y, text, sub, color }) {
   return (
@@ -292,15 +293,14 @@ function MarkupShape({ m, zoom, selected, showHandles, showResize, draft }) {
         {!draft && r.w > s + 6 && r.h > s + 6 && (
           <g className="memo-icon" pointerEvents="none">
             <rect x={ix} y={iy} width={s} height={s} rx={3} fill={color} />
+            {/* 종류별 아이콘 = 툴바 단추와 같은 모양 (24 칸을 12 로 줄여 가운데에) */}
             <path
-              d={
-                link
-                  ? `M${ix + 4} ${iy + 12}L${ix + 12} ${iy + 4}M${ix + 7} ${iy + 4}h5v5`
-                  : `M${ix + 4} ${iy + 5}h8M${ix + 4} ${iy + 8}h8M${ix + 4} ${iy + 11}h5`
-              }
+              d={m.inst ? EQUIP_ICON : link ? LINK_ICON : MEMO_ICON}
+              transform={`translate(${ix + 2} ${iy + 2}) scale(0.5)`}
               stroke="white"
-              strokeWidth={1.5}
+              strokeWidth={2.6}
               strokeLinecap="round"
+              strokeLinejoin="round"
               fill="none"
             />
           </g>

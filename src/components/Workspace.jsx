@@ -959,16 +959,17 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
         imageInputRef.current?.click()
         return
       }
-      // E: Equipment 박스 (박스 도구를 Equipment 종류로)
-      if (e.code === 'KeyE' && !e.shiftKey && pdfDoc) {
+      // E: Equipment 박스, K: 링크 박스 (박스 도구를 그 종류로). N(메모 박스)은 아래 TOOLS 에서
+      const boxKind = e.shiftKey ? null : e.code === 'KeyE' ? 'inst' : e.code === 'KeyK' ? 'link' : null
+      if (boxKind && pdfDoc) {
         e.preventDefault()
         setTool('memo')
-        setMarkupStyle((st) => ({ ...st, memoKind: 'inst' }))
+        setMarkupStyle((st) => ({ ...st, memoKind: boxKind }))
         return
       }
       const t = TOOLS.find((x) => x.key.toLowerCase() === e.key.toLowerCase())?.id
       if (t && pdfDoc) setTool(t)
-      if (t === 'memo') setMarkupStyle((st) => (st.memoKind === 'inst' ? { ...st, memoKind: 'note' } : st))
+      if (t === 'memo') setMarkupStyle((st) => (st.memoKind !== 'note' ? { ...st, memoKind: 'note' } : st))
       if (e.key === 'Delete' || (e.key === 'Backspace' && tool === 'select')) {
         if (selectedIds.length) {
           e.preventDefault()
