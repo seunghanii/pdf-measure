@@ -24,6 +24,7 @@ const shape = (s) => ({
   rev: s.rev ?? null,
   revisions: s.revisions ?? [],
   pageNum: s.pageNum,
+  pageLog: s.pageLog,
   activity: s.activity,
 })
 
