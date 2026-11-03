@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { loadInstList } from './lib/instList'
 import { loadPdf, setOpenPdf } from './lib/pdf'
 import { fileIdOf, loadSession, localStore, saveSession } from './lib/storage'
 import { createCloudStore, MAX_UPLOAD_BYTES } from './lib/cloudStore'
@@ -69,6 +70,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
   // 도면 오른쪽 목록 (모든 탭 공통). 새로 열면 펼침, 단 폰처럼 좁거나 낮은 화면은 도면을 넓게 보도록 접어서 시작
   const [sidebarOpen, setSidebarOpen] = useState(() => !window.matchMedia?.('(max-width: 767px), (max-height: 500px)').matches)
   useEffect(() => saveOpenFolder(openFolderId), [openFolderId])
+  useEffect(() => loadInstList(store), [store]) // Inst list: Equipment Tag. No 로 Description·Type 채우기
   const [recent, setRecent] = useState(store.kind === 'cloud' ? null : []) // null = 서버에서 불러오는 중
   const [library, setLibrary] = useState(EMPTY_LIBRARY) // 홈 화면 폴더
   const [error, setError] = useState('')
