@@ -163,8 +163,8 @@ export function InstFields({ memo, onChange, kinds, onAddKind, reading, onReadTa
         />
       </label>
       <div className="flex items-start gap-2">
-        <span className={`${label} w-20 shrink-0 pt-1`}>종류</span>
-        <div className="flex min-w-0 flex-1 flex-wrap gap-1" role="group" aria-label="종류">
+        <span className={`${label} w-20 shrink-0 pt-1`}>Type</span>
+        <div className="flex min-w-0 flex-1 flex-wrap gap-1" role="group" aria-label="Type">
           {options.map((k) => (
             <button
               key={k}
@@ -195,10 +195,10 @@ export function InstFields({ memo, onChange, kinds, onAddKind, reading, onReadTa
               }}
               placeholder="예: FIC"
               className="w-16 rounded border border-brand-400 px-1.5 py-0.5 text-xs font-semibold outline-none"
-              aria-label="새 종류"
+              aria-label="새 Type"
             />
           ) : (
-            <button type="button" onClick={() => setAdding(true)} className="rounded px-1.5 py-0.5 text-xs text-brand-700 hover:bg-brand-50" title="종류 더하기 (모든 도면에 적용)">
+            <button type="button" onClick={() => setAdding(true)} className="rounded px-1.5 py-0.5 text-xs text-brand-700 hover:bg-brand-50" title="Type 더하기 (모든 도면에 적용)">
               + 추가
             </button>
           )}
@@ -215,7 +215,7 @@ export function InstFields({ memo, onChange, kinds, onAddKind, reading, onReadTa
               type="button"
               aria-pressed={labelMode === o.id}
               onClick={() => setLabel(o.id)}
-              title={o.id === 'off' ? '이 카드의 이름표를 도면에서 숨기기' : o.id === 'desc' ? 'Description 보이기 (비어 있으면 Tag. No)' : 'Tag. No 보이기'}
+              title={o.id === 'off' ? '이 Equipment 의 이름표를 도면에서 숨기기' : o.id === 'desc' ? 'Description 보이기 (비어 있으면 Tag. No)' : 'Tag. No 보이기'}
               className={`px-2 py-0.5 text-xs font-medium first:rounded-l last:rounded-r ${labelMode === o.id ? 'bg-ink-800 text-surface' : 'text-ink-600 hover:bg-ink-50'}`}
             >
               {o.label}
@@ -400,7 +400,7 @@ export function RelatedDocs({ memo, library, onChange, onOpen, onPick }) {
                   <path d="M4 20h4L19 9l-4-4L4 16zM13 7l4 4" />
                 </svg>
               </button>
-              <button onClick={() => remove(i)} className="shrink-0 rounded px-1 py-1 text-ink-400 hover:bg-danger-50 hover:text-danger-600" title="연결 빼기" aria-label="연결 빼기">
+              <button onClick={() => remove(i)} className="shrink-0 rounded px-1 py-1 text-ink-400 hover:bg-danger-50 hover:text-danger-600" title="연결 해제" aria-label="연결 해제">
                 <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                   <path d="M6 6l12 12M18 6L6 18" />
                 </svg>

@@ -773,7 +773,7 @@ function EventForm({ event, onSave, onDelete, onCancel }) {
       </label>
       <div className="mt-3 flex items-center gap-2">
         {editing && (
-          <button type="button" onClick={() => window.confirm('이 일정을 지울까요?') && onDelete(event.id)} className="rounded-lg px-2 py-1.5 text-sm text-danger-500 hover:bg-danger-50">
+          <button type="button" onClick={() => window.confirm('이 일정을 삭제할까요?') && onDelete(event.id)} className="rounded-lg px-2 py-1.5 text-sm text-danger-500 hover:bg-danger-50">
             삭제
           </button>
         )}

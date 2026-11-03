@@ -140,7 +140,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
       }
       if (!isExcelFile(file)) continue
       if (file.size > MAX_EXCEL_BYTES) {
-        onNotice(`"${file.name}" 은(는) 10MB 가 넘어 첨부할 수 없어요.`)
+        onNotice(`10MB 가 넘는 파일은 첨부할 수 없어요: ${file.name}`)
         continue
       }
       const id = newFileId()
@@ -283,7 +283,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
         <button
           onClick={toggleInst}
           className={`flex shrink-0 items-center gap-1 rounded px-1.5 py-1 text-xs font-medium ${memo.inst ? 'text-ink-400 hover:bg-ink-100 hover:text-ink-700' : 'text-brand-700 hover:bg-brand-50'}`}
-          title={memo.inst ? 'Equipment 정보 칸 빼기 (글·사진·연결은 남아요)' : '태그·종류·상태 칸이 있는 Equipment로 만들기'}
+          title={memo.inst ? 'Equipment 정보 칸 빼기 (글·사진·연결은 남아요)' : 'Tag. No·Type·상태 칸이 있는 Equipment 박스로 바꾸기'}
         >
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="8" />
@@ -416,7 +416,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
         />
         <MemoHelp />
         <button onClick={onDelete} className="ml-auto rounded px-2 py-0.5 text-xs text-danger-500 hover:bg-danger-50">
-          메모 지우기
+          박스 삭제
         </button>
       </div>
 

@@ -67,7 +67,7 @@ export function tableHtml(rows) {
 
 // 글 사이 사진 한 장 (편집 안 되는 덩어리. 주소는 메모장이 불러와서 채움)
 export const photoHtml = (id) =>
-  `<div class="memo-photo" data-img="${esc(id)}" contenteditable="false"><img alt="사진"><button type="button" data-del title="이 사진 빼기" aria-label="이 사진 빼기">×</button></div>`
+  `<div class="memo-photo" data-img="${esc(id)}" contenteditable="false"><img alt="사진"><button type="button" data-del title="이 사진 삭제" aria-label="이 사진 삭제">×</button></div>`
 
 // 메모 글 전체 → 메모장 HTML
 export function markdownToHtml(md) {

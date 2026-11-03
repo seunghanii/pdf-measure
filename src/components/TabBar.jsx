@@ -20,7 +20,7 @@ export default function TabBar({ docs, library, activeId, onSelect, onClose, onH
     <nav className="flex items-end gap-0.5 overflow-x-auto border-b border-ink-200 bg-ink-100 px-2 pt-1.5" aria-label="열린 도면">
       <button
         onClick={onHome}
-        title="홈 (최근 파일)"
+        title="홈"
         className={`mb-1 flex h-8 shrink-0 items-center gap-1 rounded-md px-2.5 text-sm ${
           activeId === null ? 'bg-surface font-semibold text-brand-700 shadow-xs ring-1 ring-ink-200' : 'text-ink-500 transition-colors hover:bg-surface/70 hover:text-ink-800'
         }`}
@@ -109,8 +109,8 @@ export default function TabBar({ docs, library, activeId, onSelect, onClose, onH
 
       <button
         onClick={onAdd ?? onHome}
-        title="다른 도면 열기 (목록에서 골라 새 탭으로)"
-        aria-label="다른 도면 열기"
+        title="도면 고르기 (목록에서 골라 새 탭으로)"
+        aria-label="도면 고르기"
         className="mb-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-lg text-ink-500 hover:bg-surface/70 hover:text-ink-800"
       >
         +

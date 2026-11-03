@@ -62,7 +62,7 @@ export default function RevisionDialog({ pdfDoc, store, docId, current, revision
     } catch (e) {
       console.warn(e)
       setPick(null)
-      setError(`"${file.name}" 을(를) 열 수 없어요. 암호가 걸려 있거나 손상된 PDF 인지 확인해 주세요.`)
+      setError(`이 PDF 를 열 수 없어요: ${file.name}. 암호가 걸려 있거나 손상된 파일인지 확인해 주세요.`)
     }
   }
 
@@ -251,9 +251,9 @@ export default function RevisionDialog({ pdfDoc, store, docId, current, revision
                               disabled={!!revBusy}
                               onClick={() => restore(rv)}
                               className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-40"
-                              title="이 판으로 되돌리기 (지금 판은 예전 판 목록에 남아요)"
+                              title="이 판으로 복원 (지금 판은 예전 판 목록에 남아요)"
                             >
-                              되돌리기
+                              복원
                             </button>
                           </>
                         )}
@@ -261,12 +261,12 @@ export default function RevisionDialog({ pdfDoc, store, docId, current, revision
                           type="button"
                           disabled={!!revBusy}
                           onClick={() => {
-                            if (window.confirm(`"${rv.label}" 판을 목록에서 지울까요? 보관한 PDF 도 지워져요.`)) onRemoveRev(rv)
+                            if (window.confirm(`"${rv.label}" 판을 목록에서 삭제할까요? 보관한 PDF 도 지워져요.`)) onRemoveRev(rv)
                           }}
                           className="shrink-0 rounded-md px-2 py-1 text-xs text-ink-400 hover:bg-danger-50 hover:text-danger-600 disabled:opacity-40"
-                          title="이 판 지우기"
+                          title="이 판 삭제"
                         >
-                          지우기
+                          삭제
                         </button>
                       </li>
                     ))}
@@ -325,7 +325,7 @@ export default function RevisionDialog({ pdfDoc, store, docId, current, revision
                 {r.goneCount > 0 && (
                   <Check>
                     새 판에는 {r.goneFrom}쪽부터 없어서, 그 쪽에 있던 항목 {r.goneCount}개는 도면에 보이지 않게 돼요. 지우지 않고 보관해 두니 예전
-                    판으로 되돌리면 다시 보여요.
+                    판으로 복원하면 다시 보여요.
                   </Check>
                 )}
                 {calibrated && (
@@ -363,7 +363,7 @@ export default function RevisionDialog({ pdfDoc, store, docId, current, revision
                 className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-press disabled:opacity-60"
               >
                 {busy && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
-                {busy ? '바꾸는 중…' : pick.fromRev ? '이 판으로 되돌리기' : '개정판으로 바꾸기'}
+                {busy ? '바꾸는 중…' : pick.fromRev ? '이 판으로 복원' : '개정판으로 바꾸기'}
               </button>
             </>
           ) : (

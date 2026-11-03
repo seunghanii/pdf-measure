@@ -11,7 +11,7 @@ export default function UpdateToast() {
       role="status"
       className="fixed bottom-4 left-1/2 z-[100] flex -translate-x-1/2 items-center gap-3 rounded-xl bg-surface py-2 pr-2 pl-4 text-sm text-ink-700 shadow-lg ring-1 ring-ink-200"
     >
-      <span>새 판이 준비됐어요</span>
+      <span>앱 새 버전이 있어요</span>
       <button
         type="button"
         onClick={() => window.location.reload()}

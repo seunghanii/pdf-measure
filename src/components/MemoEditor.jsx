@@ -708,9 +708,9 @@ export default function MemoEditor({ initial, editorRef, apiRef, onEdit, onPaste
   const tableButtons = [
     ['줄 추가', () => editTable((g, [r, c]) => (g.splice(r + 1, 0, []), [r + 1, c]))],
     ['칸 추가', () => editTable((g, [r, c]) => (g.forEach((row) => row.splice(c + 1, 0, '')), [r, c + 1]))],
-    ['줄 지우기', () => editTable((g, [r, c], table) => (g.length > 1 ? (g.splice(r, 1), [Math.min(r, g.length - 1), c]) : removeTable(table)))],
-    ['칸 지우기', () => editTable((g, [r, c], table) => (Math.max(...g.map((row) => row.length)) > 1 ? (g.forEach((row) => row.splice(c, 1)), [r, Math.max(0, c - 1)]) : removeTable(table)))],
-    ['표 지우기', () => editTable((g, p, table) => removeTable(table))],
+    ['줄 삭제', () => editTable((g, [r, c], table) => (g.length > 1 ? (g.splice(r, 1), [Math.min(r, g.length - 1), c]) : removeTable(table)))],
+    ['칸 삭제', () => editTable((g, [r, c], table) => (Math.max(...g.map((row) => row.length)) > 1 ? (g.forEach((row) => row.splice(c, 1)), [r, Math.max(0, c - 1)]) : removeTable(table)))],
+    ['표 삭제', () => editTable((g, p, table) => removeTable(table))],
   ]
   // 엑셀 양식 표: 병합 때문에 줄·칸 추가는 안 되고, 일반 표로 바꾸면 할 수 있음
   const xlsTable = (fn) => {
@@ -745,7 +745,7 @@ export default function MemoEditor({ initial, editorRef, apiRef, onEdit, onPaste
           }
         }),
     ],
-    ['표 지우기', () => xlsTable(removeTable)],
+    ['표 삭제', () => xlsTable(removeTable)],
   ]
 
   return (

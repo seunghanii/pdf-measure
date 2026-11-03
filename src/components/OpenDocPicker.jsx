@@ -94,7 +94,7 @@ export default function OpenDocPicker({ recent, library, openIds, activeId, onOp
     <div className="fixed inset-0 z-40 flex items-start justify-center bg-black/40 p-4 pt-[10vh]" onMouseDown={onClose} {...dropProps}>
       <div
         role="dialog"
-        aria-label="도면 열기"
+        aria-label="도면 고르기"
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={onKeyDown}
         onPaste={(e) => e.stopPropagation()}
@@ -110,7 +110,7 @@ export default function OpenDocPicker({ recent, library, openIds, activeId, onOp
           </div>
         )}
         <div className="flex items-center gap-2">
-          <h2 className="flex-1 text-lg font-bold">도면 열기</h2>
+          <h2 className="flex-1 text-lg font-bold">도면 고르기</h2>
           <button type="button" onClick={onClose} aria-label="닫기" className="flex h-7 w-7 items-center justify-center rounded text-ink-400 hover:bg-ink-100 hover:text-ink-700">
             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
               <path d="M6 6l12 12M18 6L6 18" />

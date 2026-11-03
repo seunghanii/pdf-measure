@@ -7,6 +7,9 @@ import { DEFAULT_BOX_OPACITY, HIGHLIGHT_COLORS, IMAGE_BORDER_COLORS, IMAGE_BORDE
 
 const MARKUP_TOOL_IDS = TOOLS.filter((t) => t.group === 'markup').map((t) => t.id)
 
+// Equipment 박스: 박스 도구(memo)를 Equipment 종류로 고르는 단추. 단축키 E
+const EQUIP_TOOL = { id: 'equip', label: 'Equipment', key: 'E', icon: 'M4 4h16v16H4zM8 9h8M8 13h5M15.5 15.5l1.5 1.5 3-3' }
+
 function Icon({ d }) {
   return (
     <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -16,7 +19,6 @@ function Icon({ d }) {
 }
 
 export default function Toolbar({
-  onOpenFile,
   pdfDoc,
   pageNum,
   setPageNum,
@@ -42,8 +44,8 @@ export default function Toolbar({
   syncStatus, // 서버 저장 상태: 'saved' | 'saving' | 'error' (로그인했을 때만)
   right, // 홈 화면 오른쪽 (계정)
 }) {
-  const inputRef = useRef(null)
   const numPages = pdfDoc?.numPages ?? 0
+  const equipOn = markupStyle?.memoKind === 'inst'
 
   return (
     <header className="relative z-20 border-b border-ink-200 bg-surface">
@@ -54,34 +56,9 @@ export default function Toolbar({
         <span className="hidden text-[15px] font-semibold tracking-tight text-ink-900 xl:inline">JCP 도면 관리</span>
       </div>
 
-      <button
-        className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold whitespace-nowrap text-white shadow-xs transition-colors hover:bg-brand-press active:bg-brand-press pointer-coarse:py-2.5"
-        onClick={() => inputRef.current?.click()}
-        title="PDF 열기"
-        aria-label="PDF 열기"
-      >
-        {pdfDoc && (
-          <span className="sm:hidden">
-            <Icon d="M6 2h9l5 5v15H6zM15 2v5h5M12 11v6M9 14h6" />
-          </span>
-        )}
-        <span className={pdfDoc ? 'max-sm:hidden' : ''}>PDF 열기</span>
-      </button>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="application/pdf,.pdf"
-        multiple
-        className="hidden"
-        onChange={(e) => {
-          onOpenFile([...(e.target.files ?? [])])
-          e.target.value = ''
-        }}
-      />
-
+      {/* PDF 열기는 홈의 '도면 열기' 칸과 탭 줄 + 버튼에서 */}
       {pdfDoc && (
         <>
-          <Divider />
           <div className="flex items-center gap-0.5 rounded-xl bg-ink-100 p-0.5" role="group" aria-label="측정 도구">
             {/* 기준 길이는 오른쪽 목록 축척 칸에서만 (C·3 키는 그대로) */}
             {/* 면적·각도(more)는 + 버튼 안에. 고른 동안에는 막대에도 보여 줌 */}
@@ -93,9 +70,29 @@ export default function Toolbar({
           </div>
           <Divider />
           <div className="flex items-center gap-0.5 rounded-xl bg-ink-100 p-0.5" role="group" aria-label="마크업 도구">
-            {TOOLS.filter((t) => t.group === 'markup').map((t) => (
-              <ToolButton key={t.id} t={t} active={tool === t.id} onClick={() => setTool(t.id)} />
-            ))}
+            {TOOLS.filter((t) => t.group === 'markup').map((t) =>
+              t.id === 'memo' ? (
+                <ToolButton
+                  key={t.id}
+                  t={t}
+                  active={tool === 'memo' && !equipOn}
+                  onClick={() => {
+                    setTool('memo')
+                    if (equipOn) onChangeMarkupStyle({ memoKind: 'note' })
+                  }}
+                />
+              ) : (
+                <ToolButton key={t.id} t={t} active={tool === t.id} onClick={() => setTool(t.id)} />
+              ),
+            )}
+            <ToolButton
+              t={EQUIP_TOOL}
+              active={tool === 'memo' && equipOn}
+              onClick={() => {
+                setTool('memo')
+                onChangeMarkupStyle({ memoKind: 'inst' })
+              }}
+            />
             <button
               title="사진 넣기 (I) · 복사한 사진은 Ctrl+V 로 바로 붙여넣기, 사진 파일을 도면에 끌어다 놓아도 돼요"
               aria-label="사진 넣기"
@@ -131,10 +128,10 @@ export default function Toolbar({
               className="flex items-center gap-1.5 rounded-lg border border-ink-200 bg-surface px-2.5 py-1.5 text-sm font-medium whitespace-nowrap text-ink-700 shadow-xs pointer-coarse:py-2.5 transition-colors hover:border-ink-300 hover:bg-ink-50 disabled:opacity-50"
               onClick={onSave}
               disabled={saving}
-              title="마크업과 측정을 그려 넣은 PDF로 저장 (Ctrl+S)"
+              title="마크업과 측정을 그려 넣은 PDF 내려받기 (Ctrl+S). 측정값과 마크업 저장은 자동으로 돼요"
             >
               <Icon d="M12 4v11M7 10l5 5 5-5M5 20h14" />
-              <span className="hidden sm:inline">{saving ? '저장 중…' : 'PDF 저장'}</span>
+              <span className="hidden sm:inline">{saving ? '내보내는 중…' : 'PDF 내보내기'}</span>
             </button>
             {numPages > 1 && (
               <div className="flex items-center gap-1 text-sm">
@@ -382,7 +379,7 @@ const ALIGN_BUTTONS = [
 
 // 마크업 색상, 선 굵기, 글자 크기, 텍스트 상자 배경 투명도
 function MarkupStyle({ kind, title, style, onChange, showStroke, showShape, imageActions, memoActions }) {
-  if (kind === 'memo') return <MemoStyle title="메모 범위" style={style} onChange={onChange} actions={memoActions} />
+  if (kind === 'memo') return <MemoStyle style={style} onChange={onChange} actions={memoActions} />
   if (kind === 'image') return <ImageStyle title={title === '선택한 마크업' ? '사진' : title} style={style} onChange={onChange} actions={imageActions} />
   const isHighlight = kind === 'highlight'
   const colors = isHighlight ? HIGHLIGHT_COLORS : MARKUP_COLORS
@@ -567,18 +564,19 @@ function ImageStyle({ title, style, onChange, actions }) {
 }
 
 // 메모 범위 설정: 새로 그릴 종류(메모장 / 다른 도면 열기)와 색. 선택했을 때는 메모 열기·도면 연결
-function MemoStyle({ title, style, onChange, actions }) {
+function MemoStyle({ style, onChange, actions }) {
   const btn = (active) =>
     `flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium whitespace-nowrap pointer-coarse:py-1.5 ${
       active ? 'bg-ink-800 text-surface' : 'text-ink-700 ring-1 ring-ink-300 hover:bg-ink-100'
     }`
   const kind = style.memoKind ?? 'note'
+  const title = actions ? '박스' : kind === 'inst' ? 'Equipment 박스' : '박스'
   return (
     <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-ink-200 bg-surface/95 px-2.5 py-1.5 shadow-md backdrop-blur max-lg:max-w-full max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:*:shrink-0 no-scrollbar pointer-coarse:py-2">
       <span className="mr-1 text-xs font-semibold whitespace-nowrap text-ink-700">{title}</span>
       {actions ? (
         <>
-          <button className={btn(false)} onClick={actions.onOpen} title="메모장 열기 (범위를 더블클릭해도 돼요)">
+          <button className={btn(false)} onClick={actions.onOpen} title="메모장 열기 (박스를 두 번 눌러도 돼요)">
             <Icon d="M5 4h10l4 4v12H5zM15 4v4h4M8 12h8M8 16h5" />
             메모 열기
           </button>
@@ -587,12 +585,13 @@ function MemoStyle({ title, style, onChange, actions }) {
             {actions.linked ? '도면 더 연결' : '도면 연결'}
           </button>
         </>
+      ) : kind === 'inst' ? (
+        <span className="text-xs whitespace-nowrap text-ink-500">Tag. No·Description·Type·상태 칸이 있는 박스. 상태에 따라 색이 바뀌어요</span>
       ) : (
-        <div className="flex items-center rounded ring-1 ring-ink-300" role="group" aria-label="메모 범위 종류">
+        <div className="flex items-center rounded ring-1 ring-ink-300" role="group" aria-label="박스 종류">
           {[
-            ['note', '메모장', '범위를 누르면 메모장이 열려요 (마크다운, 사진)'],
-            ['link', '도면 열기', '범위를 누르면 고른 도면이 열려요'],
-            ['inst', 'Equipment', 'Tag. No·Description·종류·상태 칸이 있는 메모. 상태에 따라 범위 색이 바뀌어요'],
+            ['note', '메모', '박스를 누르면 메모장이 열려요 (제목·목록·표, 사진)'],
+            ['link', '링크', '박스를 누르면 연결한 도면이나 박스로 가요'],
           ].map(([value, label, tip]) => (
             <button
               key={value}
@@ -608,17 +607,17 @@ function MemoStyle({ title, style, onChange, actions }) {
           ))}
         </div>
       )}
-      <span className="mx-1 h-4 w-px bg-ink-200" />
-      {MEMO_COLORS.map((c) => (
+      {(actions || kind !== 'inst') && <span className="mx-1 h-4 w-px bg-ink-200" />}
+      {(actions || kind !== 'inst') && MEMO_COLORS.map((c) => (
         <button
           key={c}
-          title="범위 색"
+          title="박스 색"
           onClick={() => onChange({ memoColor: c })}
           className={`h-5 w-5 shrink-0 rounded-full border pointer-coarse:h-7 pointer-coarse:w-7 border-black/10 ${style.memoColor === c ? 'ring-2 ring-ink-700 ring-offset-1' : ''}`}
           style={{ background: c }}
         />
       ))}
-      {!actions && <span className="ml-1 hidden text-xs whitespace-nowrap text-ink-400 lg:inline">도면에서 끌어 범위를 정하세요</span>}
+      {!actions && kind !== 'inst' && <span className="ml-1 hidden text-xs whitespace-nowrap text-ink-400 lg:inline">도면에서 끌어 박스를 그리세요</span>}
     </div>
   )
 }

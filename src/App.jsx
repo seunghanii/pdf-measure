@@ -139,7 +139,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
         forgetIndex(storeRef.current, id)
         updateLibrary((lib) => forgetDoc(lib, id))
       } catch (e) {
-        setError(networkHint(e) ?? `"${name}" 을(를) 지우지 못했어요.`)
+        setError(networkHint(e) ?? `삭제하지 못했어요: ${name}`)
       } finally {
         purging.current.delete(id)
       }
@@ -169,7 +169,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
         console.warn(e)
         setWarning(
           e?.code === 'too_large'
-            ? `"${name}" 은(는) 50MB 가 넘어 PDF 파일은 서버에 올리지 못했어요. 측정값은 서버에 저장되고, 다른 컴퓨터에서는 같은 PDF 를 직접 열면 이어서 볼 수 있어요.`
+            ? `50MB 가 넘어 PDF 파일은 서버에 올리지 못했어요: ${name}. 측정값은 서버에 저장되고, 다른 컴퓨터에서는 같은 PDF 를 직접 열면 이어서 볼 수 있어요.`
             : `"${name}" PDF 를 서버에 올리지 못했어요. ${networkHint(e) ?? '다음에 이 파일을 열 때 다시 올려요.'}`,
         )
       })
@@ -201,7 +201,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
           console.warn(e)
           setWarning(
             s.kind === 'cloud'
-              ? `"${file.name}" 을(를) 서버에 저장하지 못했어요. ${networkHint(e) ?? ''}`
+              ? `서버에 저장하지 못했어요: ${file.name}. ${networkHint(e) ?? ''}`
               : '브라우저 저장 공간이 부족해 이 도면은 새로고침하면 사라질 수 있어요.',
           )
         }
@@ -239,11 +239,11 @@ function Session({ store, user, onLogout, onChangePassword }) {
       setLoading(true)
       try {
         if (storeRef.current.kind === 'cloud' && file.size > MAX_UPLOAD_BYTES)
-          setWarning(`"${file.name}" 은(는) 50MB 가 넘어 PDF 파일은 서버에 올라가지 않아요. 측정값은 서버에 저장돼요.`)
+          setWarning(`50MB 가 넘어 PDF 파일은 서버에 올라가지 않아요: ${file.name}. 측정값은 서버에 저장돼요.`)
         // 개정판으로 바꾼 도면의 새 판(또는 예전 판) PDF 면 그 도면으로
         const { id, stale } = resolveFile(libraryRef.current, file)
         if (stale) {
-          setWarning(`"${file.name}" 은(는) 예전 판이에요. 이 도면은 개정판으로 바뀌어 있어 지금 판으로 열었어요. 예전 판은 도면 안 '개정' 에서 볼 수 있어요.`)
+          setWarning(`예전 판 PDF 라서 지금 판으로 열었어요: ${file.name}. 예전 판은 도면 안 '개정' 에서 볼 수 있어요.`)
           await openStored(id, file.name)
           return id
         }
@@ -251,7 +251,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
         return id
       } catch (e) {
         console.error(e)
-        setError(`"${file.name}" 을(를) 열 수 없습니다. 암호가 걸려 있거나 손상된 PDF인지 확인해 주세요.`)
+        setError(`이 PDF 를 열 수 없어요: ${file.name}. 암호가 걸려 있거나 손상된 파일인지 확인해 주세요.`)
       } finally {
         setLoading(false)
         refreshRecent()
@@ -275,7 +275,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
         throw Object.assign(new Error('bad pdf'), { code: 'bad_pdf' })
       }
       if (s.kind === 'cloud' && file.size > MAX_UPLOAD_BYTES)
-        setWarning(`"${file.name}" 은(는) 50MB 가 넘어 PDF 파일은 서버에 올라가지 않아요. 이 컴퓨터에서만 미리보기·열기가 돼요.`)
+        setWarning(`50MB 가 넘어 PDF 파일은 서버에 올라가지 않아요: ${file.name}. 이 컴퓨터에서만 미리보기·열기가 돼요.`)
       // 개정판으로 바꾼 도면의 PDF 면 그 도면으로 (예전 판이면 저장된 지금 판을 그대로 둠)
       const { id, stale } = resolveFile(libraryRef.current, file)
       const record = stale ? await s.touchFile(id) : await s.rememberFile(id, file)
@@ -330,7 +330,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
         setError(
           e?.code === 'no_file'
             ? `"${item.name}" 의 PDF 파일은 서버에 없어요. 같은 PDF 를 다시 열면 저장된 측정값이 그대로 이어져요.`
-            : (networkHint(e) ?? `"${item.name}" 을(를) 다시 열 수 없습니다. 목록에서 지우고 파일을 새로 열어 주세요.`),
+            : (networkHint(e) ?? `다시 열 수 없어요: ${item.name}. 목록에서 삭제하고 파일을 새로 열어 주세요.`),
         )
       } finally {
         setLoading(false)
@@ -597,7 +597,6 @@ function Session({ store, user, onLogout, onChangePassword }) {
 
       {activeId === null && (
         <Toolbar
-          onOpenFile={openFiles}
           right={
             <>
               <button
@@ -647,7 +646,6 @@ function Session({ store, user, onLogout, onChangePassword }) {
           doc={doc}
           onReplaceFile={(args) => replaceDoc(doc.id, args)}
           active={doc.id === activeId}
-          onOpenFile={openFiles}
           searchJump={searchJump?.id === doc.id ? searchJump : null}
           onOpenLink={openLinked}
           boxPick={boxPick && !boxPick.result && boxPick.target.id === doc.id ? boxPick : null}
@@ -690,7 +688,8 @@ function Session({ store, user, onLogout, onChangePassword }) {
           openFolderId={openFolderId}
           setOpenFolderId={setOpenFolderId}
           onRemoveRecent={(item) => {
-            // 휴지통으로 (폴더·별명은 그대로 두어 되살리면 제자리로)
+            // 휴지통으로 (폴더·별명은 그대로 두어 되살리면 제자리로). 탭으로 열려 있으면 탭도 닫음 (닫을 때 저장됨)
+            closeTab(item.id)
             updateLibrary((lib) => trashDoc(lib, item.id, displayName(lib, item.id, item.name)))
           }}
           cloud={cloud}

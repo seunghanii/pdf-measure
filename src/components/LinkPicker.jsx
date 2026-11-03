@@ -206,7 +206,7 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
           </div>
         )}
         <h2 className="text-lg font-bold">관련 도면 연결</h2>
-        <p className="mt-1 text-sm text-ink-500">메모장에서 누르면 고른 도면의 그 페이지나 사진이 크게 보여요. 올려 둔 도면에서 고르거나, 컴퓨터의 PDF·사진(현장 사진, 명판 등)을 바로 올려 연결할 수 있어요.</p>
+        <p className="mt-1 text-sm text-ink-500">메모장에서 누르면 고른 도면의 그 쪽이나 사진이 크게 보여요. 올려 둔 도면에서 고르거나, 컴퓨터의 PDF·사진(현장 사진, 명판 등)을 바로 올려 연결할 수 있어요.</p>
         <input
           autoFocus
           placeholder="도면 이름 검색"
@@ -386,14 +386,14 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
                 다른 박스
               </button>
             )}
-            <button type="button" onClick={() => setKeepBox(false)} className="shrink-0 rounded px-2 py-1 text-xs text-ink-500 hover:bg-surface hover:text-danger-600" title="박스 없이 페이지로만 연결">
+            <button type="button" onClick={() => setKeepBox(false)} className="shrink-0 rounded px-2 py-1 text-xs text-ink-500 hover:bg-surface hover:text-danger-600" title="박스 없이 쪽으로만 연결">
               ✕
             </button>
           </div>
         ) : (
           <div className={`mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 ${photo ? 'hidden' : ''}`}>
             <label className="flex items-center gap-2 text-sm text-ink-600">
-              열 페이지
+              열 쪽
               <input
                 inputMode="numeric"
                 value={page}
@@ -408,7 +408,7 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
                 type="button"
                 onClick={pickBox}
                 disabled={!chosen || photoBusy}
-                title="그 도면을 열고 연결할 박스(메모 범위·Equipment·도형 등)를 누르거나 새로 그려서 연결"
+                title="그 도면을 열고 연결할 박스를 누르거나 새로 그려서 연결"
                 className="ml-auto flex items-center gap-1.5 rounded-md border border-brand-300 bg-brand-50 px-2.5 py-1 text-sm font-semibold text-brand-700 hover:bg-brand-100 disabled:opacity-40"
               >
                 <BoxIcon className="h-4 w-4" />
@@ -426,7 +426,7 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
         <div className="mt-4 flex items-center gap-2">
           {onUnlink && (
             <button type="button" onClick={onUnlink} className="rounded-md px-3 py-2 text-sm text-danger-600 hover:bg-danger-50">
-              연결 끊기
+              연결 해제
             </button>
           )}
           <button type="button" onClick={onCancel} className="ml-auto rounded-md px-4 py-2 text-sm text-ink-600 hover:bg-ink-100">
@@ -503,7 +503,7 @@ function RoleChips({ roles, role, setRole, onSetRoles }) {
     <div className="mt-3 text-sm text-ink-600">
       <div className="flex items-center gap-2">
         <span>
-          문서 종류 <span className="text-xs text-ink-400">{editing ? '(이름을 고치거나 ✕ 로 빼기, 모든 도면 공통)' : '(고르지 않아도 돼요)'}</span>
+          문서 구분 <span className="text-xs text-ink-400">{editing ? '(이름을 고치거나 ✕ 로 삭제, 모든 도면 공통)' : '(고르지 않아도 돼요)'}</span>
         </span>
         {onSetRoles && (
           <button
@@ -514,11 +514,11 @@ function RoleChips({ roles, role, setRole, onSetRoles }) {
             }}
             className="ml-auto rounded px-1.5 py-0.5 text-xs text-ink-500 hover:bg-ink-100 hover:text-ink-800"
           >
-            {editing ? '완료' : '종류 고치기'}
+            {editing ? '완료' : '구분 고치기'}
           </button>
         )}
       </div>
-      <div className="mt-1.5 flex flex-wrap items-center gap-1" role="group" aria-label="문서 종류">
+      <div className="mt-1.5 flex flex-wrap items-center gap-1" role="group" aria-label="문서 구분">
         {editing
           ? roles.map((r, i) => (
               <span key={r} className="flex items-center rounded-full pl-1 pr-0.5 ring-1 ring-ink-300">
@@ -537,8 +537,8 @@ function RoleChips({ roles, role, setRole, onSetRoles }) {
                 <button
                   type="button"
                   onClick={() => remove(i)}
-                  aria-label={`${r} 빼기`}
-                  title="목록에서 빼기 (이미 연결한 문서의 종류는 그대로)"
+                  aria-label={`${r} 삭제`}
+                  title="목록에서 삭제 (이미 연결한 문서의 구분은 그대로)"
                   className="grid h-5 w-5 place-items-center rounded-full text-ink-400 hover:bg-danger-50 hover:text-danger-600"
                 >
                   ✕
@@ -562,7 +562,7 @@ function RoleChips({ roles, role, setRole, onSetRoles }) {
               autoFocus
               value={draft}
               maxLength={30}
-              placeholder="새 종류 이름"
+              placeholder="새 구분 이름"
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Escape') {
@@ -576,7 +576,7 @@ function RoleChips({ roles, role, setRole, onSetRoles }) {
               className="w-28 rounded-full border border-brand-400 px-2.5 py-0.5 text-xs outline-none ring-2 ring-brand-200"
             />
           ) : (
-            <button type="button" onClick={() => setAdding(true)} className={`${chip} text-ink-500 border border-dashed border-ink-300 hover:bg-ink-100 hover:text-ink-800`} title="문서 종류 더하기 (모든 도면 공통)">
+            <button type="button" onClick={() => setAdding(true)} className={`${chip} text-ink-500 border border-dashed border-ink-300 hover:bg-ink-100 hover:text-ink-800`} title="문서 구분 더하기 (모든 도면 공통)">
               + 추가
             </button>
           ))}

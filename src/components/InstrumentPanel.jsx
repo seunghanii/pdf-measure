@@ -36,7 +36,7 @@ export default function InstrumentPanel({
       <div className="flex items-center gap-1 border-b border-ink-100 px-2 py-1.5">
         {[
           ['list', 'Equipment 목록'],
-          ['find', '태그 찾기'],
+          ['find', 'Tag 찾기'],
         ].map(([id, label]) => (
           <button
             key={id}
@@ -134,7 +134,7 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="태그·종류 검색 (예: FT, 1001)"
+            placeholder="Tag. No·Type 검색 (예: FT, 1001)"
             className="min-w-0 flex-1 rounded-md border border-ink-300 px-2.5 py-1 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
             autoFocus
           />
@@ -197,9 +197,9 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
               <>
                 아직 Equipment가 없어요.
                 <br />
-                메모 도구(N)에서 <b>Equipment</b>를 골라 Equipment 자리에 범위를 그리거나,
+                툴바의 <b>Equipment</b>(E)로 도면에 박스를 그리거나,
                 <button onClick={onFind} className="mx-1 font-semibold text-brand-700 hover:underline">
-                  태그 찾기
+                  Tag 찾기
                 </button>
                 로 도면 글자에서 한꺼번에 만들 수 있어요.
               </>
@@ -213,7 +213,7 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
             <thead className="sticky top-0 bg-ink-50 text-xs text-ink-500">
               <tr>
                 <th className="px-3 py-1.5 font-semibold">Tag. No</th>
-                <th className="px-2 py-1.5 font-semibold">종류</th>
+                <th className="px-2 py-1.5 font-semibold">Type</th>
                 <th className="px-2 py-1.5 font-semibold">상태</th>
                 <th className="px-2 py-1.5 font-semibold">{scope === 'all' ? '도면 · 쪽' : '쪽'}</th>
               </tr>
@@ -227,12 +227,12 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
                     key={`${r.docId}-${r.id}`}
                     onClick={go}
                     onDoubleClick={() => here && onGoHere(r, true)}
-                    title={here ? '누르면 그 자리로, 두 번 누르면 카드 열기' : '그 도면을 열고 그 자리로'}
+                    title={here ? '누르면 그 자리로, 두 번 누르면 메모장 열기' : '그 도면을 열고 그 자리로'}
                     className="cursor-pointer border-t border-ink-100 hover:bg-brand-50/60">
                     <td className="px-3 py-1.5 align-top">
-                      <span className="font-semibold text-ink-800 tabular-nums">{r.tag || <span className="font-normal text-ink-400">(태그 없음)</span>}</span>
+                      <span className="font-semibold text-ink-800 tabular-nums">{r.tag || <span className="font-normal text-ink-400">(Tag. No 없음)</span>}</span>
                       {r.tag && dup.get(tagKey(r.tag)) > 1 && (
-                        <span className="ml-1 rounded bg-warn-50 px-1 text-[10px] font-semibold text-warn-700" title="같은 태그 카드가 여러 개 있어요">
+                        <span className="ml-1 rounded bg-warn-50 px-1 text-[10px] font-semibold text-warn-700" title="같은 Tag. No 의 Equipment 가 여러 개 있어요">
                           중복
                         </span>
                       )}
@@ -286,7 +286,7 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
       </div>
 
       <div className="flex items-center gap-2 border-t border-ink-100 px-3 py-1.5">
-        <span className="text-xs text-ink-400">{scope === 'all' ? '최근 열어본 도면 전체' : '이 도면'} · 누르면 그 자리로, 두 번 누르면 카드 열기</span>
+        <span className="text-xs text-ink-400">{scope === 'all' ? '모든 도면' : '이 도면'} · 누르면 그 자리로, 두 번 누르면 메모장 열기</span>
         <button
           disabled={!rows.length}
           onClick={() => downloadInstCsv(rows, scope === 'all' ? '전체' : docName.replace(/\.pdf$/i, ''))}
@@ -356,7 +356,7 @@ function TagFinder({ docId, kinds, measurements, textIndex, onPreview, onCreate,
             {indexing.progress.page}/{indexing.progress.pages}쪽{indexing.progress.ocr ? ` · OCR ${Math.round((indexing.progress.done ?? 0) * 100)}%` : ''}
           </span>
         )}
-        <br />다 읽으면 여기에 태그가 보여요.
+        <br />다 읽으면 여기에 Tag 가 보여요.
       </p>
     )
 
@@ -364,25 +364,25 @@ function TagFinder({ docId, kinds, measurements, textIndex, onPreview, onCreate,
     <>
       <div className="flex flex-col gap-1.5 border-b border-ink-100 px-3 py-2">
         <p className="text-xs text-ink-500">
-          도면 글자에서 <b>FT-1001</b>, <b>PT 101</b>, 동그라미 안 두 줄(<b>TT</b>/<b>2001</b>) 같은 태그를 찾았어요. 고른 태그 자리에 Equipment가 생겨요.
+          도면 글자에서 <b>FT-1001</b>, <b>PT 101</b>, 동그라미 안 두 줄(<b>TT</b>/<b>2001</b>) 같은 Tag 를 찾았어요. 고른 Tag 자리에 Equipment 박스가 생겨요.
         </p>
         <div className="flex items-center gap-2">
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="찾은 태그 거르기 (예: FT, 유량)"
+            placeholder="찾은 Tag 거르기 (예: FT, 유량)"
             className="min-w-0 flex-1 rounded-md border border-ink-300 px-2.5 py-1 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
           />
           <label className="flex shrink-0 items-center gap-1 text-xs text-ink-500">
             <input type="checkbox" checked={showExisting} onChange={(e) => setShowExisting(e.target.checked)} />
-            카드 있는 것도 보기
+            이미 있는 것도 보기
           </label>
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
         {list.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-ink-500">
-            {found.length === 0 ? '이 도면 글자에서 태그 모양을 찾지 못했어요.' : fresh.length === 0 ? '찾은 태그는 모두 카드가 있어요.' : '조건에 맞는 태그가 없어요.'}
+            {found.length === 0 ? '이 도면 글자에서 Tag 모양을 찾지 못했어요.' : fresh.length === 0 ? '찾은 Tag 는 모두 Equipment 가 있어요.' : '조건에 맞는 Tag 가 없어요.'}
           </p>
         ) : (
           <ul>
@@ -400,7 +400,7 @@ function TagFinder({ docId, kinds, measurements, textIndex, onPreview, onCreate,
                     <span className="font-semibold text-ink-800 tabular-nums">{h.tag}</span>
                     <span className="shrink-0 text-xs font-semibold text-ink-600">{guessKind(h.tag, kinds)}</span>
                     <span className="truncate text-xs text-ink-400">{kindDesc(h.tag)}</span>
-                    {has && <span className="shrink-0 text-[11px] text-ok-700">카드 있음</span>}
+                    {has && <span className="shrink-0 text-[11px] text-ok-700">이미 있음</span>}
                     <span className="ml-auto shrink-0 text-xs text-ink-400 tabular-nums">{h.page}쪽</span>
                   </button>
                 </li>
@@ -410,7 +410,7 @@ function TagFinder({ docId, kinds, measurements, textIndex, onPreview, onCreate,
         )}
       </div>
       <div className="flex items-center gap-2 border-t border-ink-100 px-3 py-1.5">
-        <span className="text-xs text-ink-400">찾은 태그 {found.length}개 · 줄을 누르면 그 자리로 가요</span>
+        <span className="text-xs text-ink-400">찾은 Tag {found.length}개 · 줄을 누르면 그 자리로 가요</span>
         <button
           disabled={!pickedHits.length}
           onClick={() => {
@@ -420,7 +420,7 @@ function TagFinder({ docId, kinds, measurements, textIndex, onPreview, onCreate,
           }}
           className="ml-auto rounded-md bg-brand-600 px-3 py-1 text-xs font-semibold text-white hover:bg-brand-press disabled:opacity-40"
         >
-          고른 {pickedHits.length}개 카드 만들기
+          고른 {pickedHits.length}개 Equipment 만들기
         </button>
       </div>
     </>
