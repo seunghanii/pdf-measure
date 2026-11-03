@@ -85,6 +85,8 @@ function Session({ store, user, onLogout, onChangePassword }) {
   const [pendingRev, setPendingRev] = useState(null) // 열자마자 개정판 바꾸기 창을 띄울 도면 { id, file, nonce }
   const docsRef = useRef(docs)
   const opening = useRef(new Set())
+  const libPending = useRef(0) // 저장 중인 폴더 정보 변경 수
+  const libVersion = useRef(0) // 이 창에서 폴더 정보를 바꾼 횟수
 
   useEffect(() => {
     docsRef.current = docs
@@ -102,19 +104,46 @@ function Session({ store, user, onLogout, onChangePassword }) {
         setRecent([])
         if (s.kind === 'cloud') setError(networkHint(e) ?? '서버에서 도면 목록을 불러오지 못했어요.')
       })
+    const ver = libVersion.current
     s.getLibrary()
-      .then(setLibrary)
+      // 받는 사이에 이 창에서 바꾼 게 있으면 그 저장 결과를 씀
+      .then((lib) => libPending.current === 0 && libVersion.current === ver && setLibrary(lib))
       .catch((e) => console.warn('폴더 정보를 불러오지 못함', e))
   }, [])
 
-  // 폴더 정보 바꾸기: 화면에 먼저 반영하고 저장
+  // 폴더 정보 바꾸기: 화면에 먼저 반영하고, 저장은 서버의 지금 폴더 정보에 같은 변경을 적용해서
+  // (다른 기기에서 그사이 바꾼 폴더·별명을 덮어쓰지 않게). 저장이 모두 끝나면 서버 결과로 맞춤
   const updateLibrary = useCallback((change) => {
-    setLibrary((prev) => {
-      const next = change(prev)
-      storeRef.current.saveLibrary(next).catch((e) => setError(networkHint(e) ?? '폴더 정보를 저장하지 못했어요.'))
-      return next
-    })
+    setLibrary((prev) => change(prev))
+    libPending.current += 1
+    libVersion.current += 1
+    storeRef.current.updateLibrary(change).then(
+      (lib) => {
+        libPending.current -= 1
+        if (libPending.current === 0) setLibrary(lib)
+      },
+      (e) => {
+        libPending.current -= 1
+        setError(networkHint(e) ?? '폴더 정보를 저장하지 못했어요.')
+      },
+    )
   }, [])
+
+  // 창으로 돌아오면 (다른 기기에서 바꿨을 수 있는) 폴더 정보와 도면 목록을 다시 받음
+  useEffect(() => {
+    let last = Date.now()
+    const back = () => {
+      if (document.visibilityState === 'hidden' || Date.now() - last < 5000) return
+      last = Date.now()
+      refreshRecent()
+    }
+    window.addEventListener('focus', back)
+    document.addEventListener('visibilitychange', back)
+    return () => {
+      window.removeEventListener('focus', back)
+      document.removeEventListener('visibilitychange', back)
+    }
+  }, [refreshRecent])
 
   // ---------- 도면 휴지통 ----------
   // 홈에서 지운 도면은 바로 지우지 않고 library.trash 에 7일 동안 둠 (홈·검색·연결 목록에서는 숨김)
@@ -209,7 +238,15 @@ function Session({ store, user, onLogout, onChangePassword }) {
           )
         }
         if (record?.upload) watchUpload(record.upload, file.name)
-        const doc = { id, name: record?.name ?? file.name, pdfDoc, savedState: record?.state ?? null, store: s }
+        const doc = {
+          id,
+          name: record?.name ?? file.name,
+          pdfDoc,
+          savedState: record?.state ?? null,
+          savedStamp: record?.updatedAt, // 서버 저장 시각 (다른 기기에서 고쳤는지 알아보기)
+          savedSize: record?.size ?? file.size, // 서버 PDF 크기 (다른 기기에서 페이지·판을 바꿨는지)
+          store: s,
+        }
         setOpenPdf(id, pdfDoc)
         setDocs((prev) => (prev.some((d) => d.id === id) ? prev : [...prev, doc]))
         if (activate) setActiveId(id)
@@ -304,7 +341,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
       const s = storeRef.current
       const { kept } = await s.replaceFile(id, file, { keepKey })
       const state = buildState(kept)
-      await s.saveState(id, state)
+      const stamp = await s.saveState(id, state)
       if (dropRevKey) s.removeRevisionFile(id, dropRevKey).catch((e) => console.warn('예전 판 PDF 지우기 실패', e))
       updateLibrary((lib) => linkRevision(lib, id, fileIdOf(file)))
       // 페이지 편집은 쪽 순서만 바뀌므로 만들어 둔 색인을 새 순서로 (index: undefined 면 개정판처럼 다시 만듦)
@@ -313,13 +350,51 @@ function Session({ store, user, onLogout, onChangePassword }) {
       const old = docsRef.current.find((d) => d.id === id)?.pdfDoc
       setOpenPdf(id, pdfDoc)
       setDocs((prev) =>
-        prev.map((d) => (d.id === id ? { ...d, name: file.name, pdfDoc, savedState: state, rev: (d.rev ?? 0) + 1, notice } : d)),
+        prev.map((d) => (d.id === id ? { ...d, name: file.name, pdfDoc, savedState: state, savedStamp: stamp, savedSize: file.size, rev: (d.rev ?? 0) + 1, notice } : d)),
       )
       // 화면이 새 PDF 로 바뀐 뒤 예전 PDF 메모리 해제
       if (old && old !== pdfDoc) setTimeout(() => old.loadingTask?.destroy(), 1000)
       refreshRecent()
     },
     [updateLibrary, refreshRecent],
+  )
+
+  // 다른 기기(창)에서 이 도면의 PDF 를 바꿨을 때 (페이지 편집·개정판): PDF 와 저장된 상태를 새로 받아 탭을 다시 그림
+  const reloadDoc = useCallback(
+    async (id) => {
+      const s = storeRef.current
+      try {
+        const blob = await s.getFile(id)
+        const cur = docsRef.current.find((d) => d.id === id)
+        if (!blob || !cur) return
+        const pdfDoc = await loadPdf(await blob.arrayBuffer())
+        const row = await s.getState(id)
+        forgetIndex(s, id) // 글자 색인도 그쪽에서 새 순서로 저장했으므로 다시 받음
+        const old = cur.pdfDoc
+        setOpenPdf(id, pdfDoc)
+        setDocs((prev) =>
+          prev.map((d) =>
+            d.id === id
+              ? {
+                  ...d,
+                  pdfDoc,
+                  savedState: row?.state ?? null,
+                  savedStamp: row?.updatedAt,
+                  savedSize: row?.size ?? blob.size,
+                  rev: (d.rev ?? 0) + 1,
+                  notice: '다른 기기(창)에서 이 도면의 페이지나 판이 바뀌어서 새로 불러왔어요.',
+                }
+              : d,
+          ),
+        )
+        if (old && old !== pdfDoc) setTimeout(() => old.loadingTask?.destroy(), 1000)
+        refreshRecent()
+      } catch (e) {
+        console.warn('도면 다시 불러오기 실패', e)
+        setError(networkHint(e) ?? '다른 기기에서 바뀐 도면을 다시 불러오지 못했어요. 탭을 닫고 다시 열어 주세요.')
+      }
+    },
+    [refreshRecent],
   )
 
   const openRecent = useCallback(
@@ -650,6 +725,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
           key={`${doc.id}:${doc.rev ?? 0}`}
           doc={doc}
           onReplaceFile={(args) => replaceDoc(doc.id, args)}
+          onReloadDoc={() => reloadDoc(doc.id)}
           active={doc.id === activeId}
           searchJump={searchJump?.id === doc.id ? searchJump : null}
           onOpenLink={openLinked}

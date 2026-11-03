@@ -28,7 +28,7 @@ const CAL_KEY = '__calendar__' // 달력 일정 (lib/calEvents.js)
 const INST_LIST_KEY = '__inst_list__' // Inst list: 올린 계기 목록 (lib/instList.js)
 const TEXT_PREFIX = '@text|'
 const IMAGE_PREFIX = '@img|'
-const COLS = 'file_key, name, size, storage_path, has_file, state, last_opened'
+const COLS = 'file_key, name, size, storage_path, has_file, state, last_opened, updated_at'
 // 홈 목록에는 측정값 전체 대신 요약(개수·축척)만 받음
 const LIST_COLS = 'file_key, name, size, storage_path, has_file, last_opened, summary:state->summary'
 
@@ -42,6 +42,7 @@ const toRecord = (row) =>
     state: row.state,
     summary: row.summary ?? (row.state !== undefined ? summarize(row.state) : undefined),
     lastOpened: Date.parse(row.last_opened),
+    updatedAt: row.updated_at ?? null, // 마지막 저장 시각 (여러 기기에서 고칠 때 덮어쓰기 막기)
   }
 
 const check = ({ data, error }) => {
@@ -195,6 +196,8 @@ export function createCloudStore(supabase, user) {
     return list
   }
 
+  let libChain = Promise.resolve() // 폴더 정보 바꾸기 차례
+
   return {
     kind: 'cloud',
     saveDelay: 1500, // 서버 저장은 연달아 고치는 동안 모아서 한 번에 (창을 닫을 때는 바로 저장)
@@ -244,16 +247,36 @@ export function createCloudStore(supabase, user) {
       return blob
     },
 
-    saveState(id, state) {
+    // expect: 이 창이 마지막으로 본 저장 시각 (updatedAt). 주면 서버가 그대로일 때만 저장하고,
+    // 그사이 다른 기기(창)가 저장했으면 code 'conflict' 오류 → 받는 쪽이 합쳐서 다시 저장 (lib/autosave.js)
+    // 돌려주는 값: 새 저장 시각
+    saveState(id, state, { expect } = {}) {
       const summary = summarize(state)
-      patchRecent((list) => list.map((r) => (r.id === id ? { ...r, summary } : r)))
+      const at = new Date().toISOString()
       return track(
-        table()
-          .update({ state: { ...state, summary }, updated_at: new Date().toISOString() })
-          .eq('user_id', uid)
-          .eq('file_key', id)
-          .then(check),
+        (async () => {
+          let q = table().update({ state: { ...state, summary }, updated_at: at }).eq('user_id', uid).eq('file_key', id)
+          if (expect !== undefined) q = expect === null ? q.is('updated_at', null) : q.eq('updated_at', expect)
+          const rows = check(await q.select('file_key'))
+          if (expect !== undefined && !rows.length) {
+            const e = new Error('state changed elsewhere')
+            e.code = 'conflict'
+            throw e
+          }
+          patchRecent((list) => list.map((r) => (r.id === id ? { ...r, summary } : r)))
+          return at
+        })(),
       )
+    },
+
+    // 서버에 저장된 도면 상태 { state, updatedAt, size } (다른 기기에서 고쳤는지 볼 때)
+    async getState(id) {
+      const row = check(await table().select('state, updated_at, size').eq('user_id', uid).eq('file_key', id).maybeSingle())
+      return row && { state: row.state, updatedAt: row.updated_at ?? null, size: row.size }
+    },
+    async peekState(id) {
+      const row = check(await table().select('updated_at, size').eq('user_id', uid).eq('file_key', id).maybeSingle())
+      return row && { updatedAt: row.updated_at ?? null, size: row.size }
     },
 
     // 돌려주는 배열은 매번 새로 (받는 쪽이 정렬해도 기억한 목록은 그대로)
@@ -340,6 +363,34 @@ export function createCloudStore(supabase, user) {
 
     saveLibrary(lib) {
       return track(upsertSpecial(LIBRARY_KEY, '폴더 정보', lib))
+    },
+
+    // 폴더 정보 바꾸기: 서버의 지금 폴더 정보를 받아 change 를 적용하고, 그사이 다른 기기가 저장했으면 다시 받아 적용.
+    // (오래 켜 둔 창이 다른 기기에서 바꾼 폴더·별명을 덮어쓰지 않게) 바꾼 결과를 돌려줌. 한 번에 하나씩 차례로
+    updateLibrary(change) {
+      const run = async () => {
+        for (let i = 0; i < 4; i++) {
+          const row = check(await table().select('state, updated_at').eq('user_id', uid).eq('file_key', LIBRARY_KEY).maybeSingle())
+          const lib = change(normalizeLibrary(row?.state))
+          if (!row) {
+            await upsertSpecial(LIBRARY_KEY, '폴더 정보', lib)
+            return lib
+          }
+          const rows = check(
+            await table()
+              .update({ state: lib, updated_at: new Date().toISOString() })
+              .eq('user_id', uid)
+              .eq('file_key', LIBRARY_KEY)
+              .eq('updated_at', row.updated_at)
+              .select('file_key'),
+          )
+          if (rows.length) return lib
+        }
+        throw new Error('폴더 정보가 계속 바뀌어 저장하지 못함')
+      }
+      const p = libChain.then(run, run)
+      libChain = p.catch(() => {})
+      return track(p)
     },
 
     // 홈 메모장: 서버 글과 이 브라우저 사본 중 나중에 고친 것 (사본이 더 새로우면 = 못 올린 글, 다시 올림)

@@ -305,6 +305,12 @@ export const localStore = {
   listImages,
   getLibrary: async () => getLibrary(),
   saveLibrary: async (lib) => saveLibrary(lib),
+  // 이 브라우저 안에서는 저장된 것에 바로 적용 (다른 탭에서 바꾼 것도 덮어쓰지 않게)
+  updateLibrary: async (change) => {
+    const lib = change(getLibrary())
+    saveLibrary(lib)
+    return lib
+  },
   getHomeNote: async () => loadLocalNote(),
   saveHomeNote: async (note) => saveLocalNote(note),
   getCalendar: async () => loadLocalCal(),
