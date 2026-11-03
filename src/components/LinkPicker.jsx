@@ -185,7 +185,7 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
     else if (box) onConfirm({ ...box, name: chosen.name, role: role.trim() })
     else if (chosen) onConfirm({ ...unboxLink(initial?.id === chosen.id ? initial : {}), id: chosen.id, name: chosen.name, page: pageNo, role: role.trim() })
   }
-  const pickBox = () => chosen && onPickBox({ id: chosen.id, name: chosen.name, role: role.trim() })
+  const pickBox = () => chosen && onPickBox({ id: chosen.id, name: chosen.name, role: role.trim(), page: pageNo })
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onMouseDown={onCancel} {...dropProps}>
@@ -365,6 +365,7 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
                   <span className="block truncate" title={r.name}>
                     {displayName(lib, r.id, r.name)}
                   </span>
+                  {lib.aliases?.[r.id] && <span className="block truncate text-[11px] text-ink-400">{r.name}</span>}
                   {lib.assign[r.id] && <span className="block truncate text-xs text-ink-400">{folderLabel(lib, lib.assign[r.id])}</span>}
                 </span>
                 {r.id === currentId && <span className="shrink-0 text-xs text-ink-400">지금 도면</span>}

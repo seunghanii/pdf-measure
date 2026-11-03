@@ -373,6 +373,9 @@ function Session({ store, user, onLogout, onChangePassword }) {
         return
       }
       setBoxPick({ ...req, fromName, result: null })
+      // '열 페이지' 에 적은 쪽으로 바로 가서 고르기 (Workspace 가 쪽 수 넘으면 맞춤)
+      const page = Math.max(1, Number(req.target.page) || 1)
+      setSearchJump({ id: req.target.id, page, nonce: Date.now() })
     },
     [library, openRecent],
   )
