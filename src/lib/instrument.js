@@ -7,6 +7,7 @@
 // 사진도 연결할 수 있음: { photo: 사진 id, name, role, w, h } (id 없음, 사진은 이 도면 사진 저장소에 있음)
 // 상태 색은 분류처럼 항목 color 에 함께 넣어 두어 그리기 코드가 상태 목록을 몰라도 되게 함.
 import { isMarkup, rectOf } from './markup'
+import { isDefaultName } from './categories'
 
 export const INST_STATUSES = [
   { id: 'pre', label: 'Not Installed', color: '#64748b' },
@@ -109,6 +110,19 @@ export function normTag(s) {
     .trim()
     .replace(/\s*[-_ ]\s*/g, '-')
 }
+// Tag. No 를 바꿀 때 메모 항목에 합칠 값.
+// 종류를 비워 뒀거나 태그로 짐작한 값 그대로면 새 태그로 다시 짐작 (FT-1001 → FT),
+// 메모 이름이 기본 이름이거나 예전 태그와 같으면 이름도 태그로
+export function tagPatch(memo, raw, kinds) {
+  const inst = memo.inst
+  const tag = String(raw ?? '').toUpperCase()
+  const next = { ...inst, tag }
+  if (!inst.kind?.trim() || inst.kind === guessKind(inst.tag, kinds)) next.kind = guessKind(tag, kinds)
+  const patch = { inst: next }
+  if (isDefaultName(memo.name) || !memo.name?.trim() || memo.name === inst.tag) patch.name = tag || memo.name
+  return patch
+}
+
 // 비교용: 기호 모두 뺌 ("FT-1001" = "FT1001")
 export const tagKey = (s) => String(s ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
 

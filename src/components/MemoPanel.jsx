@@ -42,7 +42,7 @@ function loadBottomH() {
 // 메모장. 도면 오른쪽 위(또는 아래에 길게, memoDock 설정)에 떠 있고, 글을 바로 쓰고 사진을 글 사이에 넣습니다.
 // others: 같은 자리에 겹친 메모들 (누르면 그 메모로 바뀜)
 // backlinks: 다른 박스가 이 메모로 연결해 둔 것들 (양방향 연결, lib/backlinks.js)
-export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, onDelete, onOpenLink, onPickLink, store, library, docId, onNotice, kinds, onAddKind, backlinks }) {
+export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, onDelete, onOpenLink, onPickLink, store, library, docId, onNotice, kinds, onAddKind, backlinks, tagReading, onReadTag }) {
   // 예전(사진을 아래 칸에 모아 둔) 메모는 처음 열 때 사진을 글 끝으로 옮김
   const [migrated] = useState(() => migrateMemo(memo))
   const [initialText] = useState(() => migrated?.text ?? memo.text ?? '')
@@ -230,6 +230,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
     else {
       const inst = memo.instKept ?? { tag: '', desc: '', kind: '', status: DEFAULT_STATUS }
       onChange({ inst, instKept: undefined, color: statusOf(inst.status ?? DEFAULT_STATUS).color })
+      if (!inst.tag?.trim()) onReadTag?.(false) // 태그가 비어 있으면 박스 안 글자로 채워 봄
     }
   }
   const urls = viewing ? viewing.ids.map((id) => cachedImageUrl(id)) : []
@@ -338,7 +339,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
       )}
 
       {/* 계기 카드 칸 (계기 카드일 때만) */}
-      {memo.inst && <InstFields memo={memo} onChange={onChange} kinds={kinds} onAddKind={onAddKind} />}
+      {memo.inst && <InstFields memo={memo} onChange={onChange} kinds={kinds} onAddKind={onAddKind} reading={tagReading} onReadTag={onReadTag && (() => onReadTag(true))} />}
 
       {/* 관련 도면 (여러 개) */}
       <RelatedDocs memo={memo} library={library} onChange={onChange} onOpen={(l) => (l.photo ? openPhotoLink(l) : setPreviewing(l))} onPick={onPickLink} />

@@ -23,12 +23,13 @@ import { itemLabel, itemRect } from '../lib/activity'
 import { backlinksFor, refreshLinkNames } from '../lib/backlinks'
 import { linkBoxName } from '../lib/drawingNo'
 import { memoFileIds } from '../lib/excel'
-import { DEFAULT_STATUS, cardBoxFor, donePatch, doneUpTo, guessKind, isInst, itemGroup, linksPatch, memoLinkPhotoIds, memoLinks, statusOf } from '../lib/instrument'
+import { DEFAULT_STATUS, cardBoxFor, donePatch, doneUpTo, guessKind, tagPatch, isInst, itemGroup, linksPatch, memoLinkPhotoIds, memoLinks, statusOf } from '../lib/instrument'
 import { liveItemTrash, pushItems, withoutTrashed } from '../lib/trash'
 import { MAX_ZOOM, MIN_ZOOM } from '../lib/zoom'
 import { adaptState, newRevKey } from '../lib/revision'
 import { loadUncalHidden } from '../lib/scalePanel'
 import RevisionDialog from './RevisionDialog'
+import { readTagInBox } from '../lib/tagRead'
 
 // 메모장은 마크다운 읽는 도구까지 필요할 때만 불러옴
 const MemoPanel = lazy(() => import('./MemoPanel'))
@@ -184,6 +185,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
     setHistory(h.slice(0, -1))
   }, [])
 
+  const readNewTag = useRef(null) // 방금 그린 Equipment 박스 (그려지면 박스 안 글자로 Tag. No 채움)
   const onComplete = useCallback(
     (type, points, page, extra) => {
       if (type === 'calibrate') {
@@ -209,6 +211,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
           if (markupStyle.memoKind === 'inst') {
             m.inst = { tag: '', kind: '', status: DEFAULT_STATUS }
             m.color = statusOf(DEFAULT_STATUS).color
+            readNewTag.current = m.id
           }
         }
         if (type === 'text') {
@@ -608,6 +611,49 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
     },
     [beginEdit, updateItem],
   )
+  // Equipment 박스 안 글자로 Tag. No 채우기 (PDF 글자, 없으면 박스 부분만 OCR)
+  // force: '박스 읽기' 단추 (이미 적힌 태그도 바꾸고, 못 읽으면 알림). 아니면 새 박스: 그사이 사용자가 태그를 쳤으면 그대로 둠
+  const [tagReading, setTagReading] = useState(() => new Set())
+  const readTag = useCallback(
+    async (id, force = false) => {
+      const m = measurementsRef.current.find((x) => x.id === id)
+      if (!m?.points?.length) return
+      const rect = rectOf(m.points[0], m.points[1] ?? m.points[0])
+      const busy = (on) =>
+        setTagReading((cur) => {
+          const next = new Set(cur)
+          if (on) next.add(id)
+          else next.delete(id)
+          return next
+        })
+      busy(true)
+      let hit = null
+      try {
+        hit = await readTagInBox({ pdfDoc, page: m.page ?? 1, rect })
+      } catch (e) {
+        console.warn('박스 글자 읽기 실패', e)
+      } finally {
+        busy(false)
+      }
+      const cur = measurementsRef.current.find((x) => x.id === id)
+      if (!cur?.inst) return
+      if (!hit) {
+        if (force) setNotice('박스 안에서 Tag. No 를 읽지 못했어요. 글자가 박스 안에 다 들어오게 그리거나 직접 입력해 주세요.')
+        return
+      }
+      if (!force && cur.inst.tag?.trim()) return
+      if (hit.tag === cur.inst.tag) return
+      if (force) beginEdit()
+      updateItem(id, tagPatch(cur, hit.tag, instKinds))
+    },
+    [pdfDoc, instKinds, beginEdit, updateItem],
+  )
+  useEffect(() => {
+    const id = readNewTag.current
+    if (!id || !measurements.some((m) => m.id === id)) return
+    readNewTag.current = null
+    readTag(id)
+  }, [measurements, readTag])
   // 태그 찾기에서 고른 태그 자리마다 계기 카드 만들기 (되돌리기 한 번에 모두 취소)
   const createCards = useCallback(
     (hits) => {
@@ -1180,6 +1226,8 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
                 onNotice={setNotice}
                 kinds={instKinds}
                 onAddKind={onAddKind}
+                tagReading={tagReading.has(memoItem.id)}
+                onReadTag={(force) => readTag(memoItem.id, force)}
               />
             </Suspense>
           )}
