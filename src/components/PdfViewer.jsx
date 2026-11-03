@@ -104,6 +104,7 @@ export default function PdfViewer({
   const dragRef = useRef(null) // 점 하나 { id, index } 또는 도형 전체 { id, whole, start, orig } 이동 중
   const [editing, setEditing] = useState(null) // 텍스트 입력 중 { page, point, id?, text, fontSize, color }
   const [marquee, setMarquee] = useState(null) // 드래그 선택 상자 { page, a, b, additive }
+  const [moveDrag, setMoveDrag] = useState(null) // 항목 통째로 끄는 중 { from, to } (다른 페이지로 옮기기)
   const panRef = useRef(null) // { x, y, left, top } 화면 이동 중
   const zoomAnchorRef = useRef(null) // 확대/축소 후에도 같은 지점을 같은 자리에
   const viewAnchorRef = useRef(null) // 현재 화면 가운데에 있는 페이지 위치
@@ -798,6 +799,46 @@ export default function PdfViewer({
     else setDraft(next)
   }
 
+  // 화면 좌표 아래의 페이지 번호 (페이지 사이 틈·바깥이면 null)
+  const pageAtClient = (x, y) => {
+    for (let i = 0; i < pageEls.current.length; i++) {
+      const r = pageEls.current[i]?.getBoundingClientRect()
+      if (r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return i + 1
+    }
+    return null
+  }
+
+  // 통째로 끌기: 잡은 페이지 좌표로 옮기고(페이지 밖으로 나가도 보임), 놓을 페이지를 표시
+  const applyWholeDrag = (d, clientX, clientY) => {
+    const rect = d.svg.getBoundingClientRect()
+    const dx = (clientX - rect.left) / zoom - d.start.x
+    const dy = (clientY - rect.top) / zoom - d.start.y
+    const next = {}
+    for (const [id, pts] of Object.entries(d.orig)) next[id] = pts.map((q) => ({ x: q.x + dx, y: q.y + dy }))
+    d.last = next
+    onSetPoints(next)
+    const to = pageAtClient(clientX, clientY) ?? d.page
+    setMoveDrag((cur) => (cur && cur.from === d.page && cur.to === to ? cur : { from: d.page, to }))
+  }
+
+  // 끄는 중 화면 위·아래 가장자리에 가면 저절로 스크롤 (다른 페이지까지 끌고 가기)
+  const EDGE = 48
+  const autoScroll = (d) => {
+    const el = containerRef.current
+    if (!el || dragRef.current !== d || !d.client) return (d.raf = 0)
+    const r = el.getBoundingClientRect()
+    const { x, y } = d.client
+    const v = y < r.top + EDGE ? -Math.ceil((r.top + EDGE - y) / 3) : y > r.bottom - EDGE ? Math.ceil((y - r.bottom + EDGE) / 3) : 0
+    const h = x < r.left + EDGE ? -Math.ceil((r.left + EDGE - x) / 3) : x > r.right - EDGE ? Math.ceil((x - r.right + EDGE) / 3) : 0
+    if (!v && !h) return (d.raf = 0)
+    const top = el.scrollTop
+    const left = el.scrollLeft
+    el.scrollTop += Math.max(-30, Math.min(30, v))
+    el.scrollLeft += Math.max(-30, Math.min(30, h))
+    if (el.scrollTop !== top || el.scrollLeft !== left) applyWholeDrag(d, x, y)
+    d.raf = requestAnimationFrame(() => autoScroll(d))
+  }
+
   const onPointerMove = (e, page) => {
     const pending = pendingTouchRef.current
     if (pending && pending.e.pointerId === e.pointerId) {
@@ -815,16 +856,15 @@ export default function PdfViewer({
     const d = dragRef.current
     if (d) {
       if (d.whole) {
-        const dx = p.x - d.start.x
-        const dy = p.y - d.start.y
         if (!d.moved) {
-          if (Math.hypot(dx, dy) * zoom < 3) return // 단순 클릭은 선택만
+          if (Math.hypot(p.x - d.start.x, p.y - d.start.y) * zoom < 3) return // 단순 클릭은 선택만
           d.moved = true
+          d.svg = e.currentTarget
           onBeginEdit()
         }
-        const next = {}
-        for (const [id, pts] of Object.entries(d.orig)) next[id] = pts.map((q) => ({ x: q.x + dx, y: q.y + dy }))
-        onSetPoints(next)
+        d.client = { x: e.clientX, y: e.clientY }
+        applyWholeDrag(d, e.clientX, e.clientY)
+        if (!d.raf) d.raf = requestAnimationFrame(() => autoScroll(d))
       } else if (d.resize) {
         if (!d.moved) {
           d.moved = true
@@ -911,6 +951,21 @@ export default function PdfViewer({
     // 묶음 상자 안을 끌지 않고 누르기만 하면: 누른 항목만 고르기(그 항목 크기 조절 등), 빈 곳이면 선택 해제
     if (dr?.group && !dr.moved) onSelect(dr.clickId ? [dr.clickId] : [])
     if (dr?.whole && !dr.moved && dr.clickId && measurements.find((m) => m.id === dr.clickId)?.type === 'memo') onOpenMemo(dr.clickId, dr.page, dr.start)
+    // 다른 페이지 위에 놓으면 그 페이지로 옮김: 화면에서 놓은 자리 그대로 그 페이지 좌표로 바꿈
+    if (dr?.whole && dr.moved && dr.last) {
+      if (dr.raf) cancelAnimationFrame(dr.raf)
+      const to = pageAtClient(e.clientX, e.clientY)
+      const a = pageEls.current[dr.page - 1]?.getBoundingClientRect()
+      const b = to && pageEls.current[to - 1]?.getBoundingClientRect()
+      if (to && to !== dr.page && a && b) {
+        const ox = (a.left - b.left) / zoom
+        const oy = (a.top - b.top) / zoom
+        const next = {}
+        for (const [id, pts] of Object.entries(dr.last)) next[id] = pts.map((q) => ({ x: q.x + ox, y: q.y + oy }))
+        onSetPoints(next, to)
+      }
+    }
+    if (moveDrag) setMoveDrag(null)
     if (dragRef.current && !drawing) setCursor(null) // 점 끌기 때 보이던 자석 표시 지우기
     dragRef.current = null
     if (textSel) {
@@ -972,7 +1027,9 @@ export default function PdfViewer({
     // 첫 손가락이 시작한 일은 취소
     clearPendingTouch()
     panRef.current = null
+    if (dragRef.current?.raf) cancelAnimationFrame(dragRef.current.raf)
     dragRef.current = null
+    setMoveDrag(null)
     touchPanRef.current = null
     setMarquee(null)
     setDraft((d) => (d?.dragging ? null : d))
@@ -1131,8 +1188,8 @@ export default function PdfViewer({
                 key={page}
                 ref={(el) => (pageEls.current[i] = el)}
                 data-page={i}
-                className="theme-light relative shrink-0 bg-white shadow-lg"
-                style={{ width: w, height: h }}
+                className={`theme-light relative shrink-0 bg-white shadow-lg ${moveDrag && moveDrag.to === page && moveDrag.from !== page ? 'outline outline-2 outline-offset-2 outline-brand-500' : ''}`}
+                style={{ width: w, height: h, zIndex: moveDrag?.from === page ? 20 : undefined }}
               >
                 <PageCanvas pdfDoc={pdfDoc} page={page} size={size} zoom={zoom} visible={visible.has(i)} scrollRoot={containerRef} />
                 {editing && editing.page === page && (
@@ -1142,7 +1199,7 @@ export default function PdfViewer({
                   width={w}
                   height={h}
                   className={`absolute inset-0 touch-none select-none ${onPickItem ? 'box-pick' : tool === 'select' || tool === 'memo' || panning ? 'memo-hover' : ''}`}
-                  style={{ cursor: cursorStyle }}
+                  style={{ cursor: cursorStyle, overflow: moveDrag?.from === page ? 'visible' : undefined }}
                   onPointerDown={(e) => onPointerDown(e, page)}
                   onPointerMove={(e) => onPointerMove(e, page)}
                   onPointerUp={(e) => onPointerUp(e, page)}
@@ -1174,7 +1231,7 @@ export default function PdfViewer({
                       showHandles={tool === 'select'}
                     />
                   )}
-                  {visible.has(i) && (
+                  {(visible.has(i) || moveDrag?.from === page) && (
                     <PageShapes
                       items={byPage.get(page)}
                       zoom={zoom}
@@ -1186,7 +1243,7 @@ export default function PdfViewer({
                       croppingId={croppingId}
                     />
                   )}
-                  {visible.has(i) && tool === 'select' && !croppingId && (
+                  {(visible.has(i) || moveDrag?.from === page) && tool === 'select' && !croppingId && (
                     <SelectionBox
                       items={byPage.get(page)}
                       selectedIds={selectedIds}
@@ -1194,7 +1251,7 @@ export default function PdfViewer({
                       width={w}
                       height={h}
                       editingId={editing?.page === page ? editing.id : null}
-                      canDelete={!marquee}
+                      canDelete={!marquee && !moveDrag}
                       onDelete={onDelete}
                       onDuplicate={onDuplicate}
                       isPinching={isPinching}

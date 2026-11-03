@@ -274,8 +274,9 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
   )
 
   // { id: points } 로 여러 항목의 점을 한꺼번에 바꾸기 (선택한 것 함께 옮기기)
-  const onSetPoints = useCallback((map) => {
-    setMeasurements((prev) => prev.map((m) => (map[m.id] ? { ...m, points: map[m.id] } : m)))
+  // page 를 주면 그 쪽으로 옮김 (다른 페이지 위에 끌어 놓기)
+  const onSetPoints = useCallback((map, page) => {
+    setMeasurements((prev) => prev.map((m) => (map[m.id] ? (page ? { ...m, points: map[m.id], page } : { ...m, points: map[m.id] }) : m)))
   }, [])
 
   const updateItem = useCallback((id, patch) => {
