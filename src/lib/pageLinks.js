@@ -81,3 +81,16 @@ export function renameMovedLinkBox(m, page, fileName, numPages) {
   if (m.type !== 'memo' || (m.page ?? 1) === page) return m.name
   return m.name === linkBoxName(fileName, m.page ?? 1, numPages) ? linkBoxName(fileName, page, numPages) : m.name
 }
+
+// 예전 판(편집 횟수 fromV 때 쪽 번호) 쪽 → 지금 쪽 번호 표 (지금 없는 쪽은 0). 너무 오래돼 표가 없으면 null
+export function composeMap(log, fromV, oldNumPages) {
+  const v = pageLogV(log)
+  const out = Array.from({ length: oldNumPages }, (_, i) => i + 1)
+  if (fromV >= v) return out
+  if (fromV < (log.start ?? 0)) return null
+  for (let i = fromV - log.start; i < log.maps.length; i++) {
+    const map = log.maps[i]
+    for (let k = 0; k < out.length; k++) if (out[k]) out[k] = out[k] > map.length ? out[k] : map[out[k] - 1]
+  }
+  return out
+}
