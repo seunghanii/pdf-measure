@@ -39,3 +39,45 @@ export function backlinksFor(docId, docName, items, rows) {
   }
   return map
 }
+
+// 요약에 넣을 박스 이름들 { 항목 id: 이름 }: 다른 도면에서 이 도면 박스로 연결해 둔 연결이 지금 이름을 보여 주게 함.
+// 메모 범위·Equipment 는 모두, 다른 항목은 이름을 바꾼 것만 ("사각형 1" 같은 기본 이름은 연결에 적힌 그대로 맞음)
+const DEFAULT_NAME = /^\S+ \d+$/
+export function boxNames(measurements) {
+  const out = {}
+  for (const m of measurements ?? []) {
+    if (m.type !== 'memo' && (!m.name || DEFAULT_NAME.test(m.name))) continue
+    out[m.id] = itemLabel(m)
+  }
+  return out
+}
+
+// 박스 연결에 적힌 이름(itemName)이 지금 이름과 다르면 고친 항목들. 고칠 게 없으면 null
+// here: 이 도면 항목들(같은 도면 박스), rows: 다른 도면 요약들 (summary.names)
+export function refreshLinkNames(docId, items, rows) {
+  let here = null
+  const nameOf = (l) => {
+    if (l.id === docId) {
+      if (!here) here = new Map(items.map((m) => [m.id, m]))
+      const t = here.get(l.item)
+      return t ? itemLabel(t) : null
+    }
+    return rows?.find((r) => r.id === l.id)?.summary?.names?.[l.item] ?? null
+  }
+  let changed = null
+  for (const m of items) {
+    if (m.type !== 'memo') continue
+    const links = memoLinks(m)
+    if (!links.some((l) => l?.item && !l.photo)) continue
+    let touched = false
+    const next = links.map((l) => {
+      if (!l?.item || l.photo) return l
+      const name = nameOf(l)
+      if (!name || name === l.itemName) return l
+      touched = true
+      return { ...l, itemName: name }
+    })
+    if (touched) (changed ??= new Map()).set(m.id, next)
+  }
+  return changed
+}

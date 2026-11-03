@@ -20,7 +20,7 @@ import LinkPicker from './LinkPicker'
 import BoxIcon from './BoxIcon'
 import { DEFAULT_MEMO_COLOR, isLinkOnly, memoPhotoIds, memosAt } from '../lib/memo'
 import { itemLabel, itemRect } from '../lib/activity'
-import { backlinksFor } from '../lib/backlinks'
+import { backlinksFor, refreshLinkNames } from '../lib/backlinks'
 import { memoFileIds } from '../lib/excel'
 import { DEFAULT_STATUS, cardBoxFor, donePatch, doneUpTo, guessKind, isInst, itemGroup, linksPatch, memoLinkPhotoIds, memoLinks, statusOf } from '../lib/instrument'
 import { liveItemTrash, pushItems, withoutTrashed } from '../lib/trash'
@@ -947,6 +947,11 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
     }
   }, [active, store, rawSearchJump])
   const backlinks = useMemo(() => backlinksFor(doc.id, fileName, measurements, otherDocs), [doc.id, fileName, measurements, otherDocs])
+  // 연결한 박스의 이름을 그쪽에서 바꿨으면 연결에 적힌 이름도 맞춤 (되돌리기 목록에는 넣지 않음)
+  useEffect(() => {
+    const fix = refreshLinkNames(doc.id, measurements, otherDocs)
+    if (fix) setMeasurements((prev) => prev.map((m) => (fix.has(m.id) ? { ...m, ...linksPatch(fix.get(m.id)) } : m)))
+  }, [doc.id, measurements, otherDocs])
 
   // 눈 아이콘: 화면에서 숨기기/보이기 (값은 그대로 남음)
   // 숨긴 항목은 선택에서도 빠짐 (보이지 않는 것이 함께 지워지거나 옮겨지지 않도록)
