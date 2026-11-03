@@ -7,8 +7,8 @@ import { DEFAULT_BOX_OPACITY, HIGHLIGHT_COLORS, IMAGE_BORDER_COLORS, IMAGE_BORDE
 
 const MARKUP_TOOL_IDS = TOOLS.filter((t) => t.group === 'markup').map((t) => t.id)
 
-// Equipment 박스: 박스 도구(memo)를 Equipment 종류로 고르는 단추. 단축키 E
-const EQUIP_TOOL = { id: 'equip', label: 'Equipment', key: 'E', icon: 'M4 4h16v16H4zM8 9h8M8 13h5M15.5 15.5l1.5 1.5 3-3' }
+// Equipment 박스: 박스 도구(memo)를 Equipment 종류로 고르는 단추. 단축키 E. 아이콘은 압력 게이지
+const EQUIP_TOOL = { id: 'equip', label: 'Equipment', key: 'E', icon: 'M5 10a7 7 0 1014 0 7 7 0 10-14 0zM12 10l3.5-3M12 17v4M9 21h6' }
 
 function Icon({ d }) {
   return (
@@ -63,7 +63,7 @@ export default function Toolbar({
             {/* 기준 길이는 오른쪽 목록 축척 칸에서만 (C·3 키는 그대로) */}
             {/* 면적·각도(more)는 + 버튼 안에. 고른 동안에는 막대에도 보여 줌 */}
             {VIEW_TOOLS.filter((t) => t.id !== 'calibrate' && (!t.more || tool === t.id)).map((t) => (
-              <ToolButton key={t.id} t={t} active={tool === t.id} onClick={() => setTool(t.id)} showLabel />
+              <ToolButton key={t.id} t={t} active={tool === t.id} onClick={() => setTool(t.id)} />
             ))}
             <MoreTools tools={VIEW_TOOLS.filter((t) => t.more)} tool={tool} setTool={setTool} />
             <SnapButton />
@@ -100,7 +100,6 @@ export default function Toolbar({
               className="flex items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-sm font-medium whitespace-nowrap text-ink-600 transition-colors hover:bg-surface hover:text-ink-900 pointer-coarse:px-3 pointer-coarse:py-2.5"
             >
               <Icon d="M4 5h16v14H4zM4 16l5-5 4 4 2-2 5 5M15.5 9.5h.01" />
-              <span className="hidden min-[1800px]:inline">사진</span>
             </button>
           </div>
           <button
@@ -109,7 +108,7 @@ export default function Toolbar({
             disabled={!canUndo}
             title="되돌리기 (Ctrl+Z)"
           >
-            ↶<span className="hidden min-[1600px]:inline"> 되돌리기</span>
+            ↶
           </button>
 
           <div className="ml-auto flex items-center gap-3">
@@ -248,7 +247,6 @@ function SnapButton() {
       ].join(' ')}
     >
       <Icon d={on ? 'M6 4v8a6 6 0 0012 0V4h-4v8a2 2 0 01-4 0V4zM6 8h4M14 8h4' : 'M6 4v8a6 6 0 0012 0V4h-4v8a2 2 0 01-4 0V4zM3 3l18 18'} />
-      <span className="hidden min-[1600px]:inline">자석</span>
     </button>
   )
 }
@@ -347,7 +345,8 @@ function MoreTools({ tools, tool, setTool }) {
   )
 }
 
-function ToolButton({ t, active, onClick, showLabel }) {
+// 툴바 도구는 아이콘만 (이름은 마우스를 올리면 나오는 설명으로)
+function ToolButton({ t, active, onClick }) {
   const digit = digitForTool(t.id)
   return (
     <button
@@ -365,7 +364,6 @@ function ToolButton({ t, active, onClick, showLabel }) {
       ].join(' ')}
     >
       <Icon d={t.icon} />
-      {showLabel ? <span className="hidden min-[1600px]:inline">{t.label}</span> : <span className="hidden min-[1800px]:inline">{t.label}</span>}
     </button>
   )
 }
