@@ -48,6 +48,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
   const [zoom, setZoom] = useState(1)
   const [fitKey, setFitKey] = useState(1)
   const [fittedKey, setFittedKey] = useState(0)
+  const [linkChoice, setLinkChoice] = useState(null) // '도면 열기' 박스를 눌러 갈 곳(또는 메모 열기)을 고르는 중 { id }
   const viewRef = useRef(null) // 보던 자리 (탭을 떠나면 PdfViewer 가 사라지므로 여기 보관)
   // 기준 길이 없는 도면은 기준선 긋기로 시작 (오른쪽 축척 칸을 접어 두었으면 선택 도구로)
   const [tool, setTool] = useState(() => (saved?.calibration ? 'length' : loadUncalHidden() ? 'select' : 'calibrate'))
@@ -498,13 +499,21 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
       const target = (force ? list.find((m) => m.id === id) : stack[0]) ?? list.find((m) => m.id === id)
       if (!target) return
       if (!force && isLinkOnly(target)) {
-        onOpenLink?.(target.link)
+        setLinkChoice({ id: target.id, nonce: Date.now() }) // 박스 아래에 갈 곳 목록 + 메모 열기
         return
       }
       setLinkPicking(null)
       setMemoOpen({ id: target.id, others: stack.length > 1 ? stack.map((m) => m.id) : [] })
     },
-    [onOpenLink],
+    [],
+  )
+  const closeLinkChoice = useCallback(() => setLinkChoice(null), [])
+  const editLinks = useCallback(
+    (id) => {
+      setLinkChoice(null)
+      openMemoAt(id, null, null, { force: true })
+    },
+    [openMemoAt],
   )
 
   // 메모 글·이름·연결 고치기. 메모장을 연 동안의 변경은 되돌리기 한 번으로 묶음
@@ -1178,6 +1187,9 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
             onPickItem={boxPick ? pickItem : undefined}
             backlinks={boxPick ? null : backlinks}
             onOpenLink={onOpenLink}
+            linkChoice={boxPick ? null : linkChoice}
+            onLinkChoiceClose={closeLinkChoice}
+            onEditLinks={editLinks}
             library={library}
           />
           {boxPick && <BoxPickBar from={boxPick.fromName} same={boxPick.from === doc.id} onCancel={() => onFinishBoxPick({ cancelled: true })} />}

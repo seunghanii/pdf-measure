@@ -31,7 +31,12 @@ export function migrateMemo(m) {
 }
 
 // 메모 내용이 비어 있고 도면 하나만 연결된 범위는 누르면 바로 그 도면이 열림 (계기 카드는 늘 카드가 열림)
-export const isLinkOnly = (m) => !m.inst && memoLinks(m).length === 1 && !memoLinks(m)[0].photo && !String(m.text ?? '').trim() && !memoPhotoIds(m).length
+// '도면 열기' 박스: 글·사진·계기 카드 없이 도면(박스) 연결만 있음. 연결이 여러 개면 누를 때 갈 곳을 고름
+export const isLinkOnly = (m) => {
+  if (m.inst || String(m.text ?? '').trim() || memoPhotoIds(m).length) return false
+  const links = memoLinks(m)
+  return links.length > 0 && links.every((l) => !l.photo)
+}
 
 // 목록·툴팁에 보여 줄 한 줄 요약
 export function memoSummary(m) {

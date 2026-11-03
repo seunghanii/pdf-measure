@@ -10,6 +10,7 @@ import { DRAG_TOOLS, textMetricsOf, minTextBoxWidth, FONT_FAMILY, itemCorners, r
 import { isImageFile } from '../lib/images'
 import { memoDrawOrder } from '../lib/memo'
 import { itemRect } from '../lib/activity'
+import BoxIcon from './BoxIcon'
 import { memoLinks } from '../lib/instrument'
 import { SNAP_KINDS, findRaySnap, findSnap, loadSnapIndex } from '../lib/snap'
 import { useSnapEnabled } from '../lib/snapSetting'
@@ -88,6 +89,9 @@ export default function PdfViewer({
   backlinks, // Map(항목 id → 여기로 연결한 박스들) 양방향 연결: 그 항목 왼쪽 위에 되돌아가기 단추
   onOpenLink,
   library,
+  linkChoice, // { id } 여러 곳으로 연결한 '도면 열기' 박스: 그 박스 아래에 갈 곳 목록
+  onLinkChoiceClose,
+  onEditLinks, // (id) 목록의 '메모 열기' → 메모장
 }) {
   const containerRef = useRef(null)
   const pageEls = useRef([])
@@ -1250,6 +1254,20 @@ export default function PdfViewer({
                 {backlinks?.size > 0 && (
                   <BacklinkBadges items={byPage.get(page)} backlinks={backlinks} zoom={zoom} onOpenLink={onOpenLink} library={library} />
                 )}
+                {linkChoice && (
+                  <LinkChoice
+                    item={byPage.get(page)?.find((m) => m.id === linkChoice.id)}
+                    nonce={linkChoice.nonce}
+                    zoom={zoom}
+                    library={library}
+                    onGo={(l) => {
+                      onLinkChoiceClose?.()
+                      onOpenLink?.(l)
+                    }}
+                    onEdit={onEditLinks}
+                    onClose={onLinkChoiceClose}
+                  />
+                )}
                 {sizes.length > 1 && (
                   <div className="pointer-events-none absolute -bottom-px left-1/2 translate-y-full -translate-x-1/2 pt-0.5 text-[11px] text-ink-500">
                     {page} / {sizes.length}
@@ -1383,6 +1401,63 @@ function TextCopyHint({ ready, copied, picked }) {
       <div key={copied?.nonce} className={`max-w-full truncate rounded-full px-4 py-1.5 text-center text-sm text-white shadow ${tone}`}>
         {text} {!copied && <span className="text-ink-400">· Esc 선택 해제</span>}
       </div>
+    </div>
+  )
+}
+
+// '도면 열기' 박스를 누르면 박스 바로 아래에 갈 곳 목록 + 메모 열기 (바깥을 누르거나 Esc 면 닫힘)
+function LinkChoice({ item, nonce, zoom, library, onGo, onEdit, onClose }) {
+  useEffect(() => {
+    if (!item) return
+    const close = (e) => !e.target.closest?.('[data-link-choice]') && onClose?.()
+    const esc = (e) => e.key === 'Escape' && onClose?.()
+    // 이 목록을 연 누름(pointerup 뒤 click)이 바로 닫지 않게 다음 틱부터
+    const t = setTimeout(() => window.addEventListener('pointerdown', close, true))
+    window.addEventListener('keydown', esc, true)
+    return () => {
+      clearTimeout(t)
+      window.removeEventListener('pointerdown', close, true)
+      window.removeEventListener('keydown', esc, true)
+    }
+  }, [item, nonce, onClose])
+  const r = item && itemRect(item)
+  if (!r) return null
+  const links = memoLinks(item)
+  const docLabel = (l) => library?.aliases?.[l.id] ?? l.name
+  return (
+    <div
+      data-link-choice=""
+      className="absolute z-20 w-72 overflow-hidden rounded-lg border border-ink-200 bg-surface py-1 text-sm text-ink-800 shadow-xl"
+      style={{ left: r.x * zoom, top: (r.y + r.h) * zoom + 4 }}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      <div className="px-3 pt-1 pb-1.5 text-xs font-semibold text-ink-500">{links.length > 1 ? `어디로 갈까요? (${links.length}곳)` : '연결한 곳으로 가기'}</div>
+      <ul>
+        {links.map((l, i) => (
+          <li key={`${l.id}-${l.item ?? ''}-${i}`}>
+            <button onClick={() => onGo(l)} className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-brand-50">
+              {l.role && <span className="shrink-0 rounded bg-brand-50 px-1.5 py-px text-[11px] font-semibold text-brand-800 ring-1 ring-brand-200">{l.role}</span>}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium">{l.item ? l.itemName || '박스' : docLabel(l)}</span>
+                <span className="block truncate text-xs text-ink-500">
+                  {l.item ? docLabel(l) : library?.aliases?.[l.id] ? l.name : '도면'}
+                  {l.page > 1 ? ` · ${l.page}쪽` : ''}
+                </span>
+              </span>
+              {l.item && <BoxIcon className="h-3.5 w-3.5 shrink-0 text-brand-500" />}
+            </button>
+          </li>
+        ))}
+      </ul>
+      <button onClick={() => onEdit?.(item.id)} className="mt-1 flex w-full items-center gap-1.5 border-t border-ink-100 px-3 py-1.5 text-left text-xs text-ink-500 hover:bg-ink-50 hover:text-ink-800">
+        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5" />
+        </svg>
+        <span className="min-w-0 flex-1">
+          <span className="block font-medium text-ink-700">메모 열기</span>
+          <span className="block truncate text-[11px] text-ink-400">이름·연결 고치기, 다른 곳 더 연결</span>
+        </span>
+      </button>
     </div>
   )
 }
