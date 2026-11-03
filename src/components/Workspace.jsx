@@ -29,6 +29,8 @@ import { MAX_ZOOM, MIN_ZOOM } from '../lib/zoom'
 import { adaptState, newRevKey } from '../lib/revision'
 import { loadUncalHidden } from '../lib/scalePanel'
 import RevisionDialog from './RevisionDialog'
+import NotepadFloat from './NotepadFloat'
+import { useMemoDock } from '../lib/memoDock'
 import { readTagInBox } from '../lib/tagRead'
 
 // 메모장은 마크다운 읽는 도구까지 필요할 때만 불러옴
@@ -41,7 +43,7 @@ const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slic
 // boxPick: 이 도면에서 연결할 박스를 고르는 중 { from, memoId, target } (App 이 보관)
 // boxPickResult: 이 도면의 메모가 박스 고르기를 끝냄 { memoId, index, fresh, result: { link } | { cancelled } }
 // onStartBoxPick(요청), onFinishBoxPick(결과), onBoxPickApplied(): 다른(또는 같은) 도면 탭을 오가며 박스 고르기
-export default function Workspace({ doc, active, searchJump: rawSearchJump, onOpenLink, boxPick, boxPickResult, onStartBoxPick, onFinishBoxPick, onBoxPickApplied, library, onImportFile, onReviseDoc, pendingRevision, onPendingRevisionDone, onReplaceFile, sidebarOpen, setSidebarOpen, instKinds, onAddKind, onSetDocRoles }) {
+export default function Workspace({ doc, active, searchJump: rawSearchJump, onOpenLink, boxPick, boxPickResult, onStartBoxPick, onFinishBoxPick, onBoxPickApplied, library, onImportFile, onReviseDoc, pendingRevision, onPendingRevisionDone, onReplaceFile, sidebarOpen, setSidebarOpen, notepadOpen, setNotepadOpen, instKinds, onAddKind, onSetDocRoles }) {
   const { pdfDoc, name: fileName } = doc
   const saved = doc.savedState
   const [pageNum, setPageNum] = useState(() => Math.min(saved?.pageNum ?? 1, pdfDoc.numPages))
@@ -81,6 +83,7 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
   const [croppingId, setCroppingId] = useState(null) // 자르는 중인 사진
   const [memoOpen, setMemoOpen] = useState(null) // 열린 메모장 { id, others: 같은 자리에 겹친 메모 id 들 }
   const [linkPicking, setLinkPicking] = useState(null) // 도면 연결 고르는 중인 메모 { id, fresh: 방금 그린 범위, index: 바꿀 연결 (없으면 추가) }
+  const memoDock = useMemoDock()
   const [instPanel, setInstPanel] = useState(null) // 계기 목록 창: 'list' | 'find' (태그 찾기)
   const placeRef = useRef(null) // 뷰어가 사진 넣을 자리를 알려 주는 함수
   const imageInputRef = useRef(null)
@@ -1195,6 +1198,8 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
             onEditLinks={editLinks}
             library={library}
           />
+          {/* 왼쪽 아래 메모장 단추: 계기 목록 창·아래에 길게 놓인 박스 메모가 그 자리를 덮을 때는 단추만 숨김 */}
+          <NotepadFloat store={store} open={!!notepadOpen} setOpen={(v) => setNotepadOpen?.(v)} hideButton={!!instPanel || (!!memoItem && memoDock === 'bottom')} />
           {boxPick && <BoxPickBar from={boxPick.fromName} same={boxPick.from === doc.id} onCancel={() => onFinishBoxPick({ cancelled: true })} />}
           {instPanel && (
             <Suspense fallback={null}>
