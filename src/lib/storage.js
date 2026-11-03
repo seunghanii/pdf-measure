@@ -11,7 +11,7 @@ import { loadLocalInstList, saveLocalInstList } from './instList'
 import { noteItems } from './notes'
 import { instRows } from './instrument'
 import { SUMMARY_ACTIVITY, normalizeActivity } from './activity'
-import { boxLinkRows, boxNames } from './backlinks'
+import { boxLinkRows, boxNames, boxPages } from './backlinks'
 
 const DB_NAME = 'pdf-measure'
 const DB_VERSION = 4
@@ -137,6 +137,8 @@ export function summarize(state) {
     // 이 기능 전에는 박스 연결이 없었으니 판(v)은 올리지 않음: 예전 요약에 없으면 연결도 없는 것
     boxLinks: boxLinkRows(state?.measurements),
     names: boxNames(state?.measurements), // 박스 이름 (다른 도면의 연결이 지금 이름을 보여 주게)
+    pages: boxPages(state?.measurements), // 박스 쪽 번호 (같은 이유, 박스를 옮기거나 페이지를 편집해도)
+    pl: state?.pageLog ?? null, // 페이지 편집 기록 (다른 도면의 쪽 연결을 새 쪽으로, lib/pageLinks.js)
   }
 }
 
