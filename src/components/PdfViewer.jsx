@@ -1314,6 +1314,7 @@ export default function PdfViewer({
                 {linkChoice && (
                   <LinkChoice
                     item={byPage.get(page)?.find((m) => m.id === linkChoice.id)}
+                    back={backlinks?.get(linkChoice.id)}
                     nonce={linkChoice.nonce}
                     zoom={zoom}
                     library={library}
@@ -1463,7 +1464,7 @@ function TextCopyHint({ ready, copied, picked }) {
 }
 
 // '도면 열기' 박스를 누르면 박스 바로 아래에 갈 곳 목록 + 메모 열기 (바깥을 누르거나 Esc 면 닫힘)
-function LinkChoice({ item, nonce, zoom, library, onGo, onEdit, onClose }) {
+function LinkChoice({ item, back, nonce, zoom, library, onGo, onEdit, onClose }) {
   useEffect(() => {
     if (!item) return
     const close = (e) => !e.target.closest?.('[data-link-choice]') && onClose?.()
@@ -1479,8 +1480,10 @@ function LinkChoice({ item, nonce, zoom, library, onGo, onEdit, onClose }) {
   }, [item, nonce, onClose])
   const r = item && itemRect(item)
   if (!r) return null
-  const links = memoLinks(item)
-  const docLabel = (l) => library?.aliases?.[l.id] ?? l.name
+  // 이 박스가 연결한 곳 + 이 박스로 연결해 온 박스(양방향: 다른 도면에서 이 박스를 고른 경우 이 박스에는 저장되지 않음)
+  const own = memoLinks(item)
+  const links = [...own, ...(back ?? []).filter((l) => !own.some((o) => o.id === l.id && o.item === l.item))]
+  const docLabel = (l) => (l.here ? '이 도면' : (library?.aliases?.[l.id] ?? l.name))
   return (
     <div
       data-link-choice=""
