@@ -9,6 +9,7 @@ import { cloudConfigured, networkHint, signOut, supabase } from './lib/supabase'
 import Workspace from './components/Workspace'
 import Toolbar from './components/Toolbar'
 import TabBar from './components/TabBar'
+import OpenDocPicker from './components/OpenDocPicker'
 import EmptyState from './components/EmptyState'
 import { AccountMenu, PasswordDialog } from './components/Account'
 import SearchPanel, { SearchIcon } from './components/SearchPanel'
@@ -76,6 +77,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
   const [loading, setLoading] = useState(false)
   const [restored, setRestored] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false) // 홈 화면 돋보기
+  const [pickerOpen, setPickerOpen] = useState(false) // 탭 줄 + 버튼: 도면 골라 새 탭으로
   const [searchJump, setSearchJump] = useState(null) // 검색에서 고른 위치 { id, page, rect }
   const [pendingRev, setPendingRev] = useState(null) // 열자마자 개정판 바꾸기 창을 띄울 도면 { id, file, nonce }
   const docsRef = useRef(docs)
@@ -588,7 +590,10 @@ function Session({ store, user, onLogout, onChangePassword }) {
       }}
       onDrop={onDrop}
     >
-      <TabBar docs={docs} library={library} activeId={activeId} onSelect={setActiveId} onClose={closeTab} onHome={() => setActiveId(null)} onSetAlias={(id, alias) => updateLibrary((lib) => setAlias(lib, id, alias))} />
+      <TabBar docs={docs} library={library} activeId={activeId} onSelect={setActiveId} onClose={closeTab} onHome={() => setActiveId(null)} onAdd={() => {
+        setPickerOpen(true)
+        refreshRecent()
+      }} onSetAlias={(id, alias) => updateLibrary((lib) => setAlias(lib, id, alias))} />
 
       {activeId === null && (
         <Toolbar
@@ -709,6 +714,24 @@ function Session({ store, user, onLogout, onChangePassword }) {
             setSearchOpen(false)
             await openRecent(item)
             setSearchJump({ id: item.id, page: hit.page, rect: hit.rect, peekId: hit.hidden ? hit.itemId : null, nonce: Date.now() })
+          }}
+        />
+      )}
+
+      {pickerOpen && (
+        <OpenDocPicker
+          recent={liveRecent}
+          library={library}
+          openIds={docs.map((d) => d.id)}
+          activeId={activeId}
+          onClose={() => setPickerOpen(false)}
+          onOpen={openRecent}
+          onOpenFiles={async (files, folderId) => {
+            // 고른 폴더에 넣음 (이미 다른 폴더에 있던 도면은 그대로)
+            for (const f of files) {
+              const id = await openFile(f)
+              if (id && folderId) updateLibrary((lib) => (lib.assign[id] || !lib.folders.some((x) => x.id === folderId) ? lib : moveDoc(lib, id, folderId)))
+            }
           }}
         />
       )}

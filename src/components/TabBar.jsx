@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { displayName, fileBase } from '../lib/library'
 
 // 열린 도면 탭. 맨 왼쪽 집 아이콘은 홈(최근 파일 목록)입니다. 별명이 있으면 별명을 보여 줌
+// 맨 오른쪽 + 는 홈으로 가지 않고 도면 고르기 창(OpenDocPicker)을 띄움
 // 탭 이름을 더블 클릭하면 홈의 연필 버튼처럼 별명을 바꿀 수 있음 (비우면 원래 파일 이름)
-export default function TabBar({ docs, library, activeId, onSelect, onClose, onHome, onSetAlias }) {
+export default function TabBar({ docs, library, activeId, onSelect, onClose, onHome, onAdd, onSetAlias }) {
   const [editingId, setEditingId] = useState(null)
   if (docs.length === 0) return null
 
@@ -107,8 +108,8 @@ export default function TabBar({ docs, library, activeId, onSelect, onClose, onH
       })}
 
       <button
-        onClick={onHome}
-        title="다른 도면 열기"
+        onClick={onAdd ?? onHome}
+        title="다른 도면 열기 (목록에서 골라 새 탭으로)"
         aria-label="다른 도면 열기"
         className="mb-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-lg text-ink-500 hover:bg-surface/70 hover:text-ink-800"
       >
