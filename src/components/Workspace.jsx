@@ -21,6 +21,7 @@ import BoxIcon from './BoxIcon'
 import { DEFAULT_MEMO_COLOR, isLinkOnly, memoPhotoIds, memosAt } from '../lib/memo'
 import { itemLabel, itemRect } from '../lib/activity'
 import { backlinksFor, refreshLinkNames } from '../lib/backlinks'
+import { linkBoxName } from '../lib/drawingNo'
 import { memoFileIds } from '../lib/excel'
 import { DEFAULT_STATUS, cardBoxFor, donePatch, doneUpTo, guessKind, isInst, itemGroup, linksPatch, memoLinkPhotoIds, memoLinks, statusOf } from '../lib/instrument'
 import { liveItemTrash, pushItems, withoutTrashed } from '../lib/trash'
@@ -217,6 +218,8 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
         if (STROKE_TYPES.includes(type)) m.strokeWidth = markupStyle.strokeWidth
       }
       Object.assign(m, extra)
+      // 도면 열기 박스 이름: 이 도면의 원래 번호 + (쪽 OF 전체 쪽). 별명은 쓰지 않음
+      if (type === 'memo' && markupStyle.memoKind === 'link') m.name = linkBoxName(fileName, page, pdfDoc.numPages)
       const cat = !isMarkup(type) && markupStyle.measureCat && categories.find((c) => c.id === markupStyle.measureCat)
       commit((prev) => [...prev, cat ? withCategory(m, cat) : m])
       setSelectedIds([m.id])
@@ -228,7 +231,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
         } else setMemoOpen({ id: m.id, others: [] })
       }
     },
-    [categories, commit, markupStyle],
+    [categories, commit, markupStyle, fileName, pdfDoc],
   )
 
   // ---------- 측정 분류 ----------
@@ -563,11 +566,12 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
         const { color, ...back } = boxPick.back
         if (color) m.color = color
         Object.assign(m, linksPatch([back]))
+        m.name = linkBoxName(fileName, page, pdfDoc.numPages)
       }
       commit((prev) => [...prev, m])
       onFinishBoxPick({ link: { ...boxPick.target, page, item: m.id, itemName: itemLabel(m), rect: itemRect(m) } })
     },
-    [boxPick, commit, onFinishBoxPick],
+    [boxPick, commit, onFinishBoxPick, fileName, pdfDoc],
   )
   useEffect(() => {
     if (!boxPick || !active) return

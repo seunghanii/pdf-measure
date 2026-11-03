@@ -30,3 +30,15 @@ export function sameNumberDocs(rows, fileName, except) {
   if (!no) return []
   return rows.filter((r) => r.id !== except && drawingNo(r.name) === no)
 }
+
+// 도면 연결 박스의 기본 이름: 원래 파일 이름의 도면 번호 + (쪽 OF 전체 쪽)
+//   "jcp2-xg02-02gcf-130004_Control Room Layout.pdf", 2쪽 / 5쪽 → "jcp2-xg02-02gcf-130004 (2 OF 5)"
+// 번호를 못 찾으면 파일 이름에서 '_' 앞 (그것도 없으면 이름 전체)
+export function linkBoxName(fileName, page, pages) {
+  const base = String(fileName ?? '').replace(/\.pdf$/i, '').trim()
+  const found = drawingNo(fileName)
+  // 대소문자는 파일 이름 그대로 (drawingNo 는 비교용이라 대문자로 바꿈)
+  const same = found && base.slice(0, found.length)
+  const no = found ? (same.toUpperCase() === found ? same : found) : base.split('_')[0].trim() || '도면'
+  return `${no} (${page} OF ${Math.max(pages || 1, page)})`
+}
