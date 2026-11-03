@@ -7,8 +7,7 @@ import { DEFAULT_BOX_OPACITY, HIGHLIGHT_COLORS, IMAGE_BORDER_COLORS, IMAGE_BORDE
 
 const MARKUP_TOOL_IDS = TOOLS.filter((t) => t.group === 'markup').map((t) => t.id)
 
-// Equipment 박스: 박스 도구(memo)를 Equipment 종류로 고르는 단추. 단축키 E. 아이콘은 압력 게이지
-const EQUIP_TOOL = { id: 'equip', label: 'Equipment', key: 'E', icon: 'M5 10a7 7 0 1014 0 7 7 0 10-14 0zM12 10l3.5-3M12 17v4M9 21h6' }
+import { BOX_TOOLS, LINK_ICON, MEMO_ICON } from '../lib/boxKinds'
 
 function Icon({ d }) {
   return (
@@ -45,7 +44,7 @@ export default function Toolbar({
   right, // 홈 화면 오른쪽 (계정)
 }) {
   const numPages = pdfDoc?.numPages ?? 0
-  const equipOn = markupStyle?.memoKind === 'inst'
+  const memoKind = markupStyle?.memoKind ?? 'note'
 
   return (
     <header className="relative z-20 border-b border-ink-200 bg-surface">
@@ -70,29 +69,21 @@ export default function Toolbar({
           </div>
           <Divider />
           <div className="flex items-center gap-0.5 rounded-xl bg-ink-100 p-0.5" role="group" aria-label="마크업 도구">
-            {TOOLS.filter((t) => t.group === 'markup').map((t) =>
-              t.id === 'memo' ? (
-                <ToolButton
-                  key={t.id}
-                  t={t}
-                  active={tool === 'memo' && !equipOn}
-                  onClick={() => {
-                    setTool('memo')
-                    if (equipOn) onChangeMarkupStyle({ memoKind: 'note' })
-                  }}
-                />
-              ) : (
-                <ToolButton key={t.id} t={t} active={tool === t.id} onClick={() => setTool(t.id)} />
-              ),
-            )}
-            <ToolButton
-              t={EQUIP_TOOL}
-              active={tool === 'memo' && equipOn}
-              onClick={() => {
-                setTool('memo')
-                onChangeMarkupStyle({ memoKind: 'inst' })
-              }}
-            />
+            {TOOLS.filter((t) => t.group === 'markup' && t.id !== 'memo').map((t) => (
+              <ToolButton key={t.id} t={t} active={tool === t.id} onClick={() => setTool(t.id)} />
+            ))}
+            {/* 박스: 메모·링크·Equipment 를 따로 (모두 memo 도구, 종류만 다름) */}
+            {BOX_TOOLS.map((t) => (
+              <ToolButton
+                key={t.id}
+                t={t}
+                active={tool === 'memo' && memoKind === t.kind}
+                onClick={() => {
+                  setTool('memo')
+                  if (memoKind !== t.kind) onChangeMarkupStyle({ memoKind: t.kind })
+                }}
+              />
+            ))}
             <button
               title="사진 넣기 (I) · 복사한 사진은 Ctrl+V 로 바로 붙여넣기, 사진 파일을 도면에 끌어다 놓아도 돼요"
               aria-label="사진 넣기"
@@ -561,49 +552,34 @@ function ImageStyle({ title, style, onChange, actions }) {
   )
 }
 
-// 메모 범위 설정: 새로 그릴 종류(메모장 / 다른 도면 열기)와 색. 선택했을 때는 메모 열기·도면 연결
+// 박스 설정: 새로 그릴 박스 색(종류는 툴바 메모·링크·Equipment 단추로 고름). 선택했을 때는 메모 열기·도면 연결
 function MemoStyle({ style, onChange, actions }) {
   const btn = (active) =>
     `flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium whitespace-nowrap pointer-coarse:py-1.5 ${
       active ? 'bg-ink-800 text-surface' : 'text-ink-700 ring-1 ring-ink-300 hover:bg-ink-100'
     }`
   const kind = style.memoKind ?? 'note'
-  const title = actions ? '박스' : kind === 'inst' ? 'Equipment 박스' : '박스'
+  const title = actions ? '박스' : kind === 'inst' ? 'Equipment 박스' : kind === 'link' ? '링크 박스' : '메모 박스'
   return (
     <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-ink-200 bg-surface/95 px-2.5 py-1.5 shadow-md backdrop-blur max-lg:max-w-full max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:*:shrink-0 no-scrollbar pointer-coarse:py-2">
       <span className="mr-1 text-xs font-semibold whitespace-nowrap text-ink-700">{title}</span>
       {actions ? (
         <>
           <button className={btn(false)} onClick={actions.onOpen} title="메모장 열기 (박스를 두 번 눌러도 돼요)">
-            <Icon d="M5 4h10l4 4v12H5zM15 4v4h4M8 12h8M8 16h5" />
+            <Icon d={MEMO_ICON} />
             메모 열기
           </button>
           <button className={btn(false)} onClick={actions.onLink} title="관련 도면(Hook-up, 데이터시트 …) 연결">
-            <Icon d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1" />
+            <Icon d={LINK_ICON} />
             {actions.linked ? '도면 더 연결' : '도면 연결'}
           </button>
         </>
       ) : kind === 'inst' ? (
         <span className="text-xs whitespace-nowrap text-ink-500">Tag. No·Description·Type·상태 칸이 있는 박스. 상태에 따라 색이 바뀌어요</span>
       ) : (
-        <div className="flex items-center rounded ring-1 ring-ink-300" role="group" aria-label="박스 종류">
-          {[
-            ['note', '메모', '박스를 누르면 메모장이 열려요 (제목·목록·표, 사진)'],
-            ['link', '링크', '박스를 누르면 연결한 도면이나 박스로 가요'],
-          ].map(([value, label, tip]) => (
-            <button
-              key={value}
-              title={tip}
-              aria-pressed={kind === value}
-              onClick={() => onChange({ memoKind: value })}
-              className={`px-2 py-0.5 text-xs font-medium whitespace-nowrap first:rounded-l pointer-coarse:px-3 pointer-coarse:py-1.5 last:rounded-r ${
-                kind === value ? 'bg-ink-800 text-surface' : 'text-ink-700 hover:bg-ink-100'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <span className="text-xs whitespace-nowrap text-ink-500">
+          {kind === 'link' ? '박스를 누르면 연결한 도면이나 박스로 가요' : '박스를 누르면 메모장이 열려요 (제목·목록·표, 사진)'}
+        </span>
       )}
       {(actions || kind !== 'inst') && <span className="mx-1 h-4 w-px bg-ink-200" />}
       {(actions || kind !== 'inst') && MEMO_COLORS.map((c) => (

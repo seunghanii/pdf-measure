@@ -1,3 +1,5 @@
+import { MEMO_ICON } from './boxKinds'
+
 // 도구 목록. 숫자 키(1~9, 0)와 글자 키로 바꿀 수 있습니다.
 // Ctrl+숫자는 크롬·엣지가 브라우저 탭 전환에 먼저 쓰기 때문에 숫자 키만 눌러도 되게 했습니다.
 export const TOOLS = [
@@ -19,7 +21,8 @@ export const TOOLS = [
   // 도형: 사각형·원(타원). id 는 예전 그대로 'rect' (저장된 사각형과 호환), 모양은 항목의 shape 로 구분
   { id: 'rect', label: '도형', key: 'R', group: 'markup', icon: 'M3 10h10v10H3zM16 14a5 5 0 100-10 5 5 0 000 10z' },
   { id: 'arrow', label: '화살표', key: 'W', group: 'markup', icon: 'M5 19L19 5M19 5h-8M19 5v8' },
-  { id: 'memo', label: '박스', key: 'N', group: 'markup', icon: 'M5 4h10l4 4v12H5zM15 4v4h4M8 12h8M8 16h5' },
+  // 박스(memo): 툴바에서는 메모·링크·Equipment 단추로 나눠 보임 (lib/boxKinds.js)
+  { id: 'memo', label: '메모 박스', key: 'N', group: 'markup', icon: MEMO_ICON },
   // 숫자 키 순서가 바뀌지 않게 맨 뒤에 둠 (도구 막대에서는 선택·이동 옆에 보임)
   { id: 'textcopy', label: '글자 복사', key: 'X', group: 'basic', icon: 'M9 9h11v11H9zM5 15H4V4h11v1M12 13h5M12 16h3' },
 ]
