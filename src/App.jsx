@@ -15,7 +15,7 @@ import EmptyState from './components/EmptyState'
 import { AccountMenu, PasswordDialog } from './components/Account'
 import SearchPanel, { SearchIcon } from './components/SearchPanel'
 import ThemeMenu from './components/ThemeMenu'
-import { ensureIndexed, forgetIndex, reindex } from './lib/indexer'
+import { ensureIndexed, forgetIndex, reindex, replaceIndex } from './lib/indexer'
 import { linkRevision, resolveFile } from './lib/revision'
 
 export default function App() {
@@ -300,14 +300,16 @@ function Session({ store, user, onLogout, onChangePassword }) {
   // keepKey: 지금 PDF 를 보관할 이름, buildState(kept): 보관 여부를 받아 저장할 state,
   // dropRevKey: 예전 판으로 되돌릴 때 목록에서 빠지는 그 판 (보관한 PDF 도 지움)
   const replaceDoc = useCallback(
-    async (id, { file, pdfDoc, keepKey, buildState, dropRevKey, notice }) => {
+    async (id, { file, pdfDoc, keepKey, buildState, dropRevKey, notice, index }) => {
       const s = storeRef.current
       const { kept } = await s.replaceFile(id, file, { keepKey })
       const state = buildState(kept)
       await s.saveState(id, state)
       if (dropRevKey) s.removeRevisionFile(id, dropRevKey).catch((e) => console.warn('예전 판 PDF 지우기 실패', e))
       updateLibrary((lib) => linkRevision(lib, id, fileIdOf(file)))
-      await reindex(s, id, file.name, () => (pdfDoc.loadingTask?.destroyed ? null : pdfDoc))
+      // 페이지 편집은 쪽 순서만 바뀌므로 만들어 둔 색인을 새 순서로 (index: undefined 면 개정판처럼 다시 만듦)
+      if (index !== undefined) await replaceIndex(s, id, file.name, index, () => (pdfDoc.loadingTask?.destroyed ? null : pdfDoc))
+      else await reindex(s, id, file.name, () => (pdfDoc.loadingTask?.destroyed ? null : pdfDoc))
       const old = docsRef.current.find((d) => d.id === id)?.pdfDoc
       setOpenPdf(id, pdfDoc)
       setDocs((prev) =>
