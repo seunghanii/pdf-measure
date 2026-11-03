@@ -4,6 +4,7 @@
 //  - 다른 도면: 각 도면 요약(summary.boxLinks)에서. 저장할 때마다 요약이 새로 써지므로 연결을 빼면 반대쪽도 사라짐
 import { itemLabel, itemRect } from './activity'
 import { memoLinks } from './instrument'
+import { mapPage, pageLogV } from './pageLinks'
 
 const r1 = (n) => Math.round(n * 10) / 10
 
@@ -52,30 +53,65 @@ export function boxNames(measurements) {
   return out
 }
 
-// 박스 연결에 적힌 이름(itemName)이 지금 이름과 다르면 고친 항목들. 고칠 게 없으면 null
-// here: 이 도면 항목들(같은 도면 박스), rows: 다른 도면 요약들 (summary.names)
+// 요약에 넣을 박스 쪽 번호들 { 항목 id: 쪽 } (boxNames 와 같은 항목): 다른 도면의 연결이 박스의 지금 쪽을 보여 주게
+export function boxPages(measurements) {
+  const out = {}
+  for (const m of measurements ?? []) {
+    if (m.type !== 'memo' && (!m.name || DEFAULT_NAME.test(m.name))) continue
+    out[m.id] = m.page ?? 1
+  }
+  return out
+}
+
+// 이 도면 연결에 적힌 이름(itemName)·쪽(page)을 지금 것으로 맞춘 항목들. 고칠 게 없으면 null
+// - 박스 연결: 그 박스의 지금 이름·쪽 (같은 도면은 항목에서, 다른 도면은 요약 summary.names·pages)
+// - 다른 도면 쪽만 건 연결: 그 도면에서 연결을 건 뒤 페이지를 넣고 지우고 옮긴 만큼 쪽 번호를 옮김 (summary.pl, lib/pageLinks.js)
+// here: 이 도면 항목들, rows: 다른 도면 요약들
 export function refreshLinkNames(docId, items, rows) {
   let here = null
-  const nameOf = (l) => {
-    if (l.id === docId) {
-      if (!here) here = new Map(items.map((m) => [m.id, m]))
-      const t = here.get(l.item)
-      return t ? itemLabel(t) : null
+  const hereItem = (id) => {
+    if (!here) here = new Map(items.map((m) => [m.id, m]))
+    return here.get(id)
+  }
+  const rowOf = (id) => rows?.find((r) => r.id === id)
+  const fix = (l) => {
+    if (!l?.id || l.photo) return l
+    let out = l
+    if (l.item) {
+      let name = null
+      let page = null
+      if (l.id === docId) {
+        const t = hereItem(l.item)
+        if (t) {
+          name = itemLabel(t)
+          page = t.page ?? 1
+        }
+      } else {
+        const sum = rowOf(l.id)?.summary
+        name = sum?.names?.[l.item] ?? null
+        page = sum?.pages?.[l.item] ?? null
+      }
+      if (name && name !== l.itemName) out = { ...out, itemName: name }
+      if (page && page !== (l.page ?? 1)) out = { ...out, page }
+      return out
     }
-    return rows?.find((r) => r.id === l.id)?.summary?.names?.[l.item] ?? null
+    if (l.id === docId) return l // 같은 도면 쪽 연결은 페이지 편집 때 바로 고침
+    const log = rowOf(l.id)?.summary?.pl
+    const v = pageLogV(log)
+    if ((l.pv ?? 0) >= v) return l
+    const page = mapPage(log, l.page ?? 1, l.pv ?? 0)
+    return { ...l, ...(page && { page }), pv: v }
   }
   let changed = null
   for (const m of items) {
     if (m.type !== 'memo') continue
     const links = memoLinks(m)
-    if (!links.some((l) => l?.item && !l.photo)) continue
+    if (!links.some((l) => l?.id && !l.photo)) continue
     let touched = false
     const next = links.map((l) => {
-      if (!l?.item || l.photo) return l
-      const name = nameOf(l)
-      if (!name || name === l.itemName) return l
-      touched = true
-      return { ...l, itemName: name }
+      const f = fix(l)
+      if (f !== l) touched = true
+      return f
     })
     if (touched) (changed ??= new Map()).set(m.id, next)
   }

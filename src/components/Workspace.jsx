@@ -22,6 +22,7 @@ import { DEFAULT_MEMO_COLOR, isLinkOnly, memoPhotoIds, memosAt } from '../lib/me
 import { itemLabel, itemRect } from '../lib/activity'
 import { backlinksFor, refreshLinkNames } from '../lib/backlinks'
 import { linkBoxName } from '../lib/drawingNo'
+import { fixLinksAfterPageEdit, orderToMap, pageLogV, pushPageLog, renameMovedLinkBox } from '../lib/pageLinks'
 import { memoFileIds } from '../lib/excel'
 import { DEFAULT_STATUS, cardBoxFor, donePatch, doneUpTo, instForTag, tagPatch, isInst, itemGroup, linksPatch, memoLinkPhotoIds, memoLinks, statusOf } from '../lib/instrument'
 import { liveItemTrash, pushItems, withoutTrashed } from '../lib/trash'
@@ -96,7 +97,8 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState(doc.notice ?? '') // 개정판으로 바꾼 직후 안내
   // 개정판: 지금 판 { label, name, size, at } 과 예전 판 목록 (lib/revision.js). 바꾼 적 없으면 비어 있음
-  const [revs, setRevs] = useState(() => ({ rev: saved?.rev ?? null, revisions: saved?.revisions ?? [] }))
+  // pageLog: 페이지 편집 기록 (다른 도면의 쪽 연결을 새 쪽으로 옮길 때, lib/pageLinks.js). 함께 저장되도록 여기에 둠
+  const [revs, setRevs] = useState(() => ({ rev: saved?.rev ?? null, revisions: saved?.revisions ?? [], ...(saved?.pageLog && { pageLog: saved.pageLog }) }))
   const [revisionOpen, setRevisionOpen] = useState(false)
   // 왼쪽 위 페이지 탐색 창 (열림은 모든 도면 공통, 페이지를 바꾸면 탭이 새로 그려져도 열린 채로)
   const [pageNavOpen, setPageNavOpenRaw] = useState(loadPageNavOpen)
@@ -324,9 +326,17 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
 
   // { id: points } 로 여러 항목의 점을 한꺼번에 바꾸기 (선택한 것 함께 옮기기)
   // page 를 주면 그 쪽으로 옮김 (다른 페이지 위에 끌어 놓기)
-  const onSetPoints = useCallback((map, page) => {
-    setMeasurements((prev) => prev.map((m) => (map[m.id] ? (page ? { ...m, points: map[m.id], page } : { ...m, points: map[m.id] }) : m)))
-  }, [])
+  // 기본 이름 그대로인 링크 박스("도면 번호 (3 OF 10)")는 이름도 새 쪽으로
+  const onSetPoints = useCallback(
+    (map, page) => {
+      setMeasurements((prev) =>
+        prev.map((m) =>
+          map[m.id] ? (page ? { ...m, points: map[m.id], page, name: renameMovedLinkBox(m, page, fileName, pdfDoc.numPages) } : { ...m, points: map[m.id] }) : m,
+        ),
+      )
+    },
+    [fileName, pdfDoc],
+  )
 
   const updateItem = useCallback((id, patch) => {
     setMeasurements((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)))
@@ -1108,6 +1118,7 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
       pageNum: Math.min(pageNum, newPdf.numPages),
       rev: { label, name: file.name, size: file.size, at: now },
       revisions: [{ ...currentRev, key: keepKey, file: kept, replacedAt: now }, ...rest],
+      ...(revs.pageLog && { pageLog: revs.pageLog }),
       activity: autosaveCtl.current?.activity?.() ?? [],
     })
     const parts = [`"${label}" 판으로 ${fromRev ? '복원했어요' : '바꿨어요'}.`]
@@ -1144,6 +1155,7 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
         // 지금 판의 크기만 새 파일에 맞춤 (판 이름·예전 판 목록은 그대로)
         ...(revs.rev ? { rev: { ...revs.rev, name: file.name, size: file.size } } : {}),
         revisions: revs.revisions,
+        pageLog: next.pageLog,
         activity: autosaveCtl.current?.activity?.() ?? [],
       })
       setPageEditCarry(doc.id, { tool: tool === 'calibrate' ? 'select' : tool })
@@ -1168,6 +1180,10 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
       const before = nowState()
       const next = remapState(before, order, pdfDoc.numPages, { editKey: key })
       if (focus) next.pageNum = focus
+      // 쪽 번호로 건 연결·링크 박스 기본 이름도 새 쪽으로, 다른 도면의 연결을 위해 편집 기록을 남김
+      const map = orderToMap(order, pdfDoc.numPages)
+      next.measurements = fixLinksAfterPageEdit(next.measurements, before.measurements, { docId: doc.id, fileName, map, oldNumPages: pdfDoc.numPages, newNumPages: order.length })
+      next.pageLog = pushPageLog(revs.pageLog, map)
       const oldFile = new File([await pdfDoc.getData()], fileName, { type: 'application/pdf' })
       const parts = [`${label}: 완료했어요.`]
       if (next.goneCount) parts.push(`지운 쪽의 항목 ${next.goneCount}개는 휴지통에 있어요 (되돌리기를 누르면 원래대로).`)
@@ -1205,6 +1221,9 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
       newPdf = await loadPdf(await entry.file.arrayBuffer())
       carryThumbs(pdfDoc, newPdf, invertOrder(entry.order, entry.oldNumPages))
       const next = undoState(nowState(), entry)
+      const map = orderToMap(invertOrder(entry.order, entry.oldNumPages), pdfDoc.numPages)
+      next.measurements = fixLinksAfterPageEdit(next.measurements, measurements, { docId: doc.id, fileName, map, oldNumPages: pdfDoc.numPages, newNumPages: entry.oldNumPages })
+      next.pageLog = pushPageLog(revs.pageLog, map)
       await savePages({ file: entry.file, newPdf, next, index: entry.index ?? null, notice: `${entry.label}: 되돌렸어요.` })
       popPageEdit(doc.id, newPdf)
     } catch (e) {
@@ -1506,7 +1525,10 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
                 }
               : null
           }
-          onConfirm={(link) => {
+          onConfirm={(raw) => {
+            // 다른 도면 쪽으로 건 연결: 그 도면의 페이지 편집 횟수를 적어 둠 (뒤에 페이지가 바뀌면 쪽을 옮기려고)
+            const target = !raw.photo && !raw.item && raw.id !== doc.id ? otherDocs.find((r) => r.id === raw.id) : null
+            const link = raw.photo || raw.item || raw.id === doc.id ? raw : { ...raw, pv: raw.pv ?? pageLogV(target?.summary?.pl) }
             const links = memoLinks(linkItem)
             const next = linkPicking.index != null ? links.map((l, i) => (i === linkPicking.index ? link : l)) : [...links, link]
             editMemo(linkItem.id, linksPatch(next))

@@ -1,3 +1,4 @@
+import { pageLogV } from '../lib/pageLinks'
 import { withoutTrashed } from '../lib/trash'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { docRoleList, isBoxLink, unboxLink } from '../lib/instrument'
@@ -175,7 +176,7 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
   // 같은 번호 도면을 개정판으로: 그 도면을 연결하고, 그 도면 탭에서 개정판 바꾸기 창을 띄움
   const reviseInto = (m) => {
     const file = upload.file
-    onConfirm({ id: m.id, name: m.name, page: pageNo, role: role.trim() })
+    onConfirm({ id: m.id, name: m.name, page: pageNo, role: role.trim(), pv: pageLogV(m.summary?.pl) })
     onReviseDoc(m, file)
   }
 
@@ -183,7 +184,8 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
     e.preventDefault()
     if (photo) onConfirm({ photo: photo.id, name: photo.name, role: role.trim(), w: photo.w, h: photo.h })
     else if (box) onConfirm({ ...box, name: chosen.name, role: role.trim() })
-    else if (chosen) onConfirm({ ...unboxLink(initial?.id === chosen.id ? initial : {}), id: chosen.id, name: chosen.name, page: pageNo, role: role.trim() })
+    else if (chosen)
+      onConfirm({ ...unboxLink(initial?.id === chosen.id ? initial : {}), id: chosen.id, name: chosen.name, page: pageNo, role: role.trim(), pv: pageLogV(chosen.summary?.pl) })
   }
   const pickBox = () => chosen && onPickBox({ id: chosen.id, name: chosen.name, role: role.trim(), page: pageNo })
 
@@ -354,7 +356,7 @@ export default function LinkPicker({ store, currentId, currentName, library, onI
                   if (already?.id !== r.id) setAlready(null)
                 }}
                 onDoubleClick={() =>
-                  box && r.id === box.id ? onConfirm({ ...box, name: r.name, role: role.trim() }) : onConfirm({ id: r.id, name: r.name, page: pageNo, role: role.trim() })
+                  box && r.id === box.id ? onConfirm({ ...box, name: r.name, role: role.trim() }) : onConfirm({ id: r.id, name: r.name, page: pageNo, role: role.trim(), pv: pageLogV(r.summary?.pl) })
                 }
                 className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm ${picked === r.id && !photo ? 'bg-brand-50 text-brand-800' : 'hover:bg-ink-50'}`}
               >
