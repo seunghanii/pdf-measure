@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { INST_LABELS, INST_STATUSES, DEFAULT_STATUS, doneDates, donePatch, fmtDay, guessKind, instDone, memoLinks, linksPatch, normTag } from '../lib/instrument'
-import { isDefaultName } from '../lib/categories'
+import { INST_LABELS, INST_STATUSES, DEFAULT_STATUS, doneDates, donePatch, fmtDay, instDone, memoLinks, linksPatch, normTag, tagPatch } from '../lib/instrument'
 import { convertTyped, hasHangul } from '../lib/hangulKeys'
 import { useImageUrl } from '../lib/images'
 import BoxIcon from './BoxIcon'
@@ -9,7 +8,7 @@ import BoxIcon from './BoxIcon'
 // onChange(patch): 메모 항목에 합칠 값. kinds: 계기 종류 목록, onAddKind(약어): 목록에 더하기 (모든 도면 공통)
 // Tag. No 칸: 기본은 영어 입력. 한글 자판 상태로 쳐도 영문 자판 글자로 바꿔 넣음 (ㄹㅅ → FT).
 // 오른쪽 A/한 버튼으로 한글 그대로 쓰기. 웹페이지는 입력기(한/영)를 직접 바꿀 수 없어서 이렇게 함.
-export function TagInput({ tag, onTag }) {
+export function TagInput({ tag, onTag, placeholder = 'FT-1001' }) {
   const [lang, setLang] = useState(() => (hasHangul(tag) ? 'ko' : 'en'))
   const ref = useRef(null)
   const composing = useRef(false)
@@ -87,7 +86,7 @@ export function TagInput({ tag, onTag }) {
           base.current = null
           if (v) onTag(normTag(v))
         }}
-        placeholder="FT-1001"
+        placeholder={placeholder}
         className="min-w-0 flex-1 rounded-md border border-ink-200 px-2 py-1 text-sm font-semibold tabular-nums outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
         autoFocus={!tag}
       />
@@ -106,21 +105,13 @@ export function TagInput({ tag, onTag }) {
   )
 }
 
-export function InstFields({ memo, onChange, kinds, onAddKind }) {
+// reading: 박스 안 글자를 읽는 중, onReadTag(): 박스 안 글자로 Tag. No 다시 채우기
+export function InstFields({ memo, onChange, kinds, onAddKind, reading, onReadTag }) {
   const inst = memo.inst
   const [adding, setAdding] = useState(false)
   const [newKind, setNewKind] = useState('')
 
-  const setTag = (raw) => {
-    const tag = raw.toUpperCase()
-    const next = { ...inst, tag }
-    // 종류를 비워 뒀거나 태그로 짐작한 값 그대로면 새 태그로 다시 짐작 (FT-1001 → FT)
-    if (!inst.kind?.trim() || inst.kind === guessKind(inst.tag, kinds)) next.kind = guessKind(tag, kinds)
-    const patch = { inst: next }
-    // 메모 이름이 기본 이름이거나 예전 태그와 같으면 이름도 태그로
-    if (isDefaultName(memo.name) || !memo.name?.trim() || memo.name === inst.tag) patch.name = tag || memo.name
-    onChange(patch)
-  }
+  const setTag = (raw) => onChange(tagPatch(memo, raw, kinds))
   const setDesc = (desc) => onChange({ inst: { ...inst, desc } })
   const setKind = (kind) => onChange({ inst: { ...inst, kind } })
   const setDone = (done) => onChange(donePatch(inst, done))
@@ -147,7 +138,19 @@ export function InstFields({ memo, onChange, kinds, onAddKind }) {
     <div className="flex flex-col gap-2 border-b border-ink-100 px-3 py-2">
       <label className="flex items-center gap-2">
         <span className={`${label} w-20 shrink-0`}>Tag. No</span>
-        <TagInput tag={inst.tag ?? ''} onTag={setTag} />
+        <TagInput tag={inst.tag ?? ''} onTag={setTag} placeholder={reading ? '박스 글자 읽는 중…' : 'FT-1001'} />
+        {onReadTag && (
+          <button
+            type="button"
+            onClick={onReadTag}
+            disabled={reading}
+            aria-busy={reading}
+            title="박스 안 글자를 읽어 Tag. No 채우기 (PDF 글자가 없으면 그 부분만 OCR)"
+            className="shrink-0 rounded px-1.5 py-1 text-xs font-semibold text-brand-700 ring-1 ring-ink-200 hover:bg-brand-50 disabled:cursor-wait disabled:opacity-60"
+          >
+            {reading ? '읽는 중' : '박스 읽기'}
+          </button>
+        )}
       </label>
       <label className="flex items-center gap-2">
         <span className={`${label} w-20 shrink-0`}>Description</span>

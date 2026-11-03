@@ -41,6 +41,43 @@ function getWorker() {
   return workerPromise
 }
 
+// 계기 태그 읽기용: 영어·숫자만, 한 덩어리 글로 읽음 (한글 모델이 섞이면 0/O 를 더 헷갈림)
+let tagWorkerPromise = null
+let tagIdleTimer = null
+function getTagWorker() {
+  clearTimeout(tagIdleTimer)
+  if (!tagWorkerPromise) {
+    tagWorkerPromise = (async () => {
+      const { createWorker, PSM } = await import('tesseract.js')
+      const base = new URL(`${import.meta.env.BASE_URL}ocr/`, window.location.href).href
+      const worker = await createWorker('eng', 1, {
+        workerPath: `${base}worker.min.js`,
+        corePath: base,
+        langPath: base.replace(/\/$/, ''),
+        workerBlobURL: false,
+      })
+      await worker.setParameters({
+        tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
+        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-/',
+        user_defined_dpi: '300',
+      })
+      return worker
+    })()
+    tagWorkerPromise.catch(() => {
+      tagWorkerPromise = null
+    })
+  }
+  return tagWorkerPromise
+}
+function releaseTagWorkerLater() {
+  clearTimeout(tagIdleTimer)
+  tagIdleTimer = setTimeout(async () => {
+    const p = tagWorkerPromise
+    tagWorkerPromise = null
+    ;(await p?.catch(() => null))?.terminate()
+  }, IDLE_CLOSE_MS)
+}
+
 function releaseWorkerLater() {
   clearTimeout(idleTimer)
   idleTimer = setTimeout(async () => {
@@ -171,5 +208,42 @@ export async function ocrPage(renderer, pdfPage, { onProgress, signal, mask = []
     return kept
   } finally {
     releaseWorkerLater()
+  }
+}
+
+// 페이지의 한 부분(r: 배율 1 페이지 좌표)만 OCR → [{ s, x, y, w, h, conf }] 줄 단위 (계기 박스 안 태그 읽기)
+// 작은 범위라 크게 키워 읽음 (scale: 1pt 당 픽셀). 렌더러는 openRenderer 결과
+export async function ocrRegion(renderer, pdfPage, r, scale) {
+  const worker = await getTagWorker()
+  try {
+    const left = Math.max(0, Math.floor(r.x * scale))
+    const top = Math.max(0, Math.floor(r.y * scale))
+    const w = Math.max(1, Math.ceil(r.w * scale))
+    const h = Math.max(1, Math.ceil(r.h * scale))
+    const drawn = await renderer.tile({ page: pdfPage.pageNumber, mask: [], scale, left, top, w, h, clean: true })
+    if (!drawn.blob) return []
+    const { data } = await worker.recognize(drawn.blob, {}, { blocks: true, text: false })
+    const lines = []
+    for (const block of data.blocks ?? [])
+      for (const para of block.paragraphs)
+        for (const line of para.lines) {
+          const words = line.words.filter((wd) => wd.text.trim() && wd.confidence >= MIN_CONFIDENCE)
+          if (!words.length) continue
+          const x0 = Math.min(...words.map((wd) => wd.bbox.x0))
+          const y0 = Math.min(...words.map((wd) => wd.bbox.y0))
+          const x1 = Math.max(...words.map((wd) => wd.bbox.x1))
+          const y1 = Math.max(...words.map((wd) => wd.bbox.y1))
+          lines.push({
+            s: words.map((wd) => wd.text.trim()).join(' '),
+            x: (left + x0) / scale,
+            y: (top + y0) / scale,
+            w: (x1 - x0) / scale,
+            h: (y1 - y0) / scale,
+            conf: Math.min(...words.map((wd) => wd.confidence)),
+          })
+        }
+    return lines
+  } finally {
+    releaseTagWorkerLater()
   }
 }

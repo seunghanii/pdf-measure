@@ -77,6 +77,12 @@ async function needsOcr(pdfPage, items, merged) {
 const pack = (list) =>
   list.map((i) => [i.s.trim().replace(/\s+/g, ' '), r1(i.x), r1(i.y), r1(i.w), r1(i.h)]).filter((i) => i[0])
 
+// 한 페이지의 PDF 글자 (색인 없이 바로, 박스 안 태그 읽기 등) → [{ s, x, y, w, h, flat }] 줄 단위로 붙인 것
+export async function pageTextItems(pdfPage) {
+  if (!Util) ({ OPS, Util } = await getPdfjs())
+  return mergeLine(await pdfTextItems(pdfPage))
+}
+
 const charCount = (items) => items.reduce((n, i) => n + i.s.replace(/\s/g, '').length, 0)
 
 // 문서 전체 색인 만들기. onProgress({ page, pages, ocr, done(0~1) })
