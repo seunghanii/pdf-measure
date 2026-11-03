@@ -13,7 +13,7 @@ const STATUS = {
   error: '저장 못 함 (이 브라우저에는 남아 있어요)',
 }
 
-export default function HomeNotepad({ store, className = '' }) {
+export default function HomeNotepad({ store, className = '', onClose }) {
   const [note, setNote] = useState(null) // null = 불러오는 중
   const [status, setStatus] = useState('saved')
   const [notice, setNotice] = useState('')
@@ -100,6 +100,21 @@ export default function HomeNotepad({ store, className = '' }) {
         <span className={`ml-auto truncate text-[11px] ${status === 'error' ? 'text-danger-500' : 'text-ink-400'}`} aria-live="polite">
           {STATUS[status]}
         </span>
+        {onClose && (
+          <button
+            onClick={() => {
+              flushRef.current()
+              onClose()
+            }}
+            className="-my-1 -mr-1.5 shrink-0 rounded-md p-1 text-ink-400 hover:bg-ink-100 hover:text-ink-700"
+            title="메모장 닫기 (Esc)"
+            aria-label="메모장 닫기"
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+        )}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto text-sm" onBlur={() => flushRef.current()}>
         {note === null ? (

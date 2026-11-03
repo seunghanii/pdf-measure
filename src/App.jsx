@@ -68,6 +68,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
   const [activeId, setActiveId] = useState(null) // null = 홈(최근 파일)
   const [openFolderId, setOpenFolderId] = useState(loadOpenFolder) // 홈 화면에서 펼쳐 본 폴더
   // 도면 오른쪽 목록 (모든 탭 공통). 새로 열면 펼침, 단 폰처럼 좁거나 낮은 화면은 도면을 넓게 보도록 접어서 시작
+  const [notepadOpen, setNotepadOpen] = useState(false) // 도면 화면 왼쪽 아래 메모장 (모든 탭 공통)
   const [sidebarOpen, setSidebarOpen] = useState(() => !window.matchMedia?.('(max-width: 767px), (max-height: 500px)').matches)
   useEffect(() => saveOpenFolder(openFolderId), [openFolderId])
   useEffect(() => loadInstList(store), [store]) // Inst list: Equipment Tag. No 로 Description·Type 채우기
@@ -664,6 +665,8 @@ function Session({ store, user, onLogout, onChangePassword }) {
           onAddKind={addKind}
           onSetDocRoles={setDocRoles}
           sidebarOpen={sidebarOpen}
+          notepadOpen={notepadOpen}
+          setNotepadOpen={setNotepadOpen}
           setSidebarOpen={setSidebarOpen}
         />
       ))}
