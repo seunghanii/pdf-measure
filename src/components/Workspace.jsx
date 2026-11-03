@@ -31,6 +31,10 @@ import { loadUncalHidden } from '../lib/scalePanel'
 import RevisionDialog from './RevisionDialog'
 import NotepadFloat from './NotepadFloat'
 import { useMemoDock } from '../lib/memoDock'
+import PageNavigator, { carryThumbs } from './PageNavigator'
+import { loadPdf } from '../lib/pdf'
+import { MAX_UPLOAD_BYTES } from '../lib/cloudStore'
+import { buildPdf, popPageEdit, setPageEditCarry, takePageEditCarry, invertOrder, loadPageNavOpen, pageEditUndo, rememberPageEdit, remapIndex, remapState, savePageNavOpen, undoState } from '../lib/pageEdit'
 import { readTagInBox } from '../lib/tagRead'
 
 // 메모장은 마크다운 읽는 도구까지 필요할 때만 불러옴
@@ -53,7 +57,9 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
   const [linkChoice, setLinkChoice] = useState(null) // '도면 열기' 박스를 눌러 갈 곳(또는 메모 열기)을 고르는 중 { id }
   const viewRef = useRef(null) // 보던 자리 (탭을 떠나면 PdfViewer 가 사라지므로 여기 보관)
   // 기준 길이 없는 도면은 기준선 긋기로 시작 (오른쪽 축척 칸을 접어 두었으면 선택 도구로)
-  const [tool, setTool] = useState(() => (saved?.calibration ? 'length' : loadUncalHidden() ? 'select' : 'calibrate'))
+  // 페이지 편집 뒤 다시 그려질 때는 쓰던 도구 그대로
+  const carried = useState(() => takePageEditCarry(doc.id))[0]
+  const [tool, setTool] = useState(() => carried?.tool ?? (saved?.calibration ? 'length' : loadUncalHidden() ? 'select' : 'calibrate'))
   const [measurements, setMeasurements] = useState(saved?.measurements ?? [])
   const [history, setHistory] = useState([])
   // 휴지통: 지운 항목 [{ item, at }]. 7일 지난 것은 열 때 뺌 (lib/trash.js)
@@ -92,6 +98,13 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
   // 개정판: 지금 판 { label, name, size, at } 과 예전 판 목록 (lib/revision.js). 바꾼 적 없으면 비어 있음
   const [revs, setRevs] = useState(() => ({ rev: saved?.rev ?? null, revisions: saved?.revisions ?? [] }))
   const [revisionOpen, setRevisionOpen] = useState(false)
+  // 왼쪽 위 페이지 탐색 창 (열림은 모든 도면 공통, 페이지를 바꾸면 탭이 새로 그려져도 열린 채로)
+  const [pageNavOpen, setPageNavOpenRaw] = useState(loadPageNavOpen)
+  const setPageNavOpen = useCallback((open) => {
+    setPageNavOpenRaw(open)
+    savePageNavOpen(open)
+  }, [])
+  const [pageBusy, setPageBusy] = useState('') // 페이지 편집 저장 중 안내
   const [revisionFile, setRevisionFile] = useState(null) // 개정 창을 열며 바로 고를 PDF (관련 도면 연결에서 넘어옴)
   // 다른 도면의 관련 도면 연결에서 "개정판으로 바꾸기"를 고르면 이 도면이 열리고 개정 창에 그 PDF 가 들어감
   useEffect(() => {
@@ -1078,6 +1091,96 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
       throw e
     }
   }
+  // ---------- 페이지 편집 (빈 페이지 넣기·지우기·순서 바꾸기) ----------
+  // order: lib/pageEdit.js 의 새 쪽 목록, label: 되돌리기에 보일 이름, focus: 편집 뒤 볼 쪽 (새 번호)
+  const pageUndo = pageEditUndo(doc.id)
+  const canUndoPages = !!pageUndo && pageUndo.pdf === pdfDoc
+  const nowState = () => ({ measurements, trash, calibration, pageNum })
+  const savePages = async ({ file, newPdf, next, index, notice }) => {
+    await autosaveCtl.current?.stop()
+    try {
+      const buildState = () => ({
+        measurements: next.measurements,
+        categories,
+        calibration: next.calibration,
+        unit,
+        markupStyle,
+        counters: counters.current,
+        trash: next.trash,
+        pageNum: next.pageNum,
+        // 지금 판의 크기만 새 파일에 맞춤 (판 이름·예전 판 목록은 그대로)
+        ...(revs.rev ? { rev: { ...revs.rev, name: file.name, size: file.size } } : {}),
+        revisions: revs.revisions,
+        activity: autosaveCtl.current?.activity?.() ?? [],
+      })
+      setPageEditCarry(doc.id, { tool: tool === 'calibrate' ? 'select' : tool })
+      await onReplaceFile({ file, pdfDoc: newPdf, buildState, index, notice })
+    } catch (e) {
+      takePageEditCarry(doc.id)
+      autosaveCtl.current?.resume()
+      throw e
+    }
+  }
+  const editPages = async (order, { label, focus }) => {
+    if (pageBusy || !onReplaceFile) return
+    setPageBusy('페이지를 저장하고 있어요…')
+    setNotice('')
+    let newPdf = null
+    try {
+      const file = await buildPdf(pdfDoc, order, fileName)
+      if (cloud && file.size > MAX_UPLOAD_BYTES) throw Object.assign(new Error('too large'), { code: 'too_large' })
+      newPdf = await loadPdf(await file.arrayBuffer())
+      carryThumbs(pdfDoc, newPdf, order)
+      const key = newRevKey()
+      const before = nowState()
+      const next = remapState(before, order, pdfDoc.numPages, { editKey: key })
+      if (focus) next.pageNum = focus
+      const oldFile = new File([await pdfDoc.getData()], fileName, { type: 'application/pdf' })
+      const parts = [`${label}: 완료했어요.`]
+      if (next.goneCount) parts.push(`지운 쪽의 항목 ${next.goneCount}개는 휴지통에 있어요 (되돌리기를 누르면 원래대로).`)
+      if (before.calibration?.mode === 'line' && next.calibration?.mode === 'ratio') parts.push('지운 쪽에 있던 기준선은 같은 축척(1:N)으로 바꿔 뒀어요.')
+      await savePages({ file, newPdf, next, index: remapIndex(textIndex, order, pdfDoc.numPages), notice: parts.join(' ') })
+      rememberPageEdit(doc.id, {
+        key,
+        label,
+        pdf: newPdf,
+        order,
+        oldNumPages: pdfDoc.numPages,
+        file: oldFile,
+        index: textIndex,
+        calBefore: before.calibration,
+        calAfter: next.calibration,
+      })
+    } catch (e) {
+      console.warn('페이지 편집 실패', e)
+      newPdf?.loadingTask?.destroy()
+      setNotice(
+        e?.code === 'too_large'
+          ? '페이지를 바꾼 PDF 가 50MB 를 넘어 서버에 올릴 수 없어요.'
+          : '페이지를 바꾸지 못했어요. 인터넷 연결을 확인하고 다시 해 주세요. (도면은 예전 그대로예요)',
+      )
+      setPageBusy('')
+    }
+  }
+  const undoPages = async () => {
+    const entry = pageEditUndo(doc.id)
+    if (!entry || entry.pdf !== pdfDoc || pageBusy) return
+    setPageBusy('되돌리고 있어요…')
+    setNotice('')
+    let newPdf = null
+    try {
+      newPdf = await loadPdf(await entry.file.arrayBuffer())
+      carryThumbs(pdfDoc, newPdf, invertOrder(entry.order, entry.oldNumPages))
+      const next = undoState(nowState(), entry)
+      await savePages({ file: entry.file, newPdf, next, index: entry.index ?? null, notice: `${entry.label}: 되돌렸어요.` })
+      popPageEdit(doc.id, newPdf)
+    } catch (e) {
+      console.warn('페이지 되돌리기 실패', e)
+      newPdf?.loadingTask?.destroy()
+      setNotice('되돌리지 못했어요. 인터넷 연결을 확인하고 다시 해 주세요.')
+      setPageBusy('')
+    }
+  }
   const removeRevision = (r) => {
     setRevs((v) => ({ ...v, revisions: v.revisions.filter((x) => x.key !== r.key) }))
     if (r.file) store.removeRevisionFile(doc.id, r.key).catch((e) => console.warn('예전 판 PDF 지우기 실패', e))
@@ -1157,6 +1260,21 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
 
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <div className="relative flex min-h-0 min-w-0 flex-1">
+        {pageNavOpen && (
+          <PageNavigator
+            pdfDoc={pdfDoc}
+            pageNum={pageNum}
+            onGo={jumpTo}
+            measurements={measurements}
+            onEdit={onReplaceFile && !boxPick ? editPages : null}
+            busy={pageBusy}
+            undoLabel={canUndoPages ? pageUndo.label : null}
+            onUndo={undoPages}
+            onClose={() => setPageNavOpen(false)}
+          />
+        )}
+        <div className="relative flex min-h-0 min-w-0 flex-1">
+          {!pageNavOpen && <PageNavButton pageNum={pageNum} numPages={pdfDoc.numPages} onClick={() => setPageNavOpen(true)} />}
           <PdfViewer
             pdfDoc={pdfDoc}
             pageNum={pageNum}
@@ -1251,6 +1369,7 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
               />
             </Suspense>
           )}
+        </div>
         </div>
         {!sidebarOpen && (
           <div className="flex shrink-0 justify-center border-t border-ink-200 bg-surface p-1 md:w-10 md:flex-col md:justify-start md:border-t-0 md:border-l md:py-3">
@@ -1413,6 +1532,28 @@ function SidebarToggle({ open, onClick }) {
 }
 
 const NO_IDS = []
+
+// 도면 왼쪽 위: 페이지 탐색 창 열기 (몇 쪽 / 전체)
+function PageNavButton({ pageNum, numPages, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      title="페이지 탐색 (페이지 추가·삭제·순서 바꾸기)"
+      aria-label="페이지 탐색 열기"
+      className="absolute top-3 left-3 z-10 flex h-8 items-center gap-1.5 rounded-lg border border-ink-200 bg-surface/95 px-2.5 text-xs font-medium text-ink-700 shadow-sm backdrop-blur transition-colors hover:bg-ink-50 hover:text-ink-900"
+    >
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="3" y="3" width="7" height="9" rx="1.5" />
+        <rect x="14" y="3" width="7" height="9" rx="1.5" />
+        <rect x="3" y="15" width="7" height="6" rx="1.5" />
+        <rect x="14" y="15" width="7" height="6" rx="1.5" />
+      </svg>
+      <span className="tabular-nums">
+        {pageNum} / {numPages}
+      </span>
+    </button>
+  )
+}
 
 // 박스 고르기 안내 (도면 위쪽 가운데). 항목을 누르면 고르고, Esc·취소로 그만둠
 function BoxPickBar({ from, same, onCancel }) {

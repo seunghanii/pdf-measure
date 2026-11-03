@@ -96,6 +96,22 @@ export async function reindex(store, id, name, getPdf) {
   pump()
 }
 
+// 페이지 편집으로 쪽 순서만 바뀐 도면: 이미 만든 색인을 새 순서로 바꿔 저장 (OCR 다시 안 함). index 가 없으면 다시 만듦
+export async function replaceIndex(store, id, name, index, getPdf) {
+  if (!isValidIndex(index)) return reindex(store, id, name, getPdf)
+  const key = keyOf(store, id)
+  for (let i = queue.length - 1; i >= 0; i--) if (queue[i].key === key) queue.splice(i, 1)
+  if (running?.key === key) running.stale = true
+  cache.set(key, index)
+  for (const fn of doneListeners) fn(scopeOf(store), id, index)
+  emit()
+  try {
+    await store.saveTextIndex(id, index)
+  } catch (e) {
+    console.warn('색인 저장 실패', e)
+  }
+}
+
 async function pump() {
   if (running) return
   const job = queue.shift()
