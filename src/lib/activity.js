@@ -62,9 +62,15 @@ function eventOf(a, m, t) {
 }
 
 // 숨기기·보이기만 바꾼 것은 기록하지 않음 (화면에서 가린 것뿐)
+// 박스 연결에 적힌 이름(itemName)을 지금 이름으로 맞춘 것도 (lib/backlinks.js refreshLinkNames) 사용자가 고친 게 아니라 기록하지 않음
+const quiet = (m) => {
+  if (!m.links?.some((l) => l?.itemName)) return { ...m, hidden: 0 }
+  const strip = (l) => (l?.itemName ? { ...l, itemName: 0 } : l)
+  return { ...m, hidden: 0, links: m.links.map(strip), link: m.link && strip(m.link) }
+}
 function sameIgnoringHidden(a, b) {
-  if (a.hidden === b.hidden) return JSON.stringify(a) === JSON.stringify(b)
-  return JSON.stringify({ ...a, hidden: 0 }) === JSON.stringify({ ...b, hidden: 0 })
+  if (JSON.stringify(a) === JSON.stringify(b)) return true
+  return JSON.stringify(quiet(a)) === JSON.stringify(quiet(b))
 }
 
 // 지난번 항목들(prev)과 지금 항목들(next)을 비교해 기록을 더한 새 목록. 바뀐 게 없으면 activity 그대로 돌려줌
@@ -127,7 +133,8 @@ export function itemRect(m) {
 export function itemLabel(m) {
   const what = whatOf(m)
   const name = nameOf(m)
-  // "사각형 · 사각형 1" 처럼 겹치면 이름만
+  // "사각형 · 사각형 1" 처럼 겹치면 이름만. 메모 범위도 이름만 ("메모 · 밸브 상세" 대신 "밸브 상세")
   if (!name || name === what) return what
+  if (m.type === 'memo' && !isInst(m)) return name
   return name.startsWith(what) ? name : `${what} · ${name}`
 }
