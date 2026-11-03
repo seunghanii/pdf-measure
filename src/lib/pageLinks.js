@@ -78,6 +78,6 @@ export function fixLinksAfterPageEdit(items, before, { docId, fileName, map, old
 
 // 박스를 다른 쪽으로 옮겼을 때 기본 이름 그대로인 링크 박스 이름
 export function renameMovedLinkBox(m, page, fileName, numPages) {
-  if (m.type !== 'memo' || (m.page ?? 1) === page) return m
+  if (m.type !== 'memo' || (m.page ?? 1) === page) return m.name
   return m.name === linkBoxName(fileName, m.page ?? 1, numPages) ? linkBoxName(fileName, page, numPages) : m.name
 }
