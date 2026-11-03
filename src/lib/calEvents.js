@@ -116,7 +116,9 @@ export function weekLanes(keys, events) {
     if (!lane) lanes.push((lane = Array(keys.length).fill(null)))
     for (let i = r[0]; i <= r[1]; i++) {
       const contLeft = e.date < keys[i]
-      lane[i] = { e, contLeft, contRight: (e.end ?? e.date) > keys[i], showTitle: !contLeft || i === 0 }
+      const showTitle = !contLeft || i === 0
+      // run: 이 칸부터 이번 주 안에서 막대가 이어지는 칸 수 (제목을 막대 전체 너비로 보이게)
+      lane[i] = { e, contLeft, contRight: (e.end ?? e.date) > keys[i], showTitle, run: showTitle ? r[1] - i + 1 : 0 }
     }
   }
   return keys.map((_, i) => {

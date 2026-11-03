@@ -225,7 +225,23 @@ function useSlotMap(cells, events) {
   }, [events, cells])
 }
 
+// 작은 달력 글씨: 9px 은 윈도우(맑은 고딕)에서 획이 뭉개져 10px 로, 자간을 조금 좁혀 한 칸에 더 들어가게
+const MINI_TEXT = 'text-[10px] leading-[14px] font-medium tracking-[-0.03em]'
 const MINI_LINES = 2 // 작은 달력 한 칸 줄 수 (넘치면 마지막 줄이 +N)
+
+// 여러 날 막대의 제목: 첫 칸에서 이번 주 끝 칸까지 막대 전체 너비를 씀 (칸 하나에 갇혀 '정기...' 로 잘리지 않게)
+// gap = 막대 칸 사이 간격(px), inset = 첫·끝 칸 바깥 여백(px)
+function SpanTitle({ run, gap = 0, inset = 0, className = '', children }) {
+  if (run <= 1) return children
+  return (
+    <span
+      className={`pointer-events-none absolute inset-y-0 left-0 z-[1] truncate ${className}`}
+      style={{ width: `calc(${run * 100}% + ${(run - 1) * gap - inset}px)` }}
+    >
+      {children}
+    </span>
+  )
+}
 
 // 작은 달력: 칸마다 일정·Equipment 를 작게 그대로 보여 주고, 넘치면 +N. 누르면 그날로 큰 창
 function MonthGrid({ month, today, weekend, holidays, pubShow, events, equip, onPick }) {
@@ -266,31 +282,38 @@ function MonthGrid({ month, today, weekend, holidays, pubShow, events, equip, on
               key={key}
               onClick={() => onPick(date)}
               title={tip || undefined}
-              className={`group flex h-12 min-w-0 flex-col items-stretch gap-px overflow-hidden rounded-md pt-0.5 transition-colors hover:bg-ink-100 ${inMonth ? '' : 'opacity-60'}`}
+              className={`group flex h-[3.25rem] min-w-0 flex-col items-stretch gap-px rounded-md pt-0.5 transition-colors hover:bg-ink-100 ${inMonth ? '' : 'opacity-60'}`}
             >
               <span className={`mx-auto flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-0.5 text-xs tabular-nums ${dayTone(isToday, off, inMonth)}`}>
                 {date.getDate()}
               </span>
               {rows.slice(0, fit).map((r, i) => {
-                if (r.type === 'gap') return <span key={`g${i}`} className="h-3 shrink-0" aria-hidden="true" />
+                if (r.type === 'gap') return <span key={`g${i}`} className="h-3.5 shrink-0" aria-hidden="true" />
                 if (r.type === 'eq')
                   return (
-                    <span key={r.q.key} className="mx-px truncate rounded-sm px-0.5 text-left text-[9px] leading-3 font-medium" style={{ color: r.q.color, backgroundColor: `${r.q.color}1f` }}>
+                    <span key={r.q.key} className={`${MINI_TEXT} mx-px overflow-hidden rounded-sm px-0.5 text-left whitespace-nowrap`} style={{ color: r.q.color, backgroundColor: `${r.q.color}1f` }}>
                       {r.q.tag}
                     </span>
                   )
-                const { e, contLeft, contRight, showTitle } = r.s
+                const { e, contLeft, contRight, showTitle, run } = r.s
+                const title = showTitle ? e.title || '·' : '\u00a0'
+                // 하루 일정 하나뿐이면 두 줄까지 접어서 보여 줌
+                const wrap = run <= 1 && rows.length === 1 && rest === 0
                 return (
                   <span
                     key={e.id}
-                    className={`h-3 shrink-0 truncate px-0.5 text-left text-[9px] leading-3 font-medium text-white ${contLeft ? 'rounded-l-none' : 'ml-px rounded-l-sm'} ${contRight ? 'rounded-r-none' : 'mr-px rounded-r-sm'}`}
+                    className={`${MINI_TEXT} relative shrink-0 px-0.5 text-left text-white ${
+                      wrap ? 'line-clamp-2 break-all' : run > 1 ? 'h-3.5' : 'h-3.5 overflow-hidden whitespace-nowrap'
+                    } ${contLeft ? 'rounded-l-none' : 'ml-px rounded-l-sm'} ${contRight ? 'rounded-r-none' : 'mr-px rounded-r-sm'}`}
                     style={{ backgroundColor: e.color }}
                   >
-                    {showTitle ? e.title || '·' : '\u00a0'}
+                    <SpanTitle run={run} inset={2} className="px-0.5">
+                      {title}
+                    </SpanTitle>
                   </span>
                 )
               })}
-              {rest > 0 && <span className="text-[9px] leading-3 font-medium text-ink-500">+{rest}</span>}
+              {rest > 0 && <span className={`${MINI_TEXT} text-ink-500`}>+{rest}</span>}
             </button>
           )
         })}
@@ -559,7 +582,7 @@ function DayCell({ date, inMonth, isToday, isSelected, off, pub = [], slots, equ
               </span>
             </span>
           )
-        const { e, contLeft, contRight, showTitle } = r.s
+        const { e, contLeft, contRight, showTitle, run } = r.s
         return (
           <button
             key={e.id}
@@ -569,12 +592,14 @@ function DayCell({ date, inMonth, isToday, isSelected, off, pub = [], slots, equ
             }}
             onDoubleClick={(ev) => ev.stopPropagation()}
             title={`${timeOf(e)}${e.title}${e.end ? ` (${e.date.slice(5).replace('-', '/')}~${e.end.slice(5).replace('-', '/')})` : ''}`}
-            className={`relative h-4 shrink-0 truncate px-1 text-left text-[11px] leading-4 font-medium text-white ${
+            className={`relative h-4 shrink-0 px-1 text-left text-[11px] leading-4 font-medium text-white ${run > 1 ? '' : 'truncate'} ${
               contLeft ? '-ml-px rounded-l-none' : 'ml-1 rounded-l'
             } ${contRight ? 'rounded-r-none' : 'mr-1 rounded-r'}`}
             style={{ backgroundColor: e.color }}
           >
-            {showTitle ? `${timeOf(e)}${e.title || '(제목 없음)'}` : '\u00a0'}
+            <SpanTitle run={run} gap={1} inset={8} className="px-1">
+              {showTitle ? `${timeOf(e)}${e.title || '(제목 없음)'}` : '\u00a0'}
+            </SpanTitle>
           </button>
         )
       })}
