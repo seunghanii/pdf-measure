@@ -22,12 +22,12 @@ import { DEFAULT_MEMO_COLOR, isLinkOnly, memoPhotoIds, memosAt } from '../lib/me
 import { itemLabel, itemRect } from '../lib/activity'
 import { backlinksFor, refreshLinkNames } from '../lib/backlinks'
 import { linkBoxName } from '../lib/drawingNo'
-import { fixLinksAfterPageEdit, orderToMap, pageLogV, pushPageLog, renameMovedLinkBox } from '../lib/pageLinks'
+import { composeMap, fixLinksAfterPageEdit, orderToMap, pageLogV, pushPageLog, renameMovedLinkBox } from '../lib/pageLinks'
 import { memoFileIds } from '../lib/excel'
 import { DEFAULT_STATUS, cardBoxFor, donePatch, doneUpTo, instForTag, tagPatch, isInst, itemGroup, linksPatch, memoLinkPhotoIds, memoLinks, statusOf } from '../lib/instrument'
 import { liveItemTrash, pushItems, withoutTrashed } from '../lib/trash'
 import { MAX_ZOOM, MIN_ZOOM } from '../lib/zoom'
-import { adaptState, newRevKey } from '../lib/revision'
+import { adaptState, newRevKey, revisionReport } from '../lib/revision'
 import { loadUncalHidden } from '../lib/scalePanel'
 import RevisionDialog from './RevisionDialog'
 import NotepadFloat from './NotepadFloat'
@@ -1103,7 +1103,27 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
   // 처음 바꿀 때는 지금 PDF 를 "처음 판" 으로 (크기는 도면 id "이름|크기" 에서)
   const currentRev = revs.rev ?? { label: '처음 판', name: fileName, size: Number(doc.id.slice(doc.id.lastIndexOf('|') + 1)) || 0, at: null }
   const applyRevision = async ({ file, newPdf, oldSizes, newSizes, fit, label, fromRev, report }) => {
-    const adapted = adaptState({ measurements, trash, calibration }, oldSizes, newSizes, fit)
+    // '페이지 편집 전' 보관본으로 복원하면 판 이름은 원래 이름 그대로, 지금 PDF 는 '페이지 편집 후' 로 보관
+    const restoringBackup = !!fromRev?.pageBackup
+    if (restoringBackup) label = label.replace(/ · 페이지 편집 전$/, '')
+    // 예전 판으로 복원: 그 판 뒤에 페이지를 넣고 지우고 옮겼으면 항목을 그 판의 쪽 번호로 되돌린 뒤 맞춤
+    let base = { measurements, trash, calibration }
+    let pageLog = revs.pageLog
+    const back = fromRev ? composeMap(revs.pageLog, fromRev.pv ?? 0, newPdf.numPages) : null
+    if (back && back.some((p, i) => p !== i + 1)) {
+      const order = back.map((p, i) => (p && p <= pdfDoc.numPages ? { src: p } : { blank: newSizes[i] }))
+      const re = remapState({ measurements, trash, calibration, pageNum }, order, pdfDoc.numPages)
+      const map = orderToMap(order, pdfDoc.numPages)
+      base = {
+        measurements: fixLinksAfterPageEdit(re.measurements, measurements, { docId: doc.id, fileName, map, oldNumPages: pdfDoc.numPages, newNumPages: order.length }),
+        trash: re.trash,
+        calibration: re.calibration,
+      }
+      oldSizes = order.map((e, i) => (e.src ? oldSizes[e.src - 1] : newSizes[i]))
+      report = revisionReport(oldSizes, newSizes, base.measurements)
+      pageLog = pushPageLog(revs.pageLog, map)
+    }
+    const adapted = adaptState(base, oldSizes, newSizes, fit)
     const keepKey = newRevKey()
     const now = Date.now()
     const rest = revs.revisions.filter((r) => r.key !== fromRev?.key)
@@ -1117,8 +1137,9 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
       trash: adapted.trash,
       pageNum: Math.min(pageNum, newPdf.numPages),
       rev: { label, name: file.name, size: file.size, at: now },
-      revisions: [{ ...currentRev, key: keepKey, file: kept, replacedAt: now }, ...rest],
-      ...(revs.pageLog && { pageLog: revs.pageLog }),
+      // pv: 이 판일 때의 페이지 편집 횟수 (나중에 복원할 때 그 뒤 편집을 되돌리려고)
+      revisions: [{ ...currentRev, ...(restoringBackup && { label: `${currentRev.label} · 페이지 편집 후` }), key: keepKey, file: kept, replacedAt: now, pv: pageLogV(revs.pageLog) }, ...rest],
+      ...(pageLog && { pageLog }),
       activity: autosaveCtl.current?.activity?.() ?? [],
     })
     const parts = [`"${label}" 판으로 ${fromRev ? '복원했어요' : '바꿨어요'}.`]
@@ -1140,10 +1161,22 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
   const pageUndo = pageEditUndo(doc.id)
   const canUndoPages = !!pageUndo && pageUndo.pdf === pdfDoc
   const nowState = () => ({ measurements, trash, calibration, pageNum })
-  const savePages = async ({ file, newPdf, next, index, notice }) => {
+  // backup: 편집 전 PDF 를 예전 판 '페이지 편집 전' 으로 보관 (이 창에서 이 도면을 처음 편집할 때만, 그런 보관본은 하나만 둠)
+  const savePages = async ({ file, newPdf, next, index, notice, backup = false }) => {
     await autosaveCtl.current?.stop()
+    const keepKey = backup ? newRevKey() : null
+    const oldBackups = backup ? revs.revisions.filter((r) => r.pageBackup) : []
     try {
-      const buildState = () => ({
+      const now = Date.now()
+      let keptBackup = false
+      const revisionsAfter = (kept) =>
+        (keptBackup = backup && !!kept)
+          ? [
+              { ...currentRev, label: `${currentRev.label} · 페이지 편집 전`, key: keepKey, file: true, replacedAt: now, pv: pageLogV(revs.pageLog), pageBackup: true },
+              ...revs.revisions.filter((r) => !r.pageBackup),
+            ]
+          : revs.revisions
+      const buildState = (kept) => ({
         measurements: next.measurements,
         categories,
         calibration: next.calibration,
@@ -1154,12 +1187,14 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
         pageNum: next.pageNum,
         // 지금 판의 크기만 새 파일에 맞춤 (판 이름·예전 판 목록은 그대로)
         ...(revs.rev ? { rev: { ...revs.rev, name: file.name, size: file.size } } : {}),
-        revisions: revs.revisions,
+        revisions: revisionsAfter(kept),
         pageLog: next.pageLog,
         activity: autosaveCtl.current?.activity?.() ?? [],
       })
       setPageEditCarry(doc.id, { tool: tool === 'calibrate' ? 'select' : tool })
-      await onReplaceFile({ file, pdfDoc: newPdf, buildState, index, notice })
+      await onReplaceFile({ file, pdfDoc: newPdf, buildState, index, notice, ...(keepKey && { keepKey }) })
+      // 예전 '페이지 편집 전' 보관본은 새것으로 바꿈
+      if (keptBackup) for (const r of oldBackups) store.removeRevisionFile(doc.id, r.key).catch((e) => console.warn('예전 보관본 지우기 실패', e))
     } catch (e) {
       takePageEditCarry(doc.id)
       autosaveCtl.current?.resume()
@@ -1188,7 +1223,10 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
       const parts = [`${label}: 완료했어요.`]
       if (next.goneCount) parts.push(`지운 쪽의 항목 ${next.goneCount}개는 휴지통에 있어요 (되돌리기를 누르면 원래대로).`)
       if (before.calibration?.mode === 'line' && next.calibration?.mode === 'ratio') parts.push('지운 쪽에 있던 기준선은 같은 축척(1:N)으로 바꿔 뒀어요.')
-      await savePages({ file, newPdf, next, index: remapIndex(textIndex, order, pdfDoc.numPages), notice: parts.join(' ') })
+      // 이 창에서 처음 편집이면 편집 전 PDF 를 예전 판으로 보관 (창을 닫으면 되돌리기는 사라지므로)
+      const backup = !pageEditUndo(doc.id)
+      if (backup) parts.push("편집 전 PDF 는 '개정' 창에 '페이지 편집 전' 판으로 보관했어요.")
+      await savePages({ file, newPdf, next, index: remapIndex(textIndex, order, pdfDoc.numPages), notice: parts.join(' '), backup })
       rememberPageEdit(doc.id, {
         key,
         label,
