@@ -1116,7 +1116,7 @@ export default function PdfViewer({
   }
 
   if (!sizes) {
-    return <div className="flex flex-1 items-center justify-center bg-ink-200 text-ink-500">페이지 불러오는 중…</div>
+    return <div className="flex flex-1 items-center justify-center bg-ink-200 text-ink-500">쪽 불러오는 중…</div>
   }
 
   const cursorStyle = panRef.current
@@ -1337,7 +1337,7 @@ export default function PdfViewer({
       </div>
       {sizes.length > 1 && (
         <div className="pointer-events-none absolute top-3 right-4 rounded-full bg-black/70 px-3 py-1 text-sm text-white shadow">
-          {pageNum} / {sizes.length} 페이지
+          {pageNum} / {sizes.length}쪽
         </div>
       )}
       {drawing && <DrawHint tool={tool} count={draftPts.length} />}

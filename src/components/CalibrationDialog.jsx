@@ -22,7 +22,7 @@ export default function CalibrationDialog({ defaultUnit, initial, onCancel, onCo
       >
         <h2 className="text-lg font-bold">{initial ? '기준 길이 수정' : '기준 길이 입력'}</h2>
         <p className="mt-1 text-sm text-ink-500">
-          {initial ? '기준선' : '방금 그은 선'}의 <b>실제 길이</b>를 입력하세요. 도면에 적힌 치수(예: 5000)를 그대로 넣으면 됩니다.
+          {initial ? '기준선' : '방금 그은 선'}의 <b>실제 길이</b>를 입력하세요. 도면에 적힌 치수(예: 5000)를 그대로 넣으면 돼요.
           {initial && ' 선은 그대로 두고 모든 측정값이 다시 계산돼요.'}
         </p>
         <div className="mt-4 flex gap-2">

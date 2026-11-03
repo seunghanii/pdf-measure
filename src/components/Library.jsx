@@ -319,12 +319,12 @@ export default function Library({ list, library, openIds, cloud, onOpen, onRemov
                       const where = openFolder ? `"${openFolder.name}" 폴더로` : '폴더 밖으로'
                       const inside = [subs && `하위 폴더 ${subs}개`, direct && `도면 ${direct}개`].filter(Boolean).join('와 ')
                       const ask = inside
-                        ? `"${folder.name}" 폴더를 지울까요? 안에 있는 ${inside}는 지워지지 않고 ${where} 나와요.`
-                        : `"${folder.name}" 폴더를 지울까요?`
+                        ? `"${folder.name}" 폴더를 삭제할까요? 안에 있는 ${inside}는 그대로 ${where} 나와요.`
+                        : `"${folder.name}" 폴더를 삭제할까요?`
                       if (!window.confirm(ask)) return
                       onUpdateLibrary((lib) => deleteFolder(lib, folder.id))
                     }}
-                    title="폴더 지우기"
+                    title="폴더 삭제"
                     className="rounded p-1 text-ink-400 hover:bg-danger-50 hover:text-danger-500"
                   >
                     <TrashIcon />
@@ -515,11 +515,10 @@ function FileRow({ item, isOpen, cloud, library, folderId, alias, onOpen, onRemo
         )}
         <button
           onClick={() => {
-            const ask = `"${shown}" 을(를) 휴지통으로 옮길까요? 홈 아래 휴지통에서 7일 안에 되살릴 수 있고, 7일이 지나면 PDF와 측정값이 ${cloud ? '서버에서 ' : ''}완전히 지워집니다.`
+            const ask = `휴지통으로 옮길까요?\n${shown}\n\n${isOpen ? '열려 있는 탭은 닫혀요. ' : ''}홈 아래 휴지통에서 7일 안에 되살릴 수 있고, 7일이 지나면 PDF와 측정값이 ${cloud ? '서버에서 ' : ''}완전히 지워져요.`
             if (window.confirm(ask)) onRemove(item)
           }}
-          disabled={isOpen}
-          title={isOpen ? '열려 있는 탭을 먼저 닫아 주세요' : '휴지통으로 옮기기'}
+          title="휴지통으로 옮기기"
           className="rounded p-1.5 text-ink-300 hover:bg-danger-50 hover:text-danger-500 disabled:hidden"
         >
           <TrashIcon />
@@ -593,7 +592,7 @@ export function FolderDialog({ folder, library, onClose, onSave }) {
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === 'Escape' && onClose()}
-            placeholder="예: 1층 평면도"
+            placeholder="예: P&ID, Unit 100"
             maxLength={40}
             className="mt-1 w-full rounded-lg border border-ink-300 px-3 py-2 text-ink-800 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
           />

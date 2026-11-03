@@ -316,7 +316,7 @@ const doneText = (r) => {
 const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
 
 export function downloadInstCsv(rows, fileBase) {
-  const head = ['Tag. No', 'Description', '종류', '상태', '완료 작업', '도면', '페이지', '관련 문서']
+  const head = ['Tag. No', 'Description', 'Type', '상태', '완료 작업', '도면', '쪽', '관련 문서']
   const lines = [head, ...rows.map((r) => [r.tag, r.desc ?? '', r.kind, statusOf(r.status).label, doneText(r), r.docName, r.page, r.docs.map((d) => `${d.role ? `${d.role}: ` : ''}${d.name}${d.photo ? ' (사진)' : d.page > 1 ? ` (${d.page}쪽)` : ''}`).join('; ')])]
   const csv = lines.map((l) => l.map(cell).join(',')).join('\r\n')
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }) // 엑셀에서 한글이 깨지지 않게 BOM

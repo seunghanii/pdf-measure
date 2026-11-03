@@ -80,7 +80,7 @@ export default function Sidebar({
 
   const exportCsv = () => {
     const catName = new Map(categories.map((c) => [c.id, c.name]))
-    const rows = [['이름', '분류', '종류', '페이지', '값', '둘레']]
+    const rows = [['이름', '분류', '종류', '쪽', '값', '둘레']]
     for (const m of measures) {
       const d = describe(m, mmPerPt, unit)
       rows.push([m.name, catName.get(m.cat) ?? '', kindName(m, TYPE_INFO), m.page, d.main, d.sub?.replace('둘레 ', '') ?? ''])
@@ -145,8 +145,8 @@ export default function Sidebar({
         <button onClick={() => onOpenInstruments?.('list')} className="ml-auto rounded-md px-2 py-0.5 text-xs font-medium text-ink-700 ring-1 ring-ink-300 hover:bg-ink-100">
           Equipment 목록
         </button>
-        <button onClick={() => onOpenInstruments?.('find')} className="rounded-md px-2 py-0.5 text-xs font-medium text-ink-700 ring-1 ring-ink-300 hover:bg-ink-100" title="도면 글자에서 FT-1001 같은 태그를 찾아 카드 만들기">
-          태그 찾기
+        <button onClick={() => onOpenInstruments?.('find')} className="rounded-md px-2 py-0.5 text-xs font-medium text-ink-700 ring-1 ring-ink-300 hover:bg-ink-100" title="도면 글자에서 FT-1001 같은 Tag 를 찾아 Equipment 만들기">
+          Tag 찾기
         </button>
       </div>
       {/* 축척 */}
@@ -206,8 +206,8 @@ export default function Sidebar({
             </div>
             <div className="mt-0.5 text-xs text-ref-700">
               {calibration.mode === 'line'
-                ? `${calibration.page}페이지 기준선 · 숫자만 고치면 선은 그대로 두고 모든 값이 다시 계산돼요`
-                : '숫자를 고치면 바로 다시 계산돼요. PDF가 실제 용지 크기로 저장된 경우에만 정확합니다'}
+                ? `${calibration.page}쪽 기준선 · 숫자만 고치면 선은 그대로 두고 모든 값이 다시 계산돼요`
+                : '숫자를 고치면 바로 다시 계산돼요. PDF가 실제 용지 크기로 저장된 경우에만 정확해요'}
             </div>
             <div className="mt-2 flex gap-3 text-xs">
               <button className="font-medium text-ref-700 hover:underline" onClick={onStartCalibrate}>
@@ -279,7 +279,7 @@ export default function Sidebar({
           title="측정 목록"
           items={shownMeasures}
           total={measures.length}
-          empty={filterOn ? '이 분류에 든 항목이 없어요.' : '아직 측정한 항목이 없습니다.'}
+          empty={filterOn ? '이 분류에 든 항목이 없어요.' : '아직 측정한 항목이 없어요.'}
           head={
             <CategoryPanel
               categories={categories}
@@ -301,11 +301,11 @@ export default function Sidebar({
           actions={
             <>
               <button className="text-brand-600 hover:underline" onClick={exportCsv}>
-                CSV 저장
+                엑셀로 내보내기
               </button>
               <button
                 className="text-danger-500 hover:underline"
-                onClick={() => window.confirm('모든 측정을 지울까요? 지운 항목은 휴지통에 7일 동안 남아요.') && onClear('measure')}
+                onClick={() => window.confirm('모든 측정을 삭제할까요? 삭제한 항목은 휴지통에 7일 동안 남아요.') && onClear('measure')}
               >
                 전체 삭제
               </button>
@@ -317,11 +317,11 @@ export default function Sidebar({
         <ItemSection
           title="마크업"
           items={markups}
-          empty="형광펜, 텍스트, 펜, 사각형, 화살표 도구로 표시를 남겨 보세요."
+          empty="형광펜, 텍스트, 펜, 도형, 화살표, 박스 도구로 표시를 남겨 보세요."
           actions={
             <button
               className="text-danger-500 hover:underline"
-              onClick={() => window.confirm('모든 마크업을 지울까요? Equipment는 지우지 않고, 지운 마크업은 휴지통에 7일 동안 남아요.') && onClear('markup')}
+              onClick={() => window.confirm('모든 마크업을 삭제할까요? Equipment 는 그대로 두고, 삭제한 마크업은 휴지통에 7일 동안 남아요.') && onClear('markup')}
             >
               전체 삭제
             </button>
@@ -333,7 +333,7 @@ export default function Sidebar({
         <ItemSection
           title="Equipment"
           items={cards}
-          empty="메모 범위 도구에서 'Equipment'를 고르거나, 위 '태그 찾기'로 만들어요."
+          empty="툴바의 'Equipment'(E)로 박스를 그리거나, 위 'Tag 찾기'로 만들어요."
           group="inst"
           {...rowProps}
           actions={
@@ -352,21 +352,23 @@ export default function Sidebar({
           <li>Shift 누른 채 클릭: 수평/수직/45° 로 고정 (자석이 켜져 있으면 그 방향의 선에 붙음)</li>
           <li>자석(S 키로 켜고 끄기): 도면 선의 끝점·교차점·선 위와 이미 찍은 점에 커서가 붙어요. 스캔한 이미지 도면은 선이 없어서 찍은 점에만 붙어요</li>
           <li>기준 길이 숫자는 오른쪽 축척 칸에서 바로 고치거나, 선택 도구로 기준선을 더블클릭해서 고쳐요</li>
-          <li>선택 도구로 점이나 도형을 끌어 옮기고, Delete 로 삭제</li>
+          <li>선택 도구로 점이나 도형을 끌어 옮기고(다른 쪽으로도), Delete 로 삭제 · Ctrl+D 복제</li>
           <li>선택 도구로 빈 곳을 끌면 상자 안의 항목을 한꺼번에 선택, Shift/Ctrl+클릭으로 하나씩 더하거나 빼기, Ctrl+A 전체 선택</li>
-          <li>고른 항목 Ctrl+C 복사 · Ctrl+X 잘라내기 · Ctrl+V 붙여넣기 (마우스 자리에, 다른 도면에도. 메모는 글·사진·엑셀·Equipment 정보까지 함께)</li>
+          <li>고른 항목 Ctrl+C 복사 · Ctrl+X 잘라내기 · Ctrl+V 붙여넣기 (마우스 자리에, 다른 도면에도. 박스는 글·사진·엑셀·Equipment 정보까지 함께)</li>
+          <li>박스(N): 끌어서 그리면 메모장이 열리거나(메모), 누르면 연결한 곳으로 가요(링크) · Equipment(E): Tag. No·상태 칸이 있는 박스</li>
+          <li>글자 복사(X): 도면 글자를 누르면 그 줄이, 끌면 상자 안 글자가 복사돼요</li>
           <li>텍스트: 클릭한 곳에 입력, Enter 완료 · Shift+Enter 줄바꿈, 선택 도구로 더블클릭하면 고치기</li>
-          <li>형광펜·펜·사각형·화살표: 누른 채 끌어서 그리기</li>
+          <li>형광펜·펜·도형·화살표: 누른 채 끌어서 그리기</li>
           <li>사진: 사진 버튼(I 키)으로 고르거나, 복사한 사진을 Ctrl+V 로 붙여넣거나, 사진 파일을 도면에 끌어다 놓기. 모서리를 끌면 비율 유지(Shift: 자유롭게), 더블클릭하면 자르기</li>
           <li>길이: 점을 이어 찍으면 총 길이, 마지막 점 다시 클릭·더블클릭·Enter 로 완료</li>
           <li>면적: 첫 점 클릭·더블클릭·Enter 로 완료, Backspace/우클릭으로 한 점 취소</li>
           <li>눈 아이콘: 도면 위에서 숨기기/보이기 (값은 그대로 남아요)</li>
-          <li>여러 페이지는 위아래로 스크롤, PageUp/PageDown 으로 페이지 이동</li>
+          <li>여러 쪽은 위아래로 스크롤, PageUp/PageDown 으로 쪽 이동</li>
           <li>
-            숫자 키로 도구 바꾸기: 1 선택 · 2 이동 · 3 기준 · 4 길이 · 5 면적 · 6 각도 · 7 형광펜 · 8 텍스트 · 9 펜 · 0
-            사각형 · W 화살표
+            숫자 키: 1 선택 · 2 이동 · 3 기준선 · 4 길이 · 5 면적 · 6 각도 · 7 형광펜 · 8 텍스트 · 9 펜 · 0 도형
           </li>
-          <li>Ctrl+S PDF 저장 · Ctrl+Z 되돌리기 · Ctrl+0 화면에 맞춤</li>
+          <li>글자 키: X 글자 복사 · W 화살표 · N 박스 · E Equipment · I 사진 · S 자석</li>
+          <li>Ctrl+S PDF 내보내기 · Ctrl+Z 되돌리기 · Ctrl+0 화면에 맞춤</li>
         </ul>
       </details>
     </aside>
@@ -524,9 +526,9 @@ const ItemRow = memo(function ItemRow({ m, mmPerPt, unit, otherPage, gonePage, s
           {otherPage && (
             <span
               className={`shrink-0 text-xs ${gonePage ? 'text-warn-600' : 'text-ink-400'}`}
-              title={gonePage ? '개정판에 없는 쪽이라 도면에 보이지 않아요 (예전 판으로 되돌리면 다시 보여요)' : undefined}
+              title={gonePage ? '개정판에 없는 쪽이라 도면에 보이지 않아요 (예전 판으로 복원하면 다시 보여요)' : undefined}
             >
-              {m.page}p{gonePage && ' 없음'}
+              {m.page}쪽{gonePage && ' 없음'}
             </span>
           )}
         </div>
@@ -616,12 +618,12 @@ function CategoryPanel({ categories, totals, mmPerPt, unit, filter, setFilter, a
       </div>
 
       {!categories.length && !adding && (
-        <p className="px-1 pt-1 text-xs text-ink-500">벽, 창호처럼 분류를 만들어 항목에 붙이면 분류별 길이·면적 합계를 보여 드려요.</p>
+        <p className="px-1 pt-1 text-xs text-ink-500">Cable Tray, Conduit 처럼 분류를 만들어 항목에 붙이면 분류별 길이·면적 합계를 보여 드려요.</p>
       )}
 
       {adding && (
         <CategoryNameForm
-          placeholder="분류 이름 (예: 벽)"
+          placeholder="분류 이름 (예: Cable Tray)"
           submitLabel="추가"
           onSubmit={add}
           onCancel={() => setAdding(false)}
@@ -642,7 +644,7 @@ function CategoryPanel({ categories, totals, mmPerPt, unit, filter, setFilter, a
                   }}
                   onCancel={() => setEditing(null)}
                   onDelete={() => {
-                    if (!window.confirm(`"${c.name}" 분류를 지울까요? 항목은 남고 분류만 빠져요.`)) return
+                    if (!window.confirm(`"${c.name}" 분류를 삭제할까요? 항목은 남고 분류만 빠져요.`)) return
                     if (filter === c.id) setFilter(null)
                     onDelete(c.id)
                     setEditing(null)
@@ -856,7 +858,7 @@ function CategoryEditor({ cat, onSave, onCancel, onDelete }) {
           취소
         </button>
         <button type="button" className="ml-auto text-danger-500 hover:underline" onClick={onDelete}>
-          분류 지우기
+          분류 삭제
         </button>
       </div>
     </form>
@@ -892,7 +894,7 @@ function TrashSection({ trash, onRestore, onPurge }) {
                 </button>
                 <button
                   className="text-danger-500 hover:underline"
-                  onClick={() => window.confirm(`휴지통의 ${trash.length}개 항목을 완전히 지울까요? 되돌릴 수 없어요.`) && onPurge()}
+                  onClick={() => window.confirm(`휴지통의 ${trash.length}개 항목을 완전히 삭제할까요? 되돌릴 수 없어요.`) && onPurge()}
                 >
                   비우기
                 </button>
@@ -904,7 +906,7 @@ function TrashSection({ trash, onRestore, onPurge }) {
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm text-ink-600">{m.name || '(이름 없음)'}</div>
                       <div className="truncate text-xs text-ink-400">
-                        {trashKind(m)} · {m.page}p · {leftLabel(at)}
+                        {trashKind(m)} · {m.page}쪽 · {leftLabel(at)}
                       </div>
                     </div>
                     <button
@@ -915,7 +917,7 @@ function TrashSection({ trash, onRestore, onPurge }) {
                       되살리기
                     </button>
                     <button
-                      onClick={() => window.confirm(`"${m.name}" 을(를) 완전히 지울까요? 되돌릴 수 없어요.`) && onPurge([m.id])}
+                      onClick={() => window.confirm(`완전히 삭제할까요? 되돌릴 수 없어요.\n${m.name}`) && onPurge([m.id])}
                       title="완전 삭제"
                       className="shrink-0 rounded p-1 text-ink-300 hover:bg-danger-50 hover:text-danger-500"
                     >

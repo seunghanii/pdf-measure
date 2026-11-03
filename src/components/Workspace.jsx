@@ -41,7 +41,7 @@ const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slic
 // boxPick: 이 도면에서 연결할 박스를 고르는 중 { from, memoId, target } (App 이 보관)
 // boxPickResult: 이 도면의 메모가 박스 고르기를 끝냄 { memoId, index, fresh, result: { link } | { cancelled } }
 // onStartBoxPick(요청), onFinishBoxPick(결과), onBoxPickApplied(): 다른(또는 같은) 도면 탭을 오가며 박스 고르기
-export default function Workspace({ doc, active, onOpenFile, searchJump: rawSearchJump, onOpenLink, boxPick, boxPickResult, onStartBoxPick, onFinishBoxPick, onBoxPickApplied, library, onImportFile, onReviseDoc, pendingRevision, onPendingRevisionDone, onReplaceFile, sidebarOpen, setSidebarOpen, instKinds, onAddKind, onSetDocRoles }) {
+export default function Workspace({ doc, active, searchJump: rawSearchJump, onOpenLink, boxPick, boxPickResult, onStartBoxPick, onFinishBoxPick, onBoxPickApplied, library, onImportFile, onReviseDoc, pendingRevision, onPendingRevisionDone, onReplaceFile, sidebarOpen, setSidebarOpen, instKinds, onAddKind, onSetDocRoles }) {
   const { pdfDoc, name: fileName } = doc
   const saved = doc.savedState
   const [pageNum, setPageNum] = useState(() => Math.min(saved?.pageNum ?? 1, pdfDoc.numPages))
@@ -354,10 +354,10 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
       const bytes = await exportPdfWithMarkups({ pdfDoc, items: measurementsRef.current, calibration, mmPerPt, unit, getImage })
       const base = fileName.replace(/\.pdf$/i, '')
       downloadBytes(bytes, `${base}_마크업.pdf`)
-      setNotice(`"${base}_마크업.pdf" 로 저장했어요. 브라우저의 다운로드 폴더를 확인하세요.`)
+      setNotice(`PDF 로 내보냈어요: ${base}_마크업.pdf. 브라우저의 다운로드 폴더를 확인해 주세요.`)
     } catch (e) {
       console.error(e)
-      setNotice('PDF 저장에 실패했어요. 다시 시도해 주세요.')
+      setNotice('PDF 내보내기에 실패했어요. 다시 해 주세요.')
     } finally {
       setSaving(false)
     }
@@ -562,7 +562,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
       const m = measurementsRef.current.find((x) => x.id === id)
       if (!m) return
       if (boxPick.from === doc.id && id === boxPick.memoId) {
-        setNotice('연결 박스 자신은 고를 수 없어요. 다른 박스를 눌러 주세요.')
+        setNotice('지금 연결하는 박스 자신은 고를 수 없어요. 다른 박스를 눌러 주세요.')
         return
       }
       onFinishBoxPick({ link: { ...boxPick.target, page: m.page ?? 1, item: m.id, itemName: itemLabel(m), rect: itemRect(m) } })
@@ -714,7 +714,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
       const c = copyItems(items, { categories: categoriesRef.current, store, docId: doc.id, spot: placeRef.current?.() })
       if (cut) deleteItems(items.map((m) => m.id))
       setNotice(
-        `${items.length === 1 ? `"${items[0].name}"` : `${items.length}개 항목`}을(를) ${cut ? '잘라' : '복사해'} 뒀어요. 이 도면이나 다른 도면에서 Ctrl+V 로 붙여넣으세요.`,
+        `${items.length === 1 ? `"${items[0].name}" 항목을` : `항목 ${items.length}개를`} ${cut ? '잘라' : '복사해'} 뒀어요. 이 도면이나 다른 도면에서 Ctrl+V 로 붙여넣으세요.`,
       )
       return c
     },
@@ -853,7 +853,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
       const add = back.filter((m) => !have.has(m.id))
       setTrash((tr) => tr.filter((t) => !set.has(t.item.id)))
       if (add.length) commit((prev) => [...prev, ...add])
-      setNotice(`${back.length === 1 ? `"${back[0].name}"` : `${back.length}개 항목`}을(를) 되살렸어요.`)
+      setNotice(`${back.length === 1 ? `"${back[0].name}" 항목을` : `항목 ${back.length}개를`} 되살렸어요.`)
     },
     [commit],
   )
@@ -965,8 +965,16 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
         imageInputRef.current?.click()
         return
       }
+      // E: Equipment 박스 (박스 도구를 Equipment 종류로)
+      if (e.code === 'KeyE' && !e.shiftKey && pdfDoc) {
+        e.preventDefault()
+        setTool('memo')
+        setMarkupStyle((st) => ({ ...st, memoKind: 'inst' }))
+        return
+      }
       const t = TOOLS.find((x) => x.key.toLowerCase() === e.key.toLowerCase())?.id
       if (t && pdfDoc) setTool(t)
+      if (t === 'memo') setMarkupStyle((st) => (st.memoKind === 'inst' ? { ...st, memoKind: 'note' } : st))
       if (e.key === 'Delete' || (e.key === 'Backspace' && tool === 'select')) {
         if (selectedIds.length) {
           e.preventDefault()
@@ -1058,7 +1066,7 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
       revisions: [{ ...currentRev, key: keepKey, file: kept, replacedAt: now }, ...rest],
       activity: autosaveCtl.current?.activity?.() ?? [],
     })
-    const parts = [`"${label}" 판으로 ${fromRev ? '되돌렸어요' : '바꿨어요'}.`]
+    const parts = [`"${label}" 판으로 ${fromRev ? '복원했어요' : '바꿨어요'}.`]
     if (fit && report.scaled.length) parts.push('쪽 크기가 바뀌어 마크업과 축척을 새 크기에 맞췄어요.')
     if (report.reshaped.length) parts.push(`${report.reshaped.map((p) => p.page).join(', ')}쪽은 비율이 달라 마크업 자리를 확인해 주세요.`)
     if (report.goneCount) parts.push(`${report.goneFrom}쪽부터 있던 항목 ${report.goneCount}개는 보관만 해 뒀어요.`)
@@ -1091,7 +1099,6 @@ export default function Workspace({ doc, active, onOpenFile, searchJump: rawSear
         }}
       />
       <Toolbar
-        onOpenFile={onOpenFile}
         pdfDoc={pdfDoc}
         pageNum={pageNum}
         setPageNum={jumpTo}
@@ -1414,8 +1421,8 @@ function BoxPickBar({ from, same, onCancel }) {
       <div className="pointer-events-auto flex max-w-full items-center gap-3 rounded-full bg-brand-700 py-1.5 pr-1.5 pl-4 text-sm text-white shadow-lg">
         <BoxIcon className="h-4 w-4 shrink-0" />
         <span className="min-w-0 truncate">
-          연결할 박스를 누르거나, 빈 곳을 끌어 새 박스를 그리세요{' '}
-          <span className="text-white/70">({same ? '메모 범위·Equipment·도형 등' : from ? `고르면 "${from}" 로 돌아가요` : '메모 범위·Equipment·도형 등'})</span>
+          연결할 박스를 누르거나 새로 그리세요
+          {!same && from && <span className="text-white/70"> · 고르면 "{from}" 로 돌아가요</span>}
         </span>
         <button onClick={onCancel} className="shrink-0 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold hover:bg-white/25" title="박스 고르기 그만두기 (Esc)">
           취소

@@ -11,9 +11,9 @@ import { TRASH_DAYS, leftLabel } from '../lib/trash'
 const HomeNotepad = lazy(() => import('./HomeNotepad'))
 
 const STEPS = [
-  { n: 1, title: 'PDF 도면 열기', text: '버튼을 누르거나 파일을 화면에 끌어다 놓으세요.' },
-  { n: 2, title: '기준 길이 지정', text: '치수를 아는 선의 양 끝을 클릭하고 실제 길이를 입력합니다.' },
-  { n: 3, title: '측정하기', text: '길이, 면적, 각도 도구로 원하는 곳을 클릭해 잽니다.' },
+  { n: 1, title: '도면 열기', text: '위 칸을 누르거나 PDF 파일을 화면에 끌어다 놓으세요.' },
+  { n: 2, title: 'Equipment 박스 그리기', text: '툴바의 Equipment(E)로 계기 자리에 박스를 그리면 Tag. No 를 읽어 채워요.' },
+  { n: 3, title: '상태·관련 도면 관리', text: '박스를 눌러 상태와 완료 날짜를 적고, Hook-up·데이터시트를 연결해요.' },
 ]
 
 export default function EmptyState({
@@ -95,7 +95,7 @@ export default function EmptyState({
             <p className="mx-auto mt-1 max-w-lg text-sm text-pretty text-ink-500">
               {cloud
                 ? '여러 개를 한 번에 열 수 있어요. PDF와 측정값은 내 계정의 서버 저장소에 저장되고, 나만 볼 수 있어요.'
-                : '여러 개를 한 번에 열 수 있어요. 파일은 서버로 전송되지 않고 내 브라우저에만 저장됩니다.'}
+                : '여러 개를 한 번에 열 수 있어요. 파일은 서버로 보내지 않고 내 브라우저에만 저장돼요.'}
             </p>
             <input
               ref={inputRef}
@@ -123,7 +123,7 @@ export default function EmptyState({
           {hasRecent ? (
             <section className="mt-8">
               <div className="mb-2 flex h-4 items-center justify-between px-1">
-                <h2 className="text-xs font-semibold tracking-wide text-ink-500">{cloud ? '서버에 저장된 도면' : '내 도면'}</h2>
+                <h2 className="text-xs font-semibold tracking-wide text-ink-500">내 도면</h2>
                 {!fetching && (
                   <button
                     onClick={() => setFolderDialog({ parent: openFolder?.id ?? null })}
@@ -154,14 +154,14 @@ export default function EmptyState({
                 />
               )}
               <button onClick={onOpenSample} className="mt-3 px-1 text-sm text-brand-600 hover:underline">
-                샘플 평면도 열기
+                샘플 도면 열기
               </button>
             </section>
           ) : (
             <>
               <div className="text-center">
                 <button onClick={onOpenSample} className="mt-4 text-sm font-medium text-brand-600 hover:underline">
-                  도면이 없다면? 샘플 평면도로 체험해 보기 →
+                  도면이 없다면? 샘플 도면으로 써 보기 →
                 </button>
               </div>
               <ol className="mt-10 grid gap-3 text-left sm:grid-cols-3">
@@ -245,7 +245,7 @@ function DocTrash({ trashed, cloud, onRestore, onPurge }) {
               </button>
               <button
                 onClick={() =>
-                  window.confirm(`"${d.name}" 을(를) 완전히 지울까요? PDF와 측정값이 ${cloud ? '서버에서 ' : ''}지워지고 되돌릴 수 없어요.`) && onPurge(d.id, d.name)
+                  window.confirm(`완전히 삭제할까요?\n${d.name}\n\nPDF와 측정값이 ${cloud ? '서버에서 ' : ''}지워지고 되돌릴 수 없어요.`) && onPurge(d.id, d.name)
                 }
                 className="shrink-0 rounded-md px-2 py-1 text-xs text-danger-500 hover:bg-danger-50"
               >

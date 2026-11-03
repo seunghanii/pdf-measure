@@ -92,7 +92,7 @@ function ExcelFile({ file, loadBlob, onUpdate, onRemove }) {
             <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />
           </svg>
         </button>
-        <button onClick={onRemove} className="shrink-0 rounded p-1 text-ink-400 hover:bg-danger-50 hover:text-danger-600" title="첨부 빼기" aria-label="첨부 빼기">
+        <button onClick={onRemove} className="shrink-0 rounded p-1 text-ink-400 hover:bg-danger-50 hover:text-danger-600" title="첨부 삭제" aria-label="첨부 삭제">
           <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <path d="M6 6l12 12M18 6L6 18" />
           </svg>

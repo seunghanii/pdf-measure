@@ -51,7 +51,7 @@ const DocSearch = forwardRef(function DocSearch({ doc, measurements, categories,
               e.currentTarget.blur()
             }
           }}
-          placeholder="도면에서 찾기 (태그, 실 이름…)"
+          placeholder="도면에서 찾기 (Tag. No, 글자…)"
           className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-ink-400"
         />
         {query && (

@@ -32,7 +32,7 @@ export function Highlighted({ text, query }) {
 
 // 찾은 곳 옆 작은 표시: 직접 넣은 글이면 종류, OCR 로 읽은 글자면 OCR
 export function HitBadge({ hit }) {
-  const label = hit.note === 'text' ? '글 상자' : hit.note === 'memo' ? '메모' : hit.note === 'measure' ? '측정' : hit.ocr ? 'OCR' : null
+  const label = hit.note === 'text' ? '텍스트' : hit.note === 'memo' ? '박스' : hit.note === 'measure' ? '측정' : hit.ocr ? 'OCR' : null
   if (!label) return null
   return (
     <span className={`shrink-0 text-[10px] ${hit.note ? 'text-warn-600' : 'text-ink-400'}`}>
@@ -190,14 +190,14 @@ export default function SearchPanel({ store, recent, library, onOpenHit, onOpenD
               </ul>
             </section>
           )}
-          {failed && <p className="px-4 py-6 text-center text-sm text-danger-600">검색 색인을 불러오지 못했어요.</p>}
-          {!failed && !indexes && <p className="px-4 py-6 text-center text-sm text-ink-400">색인 불러오는 중…</p>}
+          {failed && <p className="px-4 py-6 text-center text-sm text-danger-600">검색 준비에 실패했어요. 새로 고침해 보세요.</p>}
+          {!failed && !indexes && <p className="px-4 py-6 text-center text-sm text-ink-400">검색 준비 중…</p>}
           {indexes && query.trim() && results.length === 0 && nameHits.length === 0 && (
-            <p className="px-4 py-6 text-center text-sm text-ink-400">"{query}" 이(가) 들어 있는 도면이 없어요.</p>
+            <p className="px-4 py-6 text-center text-sm text-ink-400">찾는 글자가 들어 있는 도면이 없어요: "{query}"</p>
           )}
           {indexes && !query.trim() && (
             <p className="px-4 py-6 text-center text-sm text-ink-400">
-              도면 이름·별명으로 도면을 찾거나, 태그·실 이름·도면번호처럼 도면 {docs.length - missing}개에 적힌 글자를 입력하세요.
+              도면 이름·별명으로 도면을 찾거나, Tag. No·도면 번호·글자처럼 도면 {docs.length - missing}개에 적힌 글자를 입력하세요.
             </p>
           )}
           {results.map(({ doc, hits }) => {

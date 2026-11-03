@@ -76,7 +76,7 @@ export function equipByDay(list) {
       for (const [step, date] of Object.entries(row.done ?? {})) {
         if (!isDay(date)) continue
         const s = statusOf(step)
-        const item = { key: `${doc.id}|${row.id}|${step}`, tag: row.tag || '(Tag 없음)', desc: row.desc ?? '', label: s.label, color: s.color, step, doc, row }
+        const item = { key: `${doc.id}|${row.id}|${step}`, tag: row.tag || '(Tag. No 없음)', desc: row.desc ?? '', label: s.label, color: s.color, step, doc, row }
         if (!map.has(date)) map.set(date, [])
         map.get(date).push(item)
       }
