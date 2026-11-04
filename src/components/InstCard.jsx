@@ -107,7 +107,8 @@ export function TagInput({ tag, onTag, placeholder = 'FT-1001' }) {
 }
 
 // reading: 박스 안 글자를 읽는 중, onReadTag(): 박스 안 글자로 Tag. No 다시 채우기
-export function InstFields({ memo, onChange, kinds, onAddKind, reading, onReadTag }) {
+// compact: 메모장을 아래에 길게 놓았을 때. 넓은 대신 낮으니 Tag. No·Description·이름표를 한 줄, Type·상태를 한 줄로 붙임
+export function InstFields({ memo, onChange, kinds, onAddKind, reading, onReadTag, compact = false }) {
   const inst = memo.inst
   const [adding, setAdding] = useState(false)
   const [newKind, setNewKind] = useState('')
@@ -137,131 +138,188 @@ export function InstFields({ memo, onChange, kinds, onAddKind, reading, onReadTa
   // 예전에 적은 종류(목록에 없는 글)도 고른 상태로 보이게
   const options = inst.kind && !kinds.includes(inst.kind) ? [...kinds, inst.kind] : kinds
 
-  return (
-    <div className="flex flex-col gap-2 border-b border-ink-100 px-3 py-2">
-      <label className="flex items-center gap-2">
-        <span className={`${label} w-20 shrink-0`}>Tag. No</span>
-        <TagInput tag={inst.tag ?? ''} onTag={setTag} placeholder={reading ? '박스 글자 읽는 중…' : 'FT-1001'} />
-        {onReadTag && (
+  const lw = compact ? '' : 'w-20' // 라벨 너비 (한 줄 배치에선 글 길이만큼)
+  const readBtn = onReadTag && (
+    <button
+      type="button"
+      onClick={onReadTag}
+      disabled={reading}
+      aria-busy={reading}
+      title="박스 안 글자를 읽어 Tag. No 채우기 (PDF 글자가 없으면 그 부분만 OCR)"
+      className="shrink-0 rounded px-1.5 py-1 text-xs font-semibold text-brand-700 ring-1 ring-ink-200 hover:bg-brand-50 disabled:cursor-wait disabled:opacity-60"
+    >
+      {reading ? '읽는 중' : '박스 읽기'}
+    </button>
+  )
+  const fillBtn = listed?.diff && (
+    <button
+      type="button"
+      onClick={() => onChange(tagPatch(memo, listed.hit.tag, kinds, { canon: true }))}
+      title={`Inst list 값: ${listed.hit.tag} · ${listed.hit.desc || '(Description 없음)'} · ${listed.hit.type || '(Type 없음)'}`}
+      className="shrink-0 rounded px-1.5 py-0.5 font-semibold whitespace-nowrap text-brand-700 ring-1 ring-ink-200 hover:bg-brand-50"
+    >
+      목록 값으로 채우기
+    </button>
+  )
+  const showList = instList.rows.length > 0 && inst.tag?.trim()
+  // 한 줄 배치에선 Inst list 결과를 Tag. No 옆 작은 표시로
+  const listMark = showList && (
+    <span className="flex shrink-0 items-center gap-1 text-[11px]" aria-live="polite">
+      {listed ? (
+        <>
+          <span className="font-medium whitespace-nowrap text-ok-700" title="Inst list 에 있는 Tag. No">
+            ✓ 목록
+          </span>
+          {fillBtn}
+        </>
+      ) : (
+        <span className="whitespace-nowrap text-ink-400" title="Inst list 에 없는 Tag. No">
+          목록 없음
+        </span>
+      )}
+    </span>
+  )
+  const tagField = (
+    <label className={`flex min-w-0 items-center gap-2 ${compact ? 'flex-[1_1_18rem]' : ''}`}>
+      <span className={`${label} ${lw} shrink-0`}>Tag. No</span>
+      <TagInput tag={inst.tag ?? ''} onTag={setTag} placeholder={reading ? '박스 글자 읽는 중…' : 'FT-1001'} />
+      {readBtn}
+      {compact && listMark}
+    </label>
+  )
+  const descField = (
+    <label className={`flex min-w-0 items-center gap-2 ${compact ? 'flex-[1_1_14rem]' : ''}`}>
+      <span className={`${label} ${lw} shrink-0`}>Description</span>
+      <input
+        value={inst.desc ?? ''}
+        onChange={(e) => setDesc(e.target.value)}
+        onBlur={(e) => e.target.value !== e.target.value.trim() && setDesc(e.target.value.trim())}
+        placeholder="예: Fuel Gas Flow"
+        className="min-w-0 flex-1 rounded-md border border-ink-200 px-2 py-1 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+      />
+    </label>
+  )
+  const typeField = (
+    <div className={`flex min-w-0 items-start gap-2 ${compact ? 'flex-[1_1_auto]' : ''}`}>
+      <span className={`${label} ${lw} shrink-0 pt-1`}>Type</span>
+      <div className="flex min-w-0 flex-1 flex-wrap gap-1" role="group" aria-label="Type">
+        {options.map((k) => (
           <button
+            key={k}
             type="button"
-            onClick={onReadTag}
-            disabled={reading}
-            aria-busy={reading}
-            title="박스 안 글자를 읽어 Tag. No 채우기 (PDF 글자가 없으면 그 부분만 OCR)"
-            className="shrink-0 rounded px-1.5 py-1 text-xs font-semibold text-brand-700 ring-1 ring-ink-200 hover:bg-brand-50 disabled:cursor-wait disabled:opacity-60"
+            aria-pressed={inst.kind === k}
+            onClick={() => setKind(inst.kind === k ? '' : k)}
+            className={`rounded px-1.5 py-0.5 text-xs font-semibold tabular-nums ${inst.kind === k ? 'bg-ink-800 text-surface' : 'text-ink-600 ring-1 ring-ink-200 hover:bg-ink-50'}`}
           >
-            {reading ? '읽는 중' : '박스 읽기'}
+            {k}
+          </button>
+        ))}
+        {adding ? (
+          <input
+            autoFocus
+            value={newKind}
+            onChange={(e) => setNewKind(e.target.value.toUpperCase())}
+            onBlur={addKind}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                addKind()
+              }
+              if (e.key === 'Escape') {
+                e.stopPropagation()
+                setNewKind('')
+                setAdding(false)
+              }
+            }}
+            placeholder="예: FIC"
+            className="w-16 rounded border border-brand-400 px-1.5 py-0.5 text-xs font-semibold outline-none"
+            aria-label="새 Type"
+          />
+        ) : (
+          <button type="button" onClick={() => setAdding(true)} className="rounded px-1.5 py-0.5 text-xs text-brand-700 hover:bg-brand-50" title="Type 더하기 (모든 도면에 적용)">
+            + 추가
           </button>
         )}
-      </label>
-      {instList.rows.length > 0 && inst.tag?.trim() && (
+      </div>
+    </div>
+  )
+  const labelField = (
+    <div className="flex shrink-0 items-center gap-2">
+      <span className={`${label} ${lw} shrink-0`} title="도면 위 박스 테두리에 보이는 글">
+        이름표
+      </span>
+      <div className="flex rounded ring-1 ring-ink-200" role="group" aria-label="도면 위 이름표">
+        {INST_LABELS.map((o) => (
+          <button
+            key={o.id}
+            type="button"
+            aria-pressed={labelMode === o.id}
+            onClick={() => setLabel(o.id)}
+            title={o.id === 'off' ? '이 Equipment 의 이름표를 도면에서 숨기기' : o.id === 'desc' ? 'Description 보이기 (비어 있으면 Tag. No)' : 'Tag. No 보이기'}
+            className={`px-2 py-0.5 text-xs font-medium first:rounded-l last:rounded-r ${labelMode === o.id ? 'bg-ink-800 text-surface' : 'text-ink-600 hover:bg-ink-50'}`}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+  // 완료 날짜가 있는 작업만 작게
+  const dates = dated.length > 0 && (
+    <div className={`flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-ink-500 ${compact ? '' : 'pl-[5.5rem]'}`} aria-label="완료 날짜">
+      {dated.map((d) => (
+        <span key={d.id} className="flex items-center gap-1 whitespace-nowrap">
+          <span className="h-1.5 w-1.5 rounded-full" style={{ background: d.color }} />
+          {d.label} <span className="tabular-nums text-ink-600">{fmtDay(d.date)}</span>
+        </span>
+      ))}
+    </div>
+  )
+  const statusField = (
+    <div className={`flex min-w-0 items-start gap-2 ${compact ? 'flex-[1_1_auto]' : ''}`}>
+      <span className={`${label} ${lw} shrink-0 pt-1`}>상태</span>
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <StatusPicker done={done} onChange={setDone} />
+        {compact && dates}
+      </div>
+    </div>
+  )
+
+  if (compact)
+    return (
+      <div className="flex flex-col gap-1.5 border-b border-ink-100 px-3 py-1.5">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          {tagField}
+          {descField}
+          {labelField}
+        </div>
+        <div className="flex flex-wrap items-start gap-x-4 gap-y-1.5">
+          {typeField}
+          {statusField}
+        </div>
+      </div>
+    )
+
+  return (
+    <div className="flex flex-col gap-2 border-b border-ink-100 px-3 py-2">
+      {tagField}
+      {showList && (
         <div className="-mt-1 flex items-center gap-2 pl-[5.5rem] text-[11px]" aria-live="polite">
           {listed ? (
             <>
               <span className="font-medium text-ok-700">✓ Inst list 에 있음</span>
-              {listed.diff && (
-                <button
-                  type="button"
-                  onClick={() => onChange(tagPatch(memo, listed.hit.tag, kinds, { canon: true }))}
-                  title={`Inst list 값: ${listed.hit.tag} · ${listed.hit.desc || '(Description 없음)'} · ${listed.hit.type || '(Type 없음)'}`}
-                  className="rounded px-1.5 py-0.5 font-semibold text-brand-700 ring-1 ring-ink-200 hover:bg-brand-50"
-                >
-                  목록 값으로 채우기
-                </button>
-              )}
+              {fillBtn}
             </>
           ) : (
             <span className="text-ink-400">Inst list 에 없는 Tag. No</span>
           )}
         </div>
       )}
-      <label className="flex items-center gap-2">
-        <span className={`${label} w-20 shrink-0`}>Description</span>
-        <input
-          value={inst.desc ?? ''}
-          onChange={(e) => setDesc(e.target.value)}
-          onBlur={(e) => e.target.value !== e.target.value.trim() && setDesc(e.target.value.trim())}
-          placeholder="예: Fuel Gas Flow"
-          className="min-w-0 flex-1 rounded-md border border-ink-200 px-2 py-1 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
-        />
-      </label>
-      <div className="flex items-start gap-2">
-        <span className={`${label} w-20 shrink-0 pt-1`}>Type</span>
-        <div className="flex min-w-0 flex-1 flex-wrap gap-1" role="group" aria-label="Type">
-          {options.map((k) => (
-            <button
-              key={k}
-              type="button"
-              aria-pressed={inst.kind === k}
-              onClick={() => setKind(inst.kind === k ? '' : k)}
-              className={`rounded px-1.5 py-0.5 text-xs font-semibold tabular-nums ${inst.kind === k ? 'bg-ink-800 text-surface' : 'text-ink-600 ring-1 ring-ink-200 hover:bg-ink-50'}`}
-            >
-              {k}
-            </button>
-          ))}
-          {adding ? (
-            <input
-              autoFocus
-              value={newKind}
-              onChange={(e) => setNewKind(e.target.value.toUpperCase())}
-              onBlur={addKind}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  addKind()
-                }
-                if (e.key === 'Escape') {
-                  e.stopPropagation()
-                  setNewKind('')
-                  setAdding(false)
-                }
-              }}
-              placeholder="예: FIC"
-              className="w-16 rounded border border-brand-400 px-1.5 py-0.5 text-xs font-semibold outline-none"
-              aria-label="새 Type"
-            />
-          ) : (
-            <button type="button" onClick={() => setAdding(true)} className="rounded px-1.5 py-0.5 text-xs text-brand-700 hover:bg-brand-50" title="Type 더하기 (모든 도면에 적용)">
-              + 추가
-            </button>
-          )}
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        <span className={`${label} w-20 shrink-0`} title="도면 위 박스 테두리에 보이는 글">
-          이름표
-        </span>
-        <div className="flex rounded ring-1 ring-ink-200" role="group" aria-label="도면 위 이름표">
-          {INST_LABELS.map((o) => (
-            <button
-              key={o.id}
-              type="button"
-              aria-pressed={labelMode === o.id}
-              onClick={() => setLabel(o.id)}
-              title={o.id === 'off' ? '이 Equipment 의 이름표를 도면에서 숨기기' : o.id === 'desc' ? 'Description 보이기 (비어 있으면 Tag. No)' : 'Tag. No 보이기'}
-              className={`px-2 py-0.5 text-xs font-medium first:rounded-l last:rounded-r ${labelMode === o.id ? 'bg-ink-800 text-surface' : 'text-ink-600 hover:bg-ink-50'}`}
-            >
-              {o.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="flex items-start gap-2">
-        <span className={`${label} w-20 shrink-0 pt-1`}>상태</span>
-        <StatusPicker done={done} onChange={setDone} className="min-w-0 flex-1" />
-      </div>
-      {/* 완료 날짜가 있는 작업만 카드 아래에 작게 */}
-      {dated.length > 0 && (
-        <div className="flex flex-wrap gap-x-3 gap-y-0.5 pl-[5.5rem] text-[11px] text-ink-500" aria-label="완료 날짜">
-          {dated.map((d) => (
-            <span key={d.id} className="flex items-center gap-1 whitespace-nowrap">
-              <span className="h-1.5 w-1.5 rounded-full" style={{ background: d.color }} />
-              {d.label} <span className="tabular-nums text-ink-600">{fmtDay(d.date)}</span>
-            </span>
-          ))}
-        </div>
-      )}
+      {descField}
+      {typeField}
+      {labelField}
+      {statusField}
+      {dates}
     </div>
   )
 }
@@ -370,15 +428,16 @@ export function StatusPicker({ done, onChange, className = '' }) {
 
 // 관련 문서 (Hook-up, 데이터시트 …) 여러 개. 누르면 그 페이지 미리보기가 뜨고, 거기서 파일 열기
 // onPick(index): 고르기 창 열기 (index 없으면 새로 추가)
-export function RelatedDocs({ memo, library, onChange, onOpen, onPick }) {
+// compact: 메모장을 아래에 길게 놓았을 때, 연결을 가로로 이어 붙여 줄 수를 줄임
+export function RelatedDocs({ memo, library, onChange, onOpen, onPick, compact = false }) {
   const links = memoLinks(memo)
   const remove = (i) => onChange(linksPatch(links.filter((_, k) => k !== i)))
   return (
-    <div className="border-b border-ink-100 px-3 py-1.5 text-xs">
+    <div className={`border-b border-ink-100 px-3 py-1.5 text-xs ${compact ? 'flex flex-wrap items-center gap-x-3 gap-y-1' : ''}`}>
       {links.length > 0 && (
-        <ul className="mb-1 flex flex-col gap-1">
+        <ul className={compact ? 'contents' : 'mb-1 flex flex-col gap-1'}>
           {links.map((l, i) => (
-            <li key={`${l.photo ?? l.id}-${i}`} className="group flex items-center gap-1.5">
+            <li key={`${l.photo ?? l.id}-${i}`} className={`group flex items-center gap-1.5 ${compact ? 'max-w-full min-w-0 sm:max-w-[28rem]' : ''}`}>
               {l.photo ? (
                 <button
                   onClick={() => onOpen(l)}
