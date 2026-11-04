@@ -1,4 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { colName } from '../lib/excel'
 import { borderCss, fontStyle, xfLook } from '../lib/xlsx'
 
@@ -18,40 +19,46 @@ const loadHeight = () => {
 }
 
 // 자동 필터 처음 상태: 파일에 걸려 있던 값 목록 { "필터 번호:열": Set(보일 값) }
-const filePicks = (sheet) => {
+const filePicks = (filters) => {
   const out = {}
-  ;(sheet.filters ?? []).forEach((f, fi) => {
+  filters.forEach((f, fi) => {
     for (const [c, vals] of Object.entries(f.cols)) out[`${fi}:${c}`] = new Set(vals)
   })
   return out
 }
 const BLANK = '(빈 셀)'
 
-function SheetTable({ sheet, range, colWidths, onColWidth }) {
+// 필터를 밖에서 정할 때 (Cable schedule 카드): filters 로 필터 범위, picks/onPicks 로 고른 값을 넘기고 받음,
+// rowOk(r): 필터 범위 안 줄 중 보여 줄 줄 (예: 이 계기 Tag. No 가 든 줄)
+const NO_FILTERS = []
+function SheetTable({ sheet, range, colWidths, onColWidth, filters: filtersProp, picks: picksProp, onPicks, rowOk }) {
   const [zoom, setZoom] = useState(100)
+  const filters = filtersProp ?? sheet.filters ?? NO_FILTERS
   // 필터 고른 값 (다른 시트로 바뀌면 그 파일 상태로 다시)
   const [pickState, setPickState] = useState(() => ({
     sheet,
-    picks: filePicks(sheet),
+    picks: filePicks(filters),
   }))
-  if (pickState.sheet !== sheet) setPickState({ sheet, picks: filePicks(sheet) })
-  const picks = pickState.sheet === sheet ? pickState.picks : filePicks(sheet)
-  const setPicks = (fn) =>
-    setPickState((s) => ({
-      sheet: s.sheet,
-      picks: typeof fn === 'function' ? fn(s.picks) : fn,
-    }))
+  if (!picksProp && pickState.sheet !== sheet) setPickState({ sheet, picks: filePicks(filters) })
+  const picks = picksProp ?? (pickState.sheet === sheet ? pickState.picks : filePicks(filters))
+  const setPicks = (fn) => {
+    if (picksProp) onPicks?.(typeof fn === 'function' ? fn(picksProp) : fn)
+    else
+      setPickState((s) => ({
+        sheet: s.sheet,
+        picks: typeof fn === 'function' ? fn(s.picks) : fn,
+      }))
+  }
   const [menu, setMenu] = useState(null) // 열린 필터 목록 { fi, c, x, y }
   const box = useRef(null)
   // 필터 결과로 바뀐 행 높이 (필터 범위 안 줄은 파일의 숨김 대신 지금 필터로 정함)
   const rowHeights = useMemo(() => {
-    const filters = sheet.filters ?? []
     if (!filters.length) return sheet.rowH
     const out = { ...sheet.rowH }
     filters.forEach((f, fi) => {
       const active = Object.entries(picks).filter(([k, v]) => v && k.startsWith(`${fi}:`))
       for (let r = f.r1 + 1; r <= f.r2; r++) {
-        const pass = active.every(([k, v]) => v.has(sheet.cells.get(`${r},${k.split(':')[1]}`)?.text ?? ''))
+        const pass = (!rowOk || rowOk(r)) && active.every(([k, v]) => v.has(sheet.cells.get(`${r},${k.split(':')[1]}`)?.text ?? ''))
         if (!pass) out[r] = 0
         else if (out[r] === 0) {
           if (sheet.hiddenH[r]) out[r] = sheet.hiddenH[r]
@@ -60,12 +67,12 @@ function SheetTable({ sheet, range, colWidths, onColWidth }) {
       }
     })
     return out
-  }, [sheet, picks])
+  }, [sheet, filters, picks, rowOk])
   const [height, setHeight] = useState(loadHeight)
   const [live, setLive] = useState(null) // 끄는 중인 열 { c, w }
   const scroller = useRef(null)
   const widths = useMemo(() => (live ? { ...colWidths, [live.c]: live.w } : colWidths), [colWidths, live])
-  const model = useMemo(() => buildModel(sheet, range, widths, rowHeights, picks), [sheet, range, widths, rowHeights, picks])
+  const model = useMemo(() => buildModel(sheet, range, widths, rowHeights, picks, filters), [sheet, range, widths, rowHeights, picks, filters])
   const { cols, rows, width } = model
   const step = (d) => setZoom((z) => ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, ZOOMS.indexOf(z) + d))])
 
@@ -121,19 +128,21 @@ function SheetTable({ sheet, range, colWidths, onColWidth }) {
     e.preventDefault()
     e.stopPropagation()
     if (menu && menu.fi === fi && menu.c === c) return setMenu(null)
+    // 화면 기준 자리 (메모장·카드가 넘치는 부분을 잘라도 목록은 다 보이게 body 에 띄움)
     const b = e.currentTarget.getBoundingClientRect()
-    const o = box.current.getBoundingClientRect()
+    const below = window.innerHeight - b.bottom
     setMenu({
       fi,
       c,
-      x: Math.max(0, Math.min(b.left - o.left, o.width - 232)),
-      y: b.bottom - o.top + 2,
+      x: Math.max(8, Math.min(b.right - 232, window.innerWidth - 240)),
+      y: below > 320 ? b.bottom + 2 : null,
+      bottom: below > 320 ? null : window.innerHeight - b.top + 2,
     })
   }
 
   return (
     <div ref={box} className="theme-light relative">
-      <div ref={scroller} className="overflow-auto bg-surface" style={{ maxHeight: height }}>
+      <div ref={scroller} className="overflow-auto bg-surface pb-7" style={{ maxHeight: height }}>
         <table
           className="border-separate border-spacing-0 text-ink-900"
           style={{
@@ -222,11 +231,12 @@ function SheetTable({ sheet, range, colWidths, onColWidth }) {
       >
         <span className="h-0.5 w-8 rounded-full bg-ink-300 group-hover:bg-ink-500" />
       </div>
-      {menu && sheet.filters?.[menu.fi] && (
+      {menu && filters[menu.fi] && (
         <FilterMenu
           key={`${menu.fi}:${menu.c}`}
           sheet={sheet}
-          f={sheet.filters[menu.fi]}
+          f={filters[menu.fi]}
+          rowOk={rowOk}
           c={menu.c}
           pos={menu}
           picked={picks[`${menu.fi}:${menu.c}`]}
@@ -272,19 +282,20 @@ const FunnelIcon = () => (
 )
 
 // 엑셀 필터 목록: 값 찾기, (모두 선택), 값마다 체크, 확인·취소
-function FilterMenu({ sheet, f, c, pos, picked, onApply, onClose }) {
+function FilterMenu({ sheet, f, c, pos, picked, rowOk, onApply, onClose }) {
   const ref = useRef(null)
   const [q, setQ] = useState('')
   // 필터 범위의 이 열 값들 (같은 값은 하나로, 개수와 함께)
   const values = useMemo(() => {
     const count = new Map()
     for (let r = f.r1 + 1; r <= f.r2; r++) {
+      if (rowOk && !rowOk(r)) continue
       const t = sheet.cells.get(`${r},${c}`)?.text ?? ''
       count.set(t, (count.get(t) ?? 0) + 1)
     }
     const coll = new Intl.Collator('ko', { numeric: true })
     return [...count].sort(([a], [b]) => (a === '' ? 1 : b === '' ? -1 : coll.compare(a, b)))
-  }, [sheet, f, c])
+  }, [sheet, f, c, rowOk])
   const [checked, setChecked] = useState(() => new Set(picked ? values.map(([v]) => v).filter((v) => picked.has(v)) : values.map(([v]) => v)))
   const shown = q.trim() ? values.filter(([v]) => (v || BLANK).toLowerCase().includes(q.trim().toLowerCase())) : values
   const allOn = shown.length > 0 && shown.every(([v]) => checked.has(v))
@@ -324,13 +335,13 @@ function FilterMenu({ sheet, f, c, pos, picked, onApply, onClose }) {
     onApply(keep.length === values.length ? null : new Set(keep))
   }
 
-  return (
+  return createPortal(
     <div
       ref={ref}
       role="dialog"
       aria-label={`${colName(c)}열 필터`}
-      className="absolute z-30 flex w-58 flex-col rounded-lg bg-surface p-2 text-xs text-ink-700 shadow-lg ring-1 ring-ink-200"
-      style={{ left: pos.x, top: pos.y }}
+      className="theme-light fixed z-[60] flex max-h-[80vh] w-58 flex-col rounded-lg bg-surface p-2 text-xs text-ink-700 shadow-lg ring-1 ring-ink-200"
+      style={{ left: pos.x, ...(pos.y != null ? { top: pos.y } : { bottom: pos.bottom }) }}
     >
       <input
         autoFocus
@@ -368,16 +379,17 @@ function FilterMenu({ sheet, f, c, pos, picked, onApply, onClose }) {
           확인
         </button>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
 // 칸 하나 하나의 꾸밈을 미리 계산
-function buildModel(sheet, { r1, r2, c1, c2 }, custom, rowH = sheet.rowH, picks = {}) {
+function buildModel(sheet, { r1, r2, c1, c2 }, custom, rowH = sheet.rowH, picks = {}, filters = sheet.filters ?? []) {
   const { cells, styles, colW, colStyle, rowStyles, defColPx, defRowPx, merges, grid } = sheet
   // 필터 머리줄 칸 → { fi, on }
   const filterAt = new Map()
-  ;(sheet.filters ?? []).forEach((f, fi) => {
+  filters.forEach((f, fi) => {
     for (let c = f.c1; c <= f.c2; c++) filterAt.set(`${f.r1},${c}`, { fi, on: !!picks[`${fi}:${c}`] })
   })
   const cols = []

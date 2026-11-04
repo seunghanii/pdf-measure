@@ -7,10 +7,12 @@ import HomeCalendar from './Calendar'
 import { addFolder, editFolder } from '../lib/library'
 import { TRASH_DAYS, leftLabel } from '../lib/trash'
 import { useInstList } from '../lib/instList'
+import { useCables } from '../lib/cableSchedule'
 
 // 메모장 편집기는 처음 홈을 그릴 때 기다리지 않게 따로 불러옴
 const HomeNotepad = lazy(() => import('./HomeNotepad'))
 const InstListDialog = lazy(() => import('./InstListDialog'))
+const CableScheduleDialog = lazy(() => import('./CableScheduleDialog'))
 
 const STEPS = [
   { n: 1, title: '도면 열기', text: '위 칸을 누르거나 PDF 파일을 화면에 끌어다 놓으세요.' },
@@ -42,6 +44,8 @@ export default function EmptyState({
   const inputRef = useRef(null)
   const [folderDialog, setFolderDialog] = useState(null) // {} = 새 폴더, 폴더 객체 = 고치기
   const [instListOpen, setInstListOpen] = useState(false)
+  const [cableOpen, setCableOpen] = useState(false)
+  const cableCount = useCables().items.length
   const instCount = useInstList().rows.length
   const fetching = recent === null // 서버에서 목록을 불러오는 중
   const list = recent ?? []
@@ -84,6 +88,17 @@ export default function EmptyState({
               </svg>
               Inst list setting
               {instCount > 0 && <span className="rounded bg-brand-50 px-1.5 text-xs tabular-nums text-brand-700">{instCount.toLocaleString()}</span>}
+            </button>
+            <button
+              onClick={() => setCableOpen(true)}
+              title="Cable schedule 엑셀을 여러 개 올려 두고 Equipment 카드에서 골라 그 계기 줄만 보기"
+              className="-my-1 flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm font-medium tracking-normal text-brand-600 transition-colors hover:bg-brand-50"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M4 7h4a4 4 0 014 4v2a4 4 0 004 4h4M4 7a1.5 1.5 0 100-.01M20 17a1.5 1.5 0 100 .01" />
+              </svg>
+              Cable schedule setting
+              {cableCount > 0 && <span className="rounded bg-brand-50 px-1.5 text-xs tabular-nums text-brand-700">{cableCount}</span>}
             </button>
           </div>
           <div
@@ -208,6 +223,11 @@ export default function EmptyState({
           </Suspense>
         </aside>
       </div>
+      {cableOpen && (
+        <Suspense fallback={null}>
+          <CableScheduleDialog store={store} onClose={() => setCableOpen(false)} />
+        </Suspense>
+      )}
       {instListOpen && (
         <Suspense fallback={null}>
           <InstListDialog store={store} onClose={() => setInstListOpen(false)} />

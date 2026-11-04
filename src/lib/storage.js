@@ -8,6 +8,7 @@ import { EMPTY_LIBRARY, normalizeLibrary } from './library'
 import { loadLocalNote, saveLocalNote } from './homeNote'
 import { loadLocalCal, saveLocalCal } from './calEvents'
 import { loadLocalInstList, saveLocalInstList } from './instList'
+import { loadLocalCables, saveLocalCables } from './cableSchedule'
 import { noteItems } from './notes'
 import { instRows } from './instrument'
 import { SUMMARY_ACTIVITY, normalizeActivity } from './activity'
@@ -319,6 +320,8 @@ export const localStore = {
   saveCalendar: async (cal) => saveLocalCal(cal),
   getInstList: async () => loadLocalInstList(),
   saveInstList: async (list) => saveLocalInstList(list),
+  getCableSchedules: async () => loadLocalCables(),
+  saveCableSchedules: async (c) => saveLocalCables(c),
 }
 
 // scope: 로그인한 사용자 id (없으면 이 브라우저 전용)

@@ -16,6 +16,7 @@ import { cacheDelete, cacheGet, cachePrune, cachePut, summarize, SUMMARY_VERSION
 import { normalizeLibrary } from './library'
 import { loadLocalNote, newerNote, normalizeNote, saveLocalNote } from './homeNote'
 import { loadLocalCal, newerCal, normalizeCal, saveLocalCal } from './calEvents'
+import { loadLocalCables, newerCables, normalizeCables, saveLocalCables } from './cableSchedule'
 import { loadLocalInstList, newerInstList, normalizeInstList, saveLocalInstList } from './instList'
 import { base64ToBlob, blobToBase64 } from './images'
 
@@ -26,6 +27,7 @@ const LIBRARY_KEY = '__library__'
 const NOTE_KEY = '__home_note__' // 홈 메모장 (lib/homeNote.js)
 const CAL_KEY = '__calendar__' // 달력 일정 (lib/calEvents.js)
 const INST_LIST_KEY = '__inst_list__' // Inst list: 올린 계기 목록 (lib/instList.js)
+const CABLE_KEY = '__cable_schedule__' // Cable schedule 목록 (lib/cableSchedule.js)
 const TEXT_PREFIX = '@text|'
 const IMAGE_PREFIX = '@img|'
 const COLS = 'file_key, name, size, storage_path, has_file, state, last_opened, updated_at'
@@ -439,6 +441,22 @@ export function createCloudStore(supabase, user) {
     saveInstList(list) {
       saveLocalInstList(list, uid)
       return track(upsertSpecial(INST_LIST_KEY, 'Inst list', list))
+    },
+
+    // Cable schedule 목록: Inst list 와 같은 방식 (파일 자체는 saveImage 로 보관함에)
+    async getCableSchedules() {
+      const local = loadLocalCables(uid)
+      const row = check(await table().select('state').eq('user_id', uid).eq('file_key', CABLE_KEY).maybeSingle())
+      const server = normalizeCables(row?.state)
+      const c = newerCables(server, local)
+      if (c !== server && c.at) track(upsertSpecial(CABLE_KEY, 'Cable schedule', c)).catch((e) => console.warn('Cable schedule 다시 올리기 실패', e))
+      else saveLocalCables(server, uid)
+      return c
+    },
+
+    saveCableSchedules(c) {
+      saveLocalCables(c, uid)
+      return track(upsertSpecial(CABLE_KEY, 'Cable schedule', c))
     },
 
     // 개정판으로 바꾸기: 같은 자리(경로)에 새 PDF 를 덮어 올림. keepKey 가 있으면 지금 PDF 를 예전 판 자리에 복사해 둠.
