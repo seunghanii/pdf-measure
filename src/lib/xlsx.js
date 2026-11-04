@@ -1,5 +1,5 @@
 // .xlsx/.xlsm 을 브라우저 안에서 직접 읽습니다 (값 + 양식). 매크로는 실행하지 않습니다.
-// 읽는 양식: 열 너비, 행 높이, 숨긴 행·열, 병합 셀, 글꼴(이름·크기·굵게·기울임·밑줄·취소선·색),
+// 읽는 양식: 열 너비, 행 높이, 숨긴 행·열, 병합 셀, 자동 필터, 글꼴(이름·크기·굵게·기울임·밑줄·취소선·색),
 // 채우기 색, 테두리, 정렬(가로·세로·줄바꿈·들여쓰기), 표시 형식(0.00, #,##0, 날짜 …), 눈금선 표시 여부.
 // excel.js 가 처음 엑셀을 열 때만 불러옵니다.
 
@@ -245,6 +245,7 @@ function readSheet(files, path, ctx) {
   const data = [] // 값 2차원 배열 (범위 고르기용)
   const cells = new Map() // "r,c" → { text, s, rich, num }
   const rowH = {}
+  const hiddenH = {} // 숨긴 행의 원래 높이 (필터를 풀면 다시 보임)
   const rowStyles = new Map() // 행 전체 양식
   const used = { r1: 0, r2: 0, c1: 0, c2: 0 }
   const grow = (r, c) => {
@@ -262,8 +263,10 @@ function readSheet(files, path, ctx) {
   }
   for (const row of kids(kid(root, 'sheetData'), 'row')) {
     const r = num(row.getAttribute('r'), data.length + 1)
-    if (row.getAttribute('hidden') === '1') rowH[r] = 0
-    else if (row.hasAttribute('ht')) rowH[r] = ptPx(num(row.getAttribute('ht')))
+    if (row.getAttribute('hidden') === '1') {
+      rowH[r] = 0
+      if (row.hasAttribute('ht')) hiddenH[r] = ptPx(num(row.getAttribute('ht')))
+    } else if (row.hasAttribute('ht')) rowH[r] = ptPx(num(row.getAttribute('ht')))
     const rowStyle = row.getAttribute('customFormat') === '1' ? num(row.getAttribute('s')) : null
     let cIdx = 0
     for (const c of kids(row, 'c')) {
@@ -314,7 +317,40 @@ function readSheet(files, path, ctx) {
     grow(m.r1, m.c1)
     grow(m.r2, m.c2)
   }
-  return { data, cells, colW, colStyle, rowStyles, rowH, defColPx, defRowPx, merges, grid, used: used.r1 ? used : { r1: 1, r2: 1, c1: 1, c2: 1 } }
+  const filters = readFilters(files, path, root)
+  for (const f of filters) {
+    grow(f.r1, f.c1)
+    grow(f.r1, f.c2)
+  }
+  return { data, cells, colW, colStyle, rowStyles, rowH, hiddenH, defColPx, defRowPx, merges, grid, filters, used: used.r1 ? used : { r1: 1, r2: 1, c1: 1, c2: 1 } }
+}
+
+// 자동 필터: 시트의 <autoFilter> 와 "표로 서식 지정"한 표(tables/tableN.xml)의 필터
+// → [{ r1, c1, r2, c2, cols: { 열 번호: [보일 값 글, ...] } }] (r1 = 머리줄, 값 목록이 없으면 그 열은 거르지 않음)
+function readFilters(files, path, root) {
+  const out = []
+  const read = (af) => {
+    if (!af) return
+    const [a, b] = (af.getAttribute('ref') ?? '').split(':').map(parseRef)
+    if (!a) return
+    const f = { r1: Math.min(a.r, b?.r ?? a.r), c1: Math.min(a.c, b?.c ?? a.c), r2: Math.max(a.r, b?.r ?? a.r), c2: Math.max(a.c, b?.c ?? a.c), cols: {} }
+    for (const fc of kids(af, 'filterColumn')) {
+      const list = kid(fc, 'filters')
+      if (!list) continue // 숫자 조건·색 필터 등은 값 목록이 아니라서 건너뜀 (숨긴 행은 그대로 둠)
+      const vals = kids(list, 'filter').map((x) => x.getAttribute('val') ?? '')
+      if (list.getAttribute('blank') === '1') vals.push('')
+      f.cols[f.c1 + num(fc.getAttribute('colId'))] = vals
+    }
+    out.push(f)
+  }
+  read(kid(root, 'autoFilter'))
+  const rels = readRels(files, path.replace(/([^/]+)$/, '_rels/$1.rels'))
+  for (const tp of kids(kid(root, 'tableParts'), 'tablePart')) {
+    const rel = rels[tp.getAttributeNS(REL_NS, 'id') ?? tp.getAttribute('r:id')]
+    const t = rel && parseXml(files, rel.target)?.documentElement
+    if (t && t.getAttribute('headerRowCount') !== '0') read(kid(t, 'autoFilter'))
+  }
+  return out
 }
 
 // 엑셀 Blob/ArrayBuffer → { sheets: [{ sheet, data, ...양식 }], styles }

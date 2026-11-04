@@ -1,4 +1,4 @@
-import { memo, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { colName } from '../lib/excel'
 import { borderCss, fontStyle, xfLook } from '../lib/xlsx'
 
@@ -17,13 +17,55 @@ const loadHeight = () => {
   }
 }
 
+// 자동 필터 처음 상태: 파일에 걸려 있던 값 목록 { "필터 번호:열": Set(보일 값) }
+const filePicks = (sheet) => {
+  const out = {}
+  ;(sheet.filters ?? []).forEach((f, fi) => {
+    for (const [c, vals] of Object.entries(f.cols)) out[`${fi}:${c}`] = new Set(vals)
+  })
+  return out
+}
+const BLANK = '(빈 셀)'
+
 function SheetTable({ sheet, range, colWidths, onColWidth }) {
   const [zoom, setZoom] = useState(100)
+  // 필터 고른 값 (다른 시트로 바뀌면 그 파일 상태로 다시)
+  const [pickState, setPickState] = useState(() => ({
+    sheet,
+    picks: filePicks(sheet),
+  }))
+  if (pickState.sheet !== sheet) setPickState({ sheet, picks: filePicks(sheet) })
+  const picks = pickState.sheet === sheet ? pickState.picks : filePicks(sheet)
+  const setPicks = (fn) =>
+    setPickState((s) => ({
+      sheet: s.sheet,
+      picks: typeof fn === 'function' ? fn(s.picks) : fn,
+    }))
+  const [menu, setMenu] = useState(null) // 열린 필터 목록 { fi, c, x, y }
+  const box = useRef(null)
+  // 필터 결과로 바뀐 행 높이 (필터 범위 안 줄은 파일의 숨김 대신 지금 필터로 정함)
+  const rowHeights = useMemo(() => {
+    const filters = sheet.filters ?? []
+    if (!filters.length) return sheet.rowH
+    const out = { ...sheet.rowH }
+    filters.forEach((f, fi) => {
+      const active = Object.entries(picks).filter(([k, v]) => v && k.startsWith(`${fi}:`))
+      for (let r = f.r1 + 1; r <= f.r2; r++) {
+        const pass = active.every(([k, v]) => v.has(sheet.cells.get(`${r},${k.split(':')[1]}`)?.text ?? ''))
+        if (!pass) out[r] = 0
+        else if (out[r] === 0) {
+          if (sheet.hiddenH[r]) out[r] = sheet.hiddenH[r]
+          else delete out[r]
+        }
+      }
+    })
+    return out
+  }, [sheet, picks])
   const [height, setHeight] = useState(loadHeight)
   const [live, setLive] = useState(null) // 끄는 중인 열 { c, w }
   const scroller = useRef(null)
   const widths = useMemo(() => (live ? { ...colWidths, [live.c]: live.w } : colWidths), [colWidths, live])
-  const model = useMemo(() => buildModel(sheet, range, widths), [sheet, range, widths])
+  const model = useMemo(() => buildModel(sheet, range, widths, rowHeights, picks), [sheet, range, widths, rowHeights, picks])
   const { cols, rows, width } = model
   const step = (d) => setZoom((z) => ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, ZOOMS.indexOf(z) + d))])
 
@@ -74,10 +116,35 @@ function SheetTable({ sheet, range, colWidths, onColWidth }) {
     window.addEventListener('pointercancel', up)
   }
 
+  const activeCount = Object.values(picks).filter(Boolean).length
+  const openMenu = (e, fi, c) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (menu && menu.fi === fi && menu.c === c) return setMenu(null)
+    const b = e.currentTarget.getBoundingClientRect()
+    const o = box.current.getBoundingClientRect()
+    setMenu({
+      fi,
+      c,
+      x: Math.max(0, Math.min(b.left - o.left, o.width - 232)),
+      y: b.bottom - o.top + 2,
+    })
+  }
+
   return (
-    <div className="theme-light relative">
+    <div ref={box} className="theme-light relative">
       <div ref={scroller} className="overflow-auto bg-surface" style={{ maxHeight: height }}>
-        <table className="border-separate border-spacing-0 text-ink-900" style={{ tableLayout: 'fixed', width: width + 32, zoom: zoom / 100, fontFamily: '"Malgun Gothic", "Apple SD Gothic Neo", sans-serif', fontSize: '14.7px', lineHeight: 1.2 }}>
+        <table
+          className="border-separate border-spacing-0 text-ink-900"
+          style={{
+            tableLayout: 'fixed',
+            width: width + 32,
+            zoom: zoom / 100,
+            fontFamily: '"Malgun Gothic", "Apple SD Gothic Neo", sans-serif',
+            fontSize: '14.7px',
+            lineHeight: 1.2,
+          }}
+        >
           <colgroup>
             <col style={{ width: 32 }} />
             {cols.map((c) => (
@@ -107,8 +174,37 @@ function SheetTable({ sheet, range, colWidths, onColWidth }) {
               <tr key={row.r} style={{ height: row.h }}>
                 <th className="sticky left-0 z-10 border-r border-b border-ink-200 bg-ink-100 text-center text-[11px] font-normal text-ink-500 tabular-nums">{row.r}</th>
                 {row.cells.map((cell) => (
-                  <td key={cell.c} colSpan={cell.cs > 1 ? cell.cs : undefined} rowSpan={cell.rs > 1 ? cell.rs : undefined} style={cell.style}>
-                    {cell.rich ? cell.rich.map((p, i) => <span key={i} style={p.font ? fontStyle(p.font) : undefined}>{p.t}</span>) : cell.text}
+                  <td
+                    key={cell.c}
+                    colSpan={cell.cs > 1 ? cell.cs : undefined}
+                    rowSpan={cell.rs > 1 ? cell.rs : undefined}
+                    style={
+                      cell.filter
+                        ? {
+                            ...cell.style,
+                            position: 'relative',
+                            paddingRight: 18,
+                          }
+                        : cell.style
+                    }
+                  >
+                    {cell.rich
+                      ? cell.rich.map((p, i) => (
+                          <span key={i} style={p.font ? fontStyle(p.font) : undefined}>
+                            {p.t}
+                          </span>
+                        ))
+                      : cell.text}
+                    {cell.filter && (
+                      <button
+                        onClick={(e) => openMenu(e, cell.filter.fi, cell.c)}
+                        className={`absolute right-0.5 bottom-0.5 flex h-[15px] w-[15px] items-center justify-center rounded-[2px] border text-[9px] leading-none ${cell.filter.on ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-ink-300 bg-surface text-ink-600'} hover:bg-ink-100`}
+                        aria-label={`${cell.text || colName(cell.c)} 필터`}
+                        title={cell.filter.on ? '필터 걸림 (눌러서 바꾸기)' : '필터'}
+                      >
+                        {cell.filter.on ? <FunnelIcon /> : '▾'}
+                      </button>
+                    )}
                   </td>
                 ))}
               </tr>
@@ -126,16 +222,42 @@ function SheetTable({ sheet, range, colWidths, onColWidth }) {
       >
         <span className="h-0.5 w-8 rounded-full bg-ink-300 group-hover:bg-ink-500" />
       </div>
-      <div className="absolute right-3 bottom-4.5 flex items-center rounded-md bg-surface/90 text-[11px] text-ink-600 shadow-xs ring-1 ring-ink-200">
-        <button onClick={() => step(-1)} disabled={zoom === ZOOMS[0]} className="px-1.5 py-0.5 hover:bg-ink-100 disabled:opacity-30" aria-label="작게 보기" title="작게 보기">
-          −
-        </button>
-        <button onClick={() => setZoom(100)} className="min-w-10 px-1 py-0.5 tabular-nums hover:bg-ink-100" title="100%로">
-          {zoom}%
-        </button>
-        <button onClick={() => step(1)} disabled={zoom === ZOOMS[ZOOMS.length - 1]} className="px-1.5 py-0.5 hover:bg-ink-100 disabled:opacity-30" aria-label="크게 보기" title="크게 보기">
-          +
-        </button>
+      {menu && sheet.filters?.[menu.fi] && (
+        <FilterMenu
+          key={`${menu.fi}:${menu.c}`}
+          sheet={sheet}
+          f={sheet.filters[menu.fi]}
+          c={menu.c}
+          pos={menu}
+          picked={picks[`${menu.fi}:${menu.c}`]}
+          onApply={(set) => {
+            setPicks((p) => ({ ...p, [`${menu.fi}:${menu.c}`]: set }))
+            setMenu(null)
+          }}
+          onClose={() => setMenu(null)}
+        />
+      )}
+      <div className="absolute right-3 bottom-4.5 flex items-center gap-1.5">
+        {activeCount > 0 && (
+          <button
+            onClick={() => setPicks({})}
+            className="rounded-md bg-surface/90 px-2 py-0.5 text-[11px] text-brand-700 shadow-xs ring-1 ring-brand-300 hover:bg-brand-50"
+            title="모든 필터를 풀고 전체 줄 보기"
+          >
+            필터 {activeCount}개 · 모두 풀기
+          </button>
+        )}
+        <div className="flex items-center rounded-md bg-surface/90 text-[11px] text-ink-600 shadow-xs ring-1 ring-ink-200">
+          <button onClick={() => step(-1)} disabled={zoom === ZOOMS[0]} className="px-1.5 py-0.5 hover:bg-ink-100 disabled:opacity-30" aria-label="작게 보기" title="작게 보기">
+            −
+          </button>
+          <button onClick={() => setZoom(100)} className="min-w-10 px-1 py-0.5 tabular-nums hover:bg-ink-100" title="100%로">
+            {zoom}%
+          </button>
+          <button onClick={() => step(1)} disabled={zoom === ZOOMS[ZOOMS.length - 1]} className="px-1.5 py-0.5 hover:bg-ink-100 disabled:opacity-30" aria-label="크게 보기" title="크게 보기">
+            +
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -143,9 +265,121 @@ function SheetTable({ sheet, range, colWidths, onColWidth }) {
 
 export default memo(SheetTable)
 
+const FunnelIcon = () => (
+  <svg viewBox="0 0 10 10" width="9" height="9" aria-hidden="true">
+    <path d="M1 1.5h8L6 5.2V8.6L4 7.6V5.2z" fill="currentColor" />
+  </svg>
+)
+
+// 엑셀 필터 목록: 값 찾기, (모두 선택), 값마다 체크, 확인·취소
+function FilterMenu({ sheet, f, c, pos, picked, onApply, onClose }) {
+  const ref = useRef(null)
+  const [q, setQ] = useState('')
+  // 필터 범위의 이 열 값들 (같은 값은 하나로, 개수와 함께)
+  const values = useMemo(() => {
+    const count = new Map()
+    for (let r = f.r1 + 1; r <= f.r2; r++) {
+      const t = sheet.cells.get(`${r},${c}`)?.text ?? ''
+      count.set(t, (count.get(t) ?? 0) + 1)
+    }
+    const coll = new Intl.Collator('ko', { numeric: true })
+    return [...count].sort(([a], [b]) => (a === '' ? 1 : b === '' ? -1 : coll.compare(a, b)))
+  }, [sheet, f, c])
+  const [checked, setChecked] = useState(() => new Set(picked ? values.map(([v]) => v).filter((v) => picked.has(v)) : values.map(([v]) => v)))
+  const shown = q.trim() ? values.filter(([v]) => (v || BLANK).toLowerCase().includes(q.trim().toLowerCase())) : values
+  const allOn = shown.length > 0 && shown.every(([v]) => checked.has(v))
+
+  useEffect(() => {
+    const down = (e) => {
+      if (!ref.current?.contains(e.target)) onClose()
+    }
+    const key = (e) => e.key === 'Escape' && onClose()
+    window.addEventListener('pointerdown', down, true)
+    window.addEventListener('keydown', key)
+    return () => {
+      window.removeEventListener('pointerdown', down, true)
+      window.removeEventListener('keydown', key)
+    }
+  }, [onClose])
+
+  const toggle = (v) =>
+    setChecked((s) => {
+      const n = new Set(s)
+      if (n.has(v)) n.delete(v)
+      else n.add(v)
+      return n
+    })
+  const toggleAll = () =>
+    setChecked((s) => {
+      const n = new Set(s)
+      for (const [v] of shown) {
+        if (allOn) n.delete(v)
+        else n.add(v)
+      }
+      return n
+    })
+  const apply = () => {
+    // 찾기 중이면 엑셀처럼 찾은 값 안에서 고른 것만
+    const keep = q.trim() ? shown.map(([v]) => v).filter((v) => checked.has(v)) : [...checked]
+    onApply(keep.length === values.length ? null : new Set(keep))
+  }
+
+  return (
+    <div
+      ref={ref}
+      role="dialog"
+      aria-label={`${colName(c)}열 필터`}
+      className="absolute z-30 flex w-58 flex-col rounded-lg bg-surface p-2 text-xs text-ink-700 shadow-lg ring-1 ring-ink-200"
+      style={{ left: pos.x, top: pos.y }}
+    >
+      <input
+        autoFocus
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && apply()}
+        placeholder="값 찾기"
+        className="mb-1.5 rounded-md px-2 py-1 ring-1 ring-ink-200 outline-none focus:ring-brand-400"
+      />
+      <label className="flex cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 hover:bg-ink-50">
+        <input type="checkbox" checked={allOn} onChange={toggleAll} />
+        <span className="font-medium">{q.trim() ? '(찾은 값 모두 선택)' : '(모두 선택)'}</span>
+      </label>
+      <div className="max-h-56 overflow-auto border-t border-ink-100 pt-0.5">
+        {shown.map(([v, n]) => (
+          <label key={v} className="flex cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 hover:bg-ink-50">
+            <input type="checkbox" checked={checked.has(v)} onChange={() => toggle(v)} />
+            <span className={`min-w-0 flex-1 truncate ${v ? '' : 'text-ink-400'}`}>{v || BLANK}</span>
+            <span className="text-[10px] text-ink-400 tabular-nums">{n}</span>
+          </label>
+        ))}
+        {!shown.length && <div className="px-1 py-2 text-ink-400">찾는 값이 없어요</div>}
+      </div>
+      <div className="mt-1.5 flex items-center gap-1 border-t border-ink-100 pt-1.5">
+        {picked && (
+          <button onClick={() => onApply(null)} className="rounded-md px-2 py-0.5 text-ink-500 hover:bg-ink-100" title="이 열의 필터 풀기">
+            필터 풀기
+          </button>
+        )}
+        <span className="flex-1" />
+        <button onClick={onClose} className="rounded-md px-2 py-0.5 text-ink-600 hover:bg-ink-100">
+          취소
+        </button>
+        <button onClick={apply} disabled={!checked.size} className="rounded-md bg-brand-600 px-2.5 py-0.5 font-medium text-white hover:bg-brand-700 disabled:opacity-40">
+          확인
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // 칸 하나 하나의 꾸밈을 미리 계산
-function buildModel(sheet, { r1, r2, c1, c2 }, custom) {
-  const { cells, styles, colW, colStyle, rowStyles, rowH, defColPx, defRowPx, merges, grid } = sheet
+function buildModel(sheet, { r1, r2, c1, c2 }, custom, rowH = sheet.rowH, picks = {}) {
+  const { cells, styles, colW, colStyle, rowStyles, defColPx, defRowPx, merges, grid } = sheet
+  // 필터 머리줄 칸 → { fi, on }
+  const filterAt = new Map()
+  ;(sheet.filters ?? []).forEach((f, fi) => {
+    for (let c = f.c1; c <= f.c2; c++) filterAt.set(`${f.r1},${c}`, { fi, on: !!picks[`${fi}:${c}`] })
+  })
   const cols = []
   for (let c = c1; c <= c2; c++) {
     const w = custom?.[c] ?? colW[c] ?? defColPx
@@ -172,8 +406,15 @@ function buildModel(sheet, { r1, r2, c1, c2 }, custom) {
     const rs = rowList.filter((x) => x.r >= m.r1 && x.r <= m.r2)
     const cs = cols.filter((x) => x.c >= m.c1 && x.c <= m.c2)
     if (!rs.length || !cs.length) continue
-    const ar = rs[0].r, ac = cs[0].c
-    anchor.set(`${ar},${ac}`, { rs: rs.length, cs: cs.length, m, re: rs[rs.length - 1].r, ce: cs[cs.length - 1].c })
+    const ar = rs[0].r,
+      ac = cs[0].c
+    anchor.set(`${ar},${ac}`, {
+      rs: rs.length,
+      cs: cs.length,
+      m,
+      re: rs[rs.length - 1].r,
+      ce: cs[cs.length - 1].c,
+    })
     for (const x of rs) for (const y of cs) if (x.r !== ar || y.c !== ac) covered.add(`${x.r},${y.c}`)
   }
 
@@ -213,7 +454,12 @@ function buildModel(sheet, { r1, r2, c1, c2 }, custom) {
       const cell = cells.get(key)
       const look = xfLook(styles, styleOf(r, c), cell)
       const fill = fillOf(r, c)
-      const st = { ...look.style, padding: '0 3px', paddingLeft: look.style.paddingLeft ?? '3px', overflow: 'hidden' }
+      const st = {
+        ...look.style,
+        padding: '0 3px',
+        paddingLeft: look.style.paddingLeft ?? '3px',
+        overflow: 'hidden',
+      }
       // 오른쪽 선: 대표 줄 기준 오른쪽 끝 칸의 오른쪽 또는 다음 칸의 왼쪽
       const nc = nextCol(ce)
       st.borderRight = edge(bordersOf(r, ce).right, bordersOf(r, nc).left, fill, fillOf(r, nc))
@@ -229,7 +475,15 @@ function buildModel(sheet, { r1, r2, c1, c2 }, custom) {
       }
       // 줄바꿈 없는 왼쪽 정렬 글은 오른쪽 칸이 비어 있으면 넘쳐 보이게 (엑셀처럼)
       if (!look.wrap && st.textAlign === 'left' && !a && cell?.text && !textOf(r, nc) && visCol.has(nc)) st.overflow = 'visible'
-      out.push({ c, cs: a?.cs ?? 1, rs: a?.rs ?? 1, style: st, text: cell?.text ?? '', rich: cell?.rich ?? null })
+      out.push({
+        c,
+        cs: a?.cs ?? 1,
+        rs: a?.rs ?? 1,
+        style: st,
+        text: cell?.text ?? '',
+        rich: cell?.rich ?? null,
+        filter: filterAt.get(key) ?? null,
+      })
     }
     return { r, h, cells: out }
   })
