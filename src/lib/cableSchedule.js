@@ -173,11 +173,19 @@ export function guessTagCols(sheet, head) {
 }
 
 // 칸 글이 이 계기 태그와 맞는지: 칸이 태그를 품거나(예: "PT-10LBA10CP001-1"), 칸이 태그 안에 든 6글자 이상 번호
+// 끝에 영문 한 글자가 붙은 태그는 다른 계기라(02GBK02CL001 ≠ 02GBK02CL001A ≠ 02GBK02CL001B) 서로 맞추지 않음
+const SUFFIX_AFTER = /^[A-Z](?![A-Z])/ // 숫자로 끝난 태그 바로 뒤에 붙은 영문 한 글자
+function holds(hay, needle) {
+  for (let i = hay.indexOf(needle); i >= 0; i = hay.indexOf(needle, i + 1)) {
+    if (!/\d$/.test(needle) || !SUFFIX_AFTER.test(hay.slice(i + needle.length))) return true
+  }
+  return false
+}
 export function tagMatches(cellText, tag) {
   const a = listKey(cellText)
   const b = listKey(tag)
   if (!a || !b) return false
-  return a.includes(b) || (a.length >= 6 && b.includes(a))
+  return holds(a, b) || (a.length >= 6 && holds(b, a))
 }
 
 // 이 계기 줄 번호들 (제목 아래 ~ 끝)
