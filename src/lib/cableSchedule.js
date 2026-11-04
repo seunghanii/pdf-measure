@@ -5,7 +5,7 @@
 // 로그인했으면 documents 특별한 줄 __cable_schedule__ (스키마 변경 없음) + 이 브라우저 사본, 아니면 이 브라우저.
 // 카드 쪽 저장: memo.cables = [{ id: 목록 파일 id, all: true(태그로 거르지 않음) | 없음, picks: { 열 번호: [보일 값, ...] } }]
 import { useSyncExternalStore } from 'react'
-import { getInstList, listKey } from './instList'
+import { listKey } from './instList'
 import { excelType, isExcelFile, isOldExcel, newFileId, readWorkbook } from './excel'
 
 const KEY = 'pdf-measure:cable-schedules'
@@ -144,34 +144,6 @@ export function guessHeader(sheet) {
   return { top, head: best }
 }
 
-// 태그처럼 보이는 글 (KKS 00AAA00AA000 이나 PT-1001 같은 ISA 태그)
-const TAGGISH = /^(\d{1,2}[A-Z]{3}\d{2}[A-Z]{2}\d{3}|[A-Z]{1,5}\d{3,6}[A-Z]?)/
-const HEAD_WORD = /tag|from|to\b|instrument|equip|device|loop/i
-
-// 태그 열: Inst list 태그나 태그 모양 값이 많은 열 (+ 제목에 tag/from/to)
-export function guessTagCols(sheet, head) {
-  const { r2, c1, c2 } = sheet.used
-  const list = getInstList().rows
-  const keys = new Set(list.map((x) => listKey(x.tag)))
-  const out = []
-  const last = Math.min(r2, head + 400)
-  for (let c = c1; c <= c2; c++) {
-    let n = 0
-    let hits = 0
-    for (let r = head + 1; r <= last; r++) {
-      const k = listKey(textAt(sheet, r, c))
-      if (!k) continue
-      n++
-      if (keys.has(k) || TAGGISH.test(k)) hits++
-    }
-    const title = textAt(sheet, head, c)
-    // 케이블 번호·규격 열은 태그 모양이어도 뺌 (제목에 tag 가 함께 있으면 둠)
-    if (/cable|케이블|size|core|length/i.test(title) && !/tag/i.test(title)) continue
-    if ((n && hits / n >= 0.5) || (HEAD_WORD.test(title) && n && hits / n >= 0.2)) out.push(c)
-  }
-  return out
-}
-
 // 칸 글이 이 계기 태그와 맞는지: 칸이 태그를 품거나(예: "PT-10LBA10CP001-1"), 칸이 태그 안에 든 6글자 이상 번호
 // 끝에 영문 한 글자가 붙은 태그는 다른 계기라(02GBK02CL001 ≠ 02GBK02CL001A ≠ 02GBK02CL001B) 서로 맞추지 않음
 const SUFFIX_AFTER = /^[A-Z](?![A-Z])/ // 숫자로 끝난 태그 바로 뒤에 붙은 영문 한 글자
@@ -188,21 +160,6 @@ export function tagMatches(cellText, tag) {
   return holds(a, b) || (a.length >= 6 && holds(b, a))
 }
 
-// 이 계기 줄 번호들 (제목 아래 ~ 끝)
-export function rowsForTag(sheet, cfg, tag) {
-  const out = new Set()
-  if (!tag || !cfg.cols.length) return out
-  for (let r = cfg.head + 1; r <= sheet.used.r2; r++) {
-    for (const c of cfg.cols) {
-      if (tagMatches(textAt(sheet, r, c), tag)) {
-        out.add(r)
-        break
-      }
-    }
-  }
-  return out
-}
-
 export const findSheet = (sheets, name) => sheets.find((s) => s.sheet === name) ?? sheets.find((s) => !s.hidden) ?? sheets[0]
 
 // 올린 파일 → 목록에 넣을 항목(설정은 짐작) + 저장할 Blob
@@ -214,8 +171,7 @@ export async function readCableFile(file) {
   const blob = new Blob([file], { type: excelType(file) })
   const sheets = await readWorkbook(`${id}@0`, blob)
   const s = findSheet(sheets, null)
-  const { top, head } = guessHeader(s)
-  return { item: { id, name: file.name, sheet: s.sheet, top, head, cols: guessTagCols(s, head) }, blob, sheets }
+  return { item: { id, name: file.name, sheet: s.sheet }, blob, sheets }
 }
 export const MAX_CABLE_BYTES = 20 * 1024 * 1024
 
@@ -224,4 +180,73 @@ export async function cableSheets(store, item) {
   const blob = await cableBlob(store, item.id)
   if (!blob) throw new Error('no file')
   return readWorkbook(workbookKey(item), blob)
+}
+
+// ---------- 통합 문서 전체에서 태그 찾기 (엑셀 "찾기 → 통합 문서" 처럼) ----------
+// 시트마다 글 있는 칸의 비교용 열쇠를 한 번만 만들어 둠
+const keyCache = new WeakMap()
+function sheetKeys(sheet) {
+  let list = keyCache.get(sheet)
+  if (!list) {
+    list = []
+    for (const [pos, cell] of sheet.cells) {
+      const k = listKey(cell.text)
+      if (k.length < 3) continue
+      const i = pos.indexOf(',')
+      list.push([Number(pos.slice(0, i)), Number(pos.slice(i + 1)), k])
+    }
+    keyCache.set(sheet, list)
+  }
+  return list
+}
+
+// 이 시트에서 태그가 든 칸들 → { rows: Set(줄), cols: Set(열) }. 칸이 태그를 품거나(예: "PT-10LBA10CP001-1"),
+// 칸이 8글자 이상이고 태그 안에 들 때(칸에 번호만 있을 때). 001 과 001A·001B 는 다른 계기로 봄 (holds)
+export function findTag(sheet, tag) {
+  const b = listKey(tag)
+  const rows = new Set()
+  const cols = new Set()
+  if (b.length < 3) return { rows, cols }
+  for (const [r, c, k] of sheetKeys(sheet)) {
+    if (holds(k, b) || (k.length >= 8 && holds(b, k))) {
+      rows.add(r)
+      cols.add(c)
+    }
+  }
+  return { rows, cols }
+}
+
+// 시트 제목 줄 (짐작, 시트마다 한 번). 태그가 제목 줄보다 위에서 찾아지면 그 위로 당김
+const headCache = new WeakMap()
+export function sheetHead(sheet, firstRow) {
+  let h = headCache.get(sheet)
+  if (!h) {
+    h = guessHeader(sheet)
+    headCache.set(sheet, h)
+  }
+  if (firstRow && firstRow <= h.head) {
+    const head = Math.max(sheet.used.r1, firstRow - 1)
+    return { top: Math.min(h.top, head), head }
+  }
+  return h
+}
+
+// 올린 파일 모두에서 태그 찾기 → [{ item, sheet: 시트 이름, n: 줄 수 }] (못 읽은 파일은 n: -1)
+export async function searchCables(store, items, tag) {
+  const out = []
+  await Promise.all(
+    items.map(async (item) => {
+      try {
+        const sheets = await cableSheets(store, item)
+        for (const s of sheets) {
+          const n = findTag(s, tag).rows.size
+          if (n) out.push({ item, sheet: s.sheet, n })
+        }
+      } catch {
+        out.push({ item, sheet: '', n: -1 })
+      }
+    }),
+  )
+  const order = new Map(items.map((x, i) => [x.id, i]))
+  return out.sort((a, b) => order.get(a.item.id) - order.get(b.item.id))
 }

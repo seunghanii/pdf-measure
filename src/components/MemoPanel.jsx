@@ -454,11 +454,11 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
         <CablePicker
           store={store}
           tag={memo.inst?.tag ?? ''}
-          have={(memo.cables ?? []).map((c) => c.id)}
+          have={memo.cables ?? []}
           onClose={() => setCablePick(false)}
-          onPick={(ids) => {
+          onPick={(picked) => {
             const have = memo.cables ?? []
-            const add = ids.filter((id) => !have.some((c) => c.id === id)).map((id) => ({ id }))
+            const add = picked.filter((p) => !have.some((c) => c.id === p.id && (c.sheet ?? '') === (p.sheet ?? '')))
             if (add.length) onChange({ cables: [...have, ...add] })
             setCablePick(false)
           }}

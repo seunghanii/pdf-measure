@@ -1,10 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { addCable, cableSheets, findSheet, guessHeader, guessTagCols, readCableFile, removeCable, rowsForTag, updateCable, useCables } from '../lib/cableSchedule'
-import { colName } from '../lib/excel'
+import { useRef, useState } from 'react'
+import { addCable, readCableFile, removeCable, updateCable, useCables } from '../lib/cableSchedule'
 
-// 홈 "Cable schedule setting": cable schedule 엑셀을 여러 개 올려 두고 파일마다 시트·제목 줄·태그 열을 정함.
-// Equipment 카드에서 "Cable schedule" 로 알맞은 파일을 골라 가져오면 그 계기 Tag. No 가 든 줄만 보여 줌.
-// focusId: 이 파일 설정을 바로 열어서 시작 (카드의 ⚙ 단추)
+// 홈 "Cable schedule setting": cable schedule 엑셀을 여러 개 올려 두는 목록 (올리기·새 판으로 바꾸기·삭제).
+// 따로 설정할 것은 없음: Equipment 카드의 Cable 단추가 모든 파일·시트·열에서 Tag. No 를 찾아 그 열로 거름.
 
 const fmtDate = (ms) => {
   const d = new Date(ms)
@@ -12,11 +10,10 @@ const fmtDate = (ms) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
-export default function CableScheduleDialog({ store, onClose, focusId = null }) {
+export default function CableScheduleDialog({ store, onClose }) {
   const { items } = useCables()
   const inputRef = useRef(null)
   const replaceRef = useRef(null)
-  const [editId, setEditId] = useState(focusId)
   const [error, setError] = useState('')
   const [done, setDone] = useState('')
   const [busy, setBusy] = useState(false)
@@ -40,8 +37,7 @@ export default function CableScheduleDialog({ store, onClose, focusId = null }) 
       }
     }
     setBusy(false)
-    if (added.length === 1) setEditId(added[0].id)
-    if (added.length) setDone(`${added.length}개를 올렸어요. 태그 열이 맞는지 확인해 주세요.`)
+    if (added.length) setDone(`${added.length}개를 올렸어요. Equipment 카드의 Cable 단추로 Tag. No 를 찾아 가져올 수 있어요.`)
   }
 
   // 같은 자리에 새 판 파일 (카드에 걸어 둔 필터는 그대로)
@@ -51,10 +47,8 @@ export default function CableScheduleDialog({ store, onClose, focusId = null }) 
     setDone('')
     setBusy(true)
     try {
-      const { item, blob, sheets: s } = await readCableFile(file)
-      const old = items.find((x) => x.id === id)
-      const keepSheet = s.some((x) => x.sheet === old?.sheet)
-      await updateCable(store, id, keepSheet ? { name: item.name } : { name: item.name, sheet: item.sheet, top: item.top, head: item.head, cols: item.cols }, blob)
+      const { item, blob } = await readCableFile(file)
+      await updateCable(store, id, { name: item.name, sheet: item.sheet }, blob)
       setDone(`${item.name} 로 바꿨어요. 이 파일을 쓰는 카드에 바로 보여요.`)
     } catch (e) {
       console.warn('Cable schedule 바꾸기 실패', e)
@@ -85,7 +79,6 @@ export default function CableScheduleDialog({ store, onClose, focusId = null }) 
     },
   }
 
-  const editing = items.find((x) => x.id === editId)
   const btn = 'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50'
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onMouseDown={onClose} onKeyDown={(e) => e.key === 'Escape' && onClose()} {...dragProps}>
@@ -102,7 +95,7 @@ export default function CableScheduleDialog({ store, onClose, focusId = null }) 
               Cable schedule setting
             </h3>
             <p className="mt-1 text-sm text-pretty text-ink-500">
-              Cable schedule 엑셀을 여러 개 올려 두세요. Equipment 카드에서 알맞은 파일을 골라 가져오면 그 계기 Tag. No 가 든 줄만 엑셀 양식 그대로 보여요. 파일은 한 번씩만 저장돼요.
+              Cable schedule 엑셀을 여러 개 올려 두세요. Equipment 카드의 Cable 단추를 누르면 올린 파일의 모든 시트·열에서 그 계기 Tag. No 를 찾아, 찾은 열로 걸러 엑셀 양식 그대로 보여요. 파일은 한 번씩만 저장돼요.
             </p>
           </div>
           <button onClick={onClose} aria-label="닫기" className="-mt-1 -mr-1 rounded-lg p-1.5 text-ink-400 hover:bg-ink-100 hover:text-ink-700">
@@ -154,12 +147,9 @@ export default function CableScheduleDialog({ store, onClose, focusId = null }) 
                   {it.name}
                 </span>
                 <span className="text-xs text-ink-400">
-                  {it.sheet} · 태그 열 {it.cols.length ? it.cols.map(colName).join(', ') : '없음'} · {fmtDate(it.fv || it.at)}
+                  {fmtDate(it.fv || it.at)}
                 </span>
                 <span className="ml-auto flex shrink-0 gap-1 text-xs">
-                  <button onClick={() => setEditId(editId === it.id ? null : it.id)} aria-expanded={editId === it.id} className="rounded px-2 py-0.5 text-ink-600 ring-1 ring-ink-200 hover:bg-ink-100">
-                    설정
-                  </button>
                   <button
                     onClick={() => {
                       replaceRef.current.dataset.id = it.id
@@ -191,117 +181,9 @@ export default function CableScheduleDialog({ store, onClose, focusId = null }) 
                   )}
                 </span>
               </div>
-              {editing?.id === it.id && <ItemEditor key={`${it.id}@${it.fv || 0}`} store={store} item={it} onSaved={() => setDone('설정을 저장했어요.')} />}
             </li>
           ))}
         </ul>
-      </div>
-    </div>
-  )
-}
-
-// 파일 하나 설정: 시트, 제목 줄, 태그 열, 시험해 보기
-function ItemEditor({ store, item, onSaved }) {
-  const [sheets, setSheets] = useState(null)
-  const [draft, setDraft] = useState(item)
-  const [probe, setProbe] = useState('')
-  const [err, setErr] = useState('')
-  useEffect(() => {
-    let alive = true
-    cableSheets(store, item)
-      .then((s) => alive && setSheets(s))
-      .catch((e) => {
-        console.warn('Cable schedule 읽기 실패', e)
-        if (alive) setErr('파일을 읽지 못했어요. "파일 바꾸기"로 다시 올려 주세요.')
-      })
-    return () => {
-      alive = false
-    }
-  }, [store, item])
-
-  const sheet = sheets ? findSheet(sheets, draft.sheet) : null
-  const probeCount = useMemo(() => (sheet && probe.trim() ? rowsForTag(sheet, draft, probe).size : null), [sheet, probe, draft])
-  if (err) return <p className="mt-2 text-xs text-danger-600">{err}</p>
-  if (!sheet) return <p className="mt-2 text-xs text-ink-400">읽는 중…</p>
-
-  const setSheet = (name) => {
-    const s = sheets.find((x) => x.sheet === name)
-    const { top, head } = guessHeader(s)
-    setDraft((d) => ({ ...d, sheet: s.sheet, top, head, cols: guessTagCols(s, head) }))
-  }
-  const setRow = (key, v) =>
-    setDraft((d) => {
-      const n = Math.max(1, Math.round(Number(v)) || 1)
-      return key === 'head' ? { ...d, head: n, top: Math.min(d.top, n) } : { ...d, top: Math.min(n, d.head) }
-    })
-  const toggleCol = (c) => setDraft((d) => ({ ...d, cols: d.cols.includes(c) ? d.cols.filter((x) => x !== c) : [...d.cols, c].sort((a, b) => a - b) }))
-  const changed = draft.sheet !== item.sheet || draft.top !== item.top || draft.head !== item.head || draft.cols.join() !== item.cols.join()
-  const num = 'w-14 rounded-md border border-ink-300 px-1.5 py-0.5 text-center text-sm tabular-nums outline-none focus:border-brand-500'
-
-  return (
-    <div className="mt-2 space-y-3 rounded-lg bg-ink-50 p-3 ring-1 ring-ink-200">
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-ink-700">
-        <label className="flex items-center gap-1.5">
-          시트
-          <select value={sheet.sheet} onChange={(e) => setSheet(e.target.value)} className="max-w-44 rounded-md border border-ink-300 bg-surface px-1.5 py-0.5 text-sm">
-            {sheets.map((s) => (
-              <option key={s.sheet} value={s.sheet}>
-                {s.sheet}
-              </option>
-            ))}
-          </select>
-        </label>
-        <span className="flex items-center gap-1.5">
-          제목 줄
-          <input value={draft.top} onChange={(e) => setRow('top', e.target.value)} className={num} aria-label="제목 시작 줄" />~
-          <input value={draft.head} onChange={(e) => setRow('head', e.target.value)} className={num} aria-label="제목 끝 줄" />
-        </span>
-        <span className="text-xs text-ink-400 tabular-nums">목록 {Math.max(0, sheet.used.r2 - draft.head).toLocaleString()}줄</span>
-      </div>
-      <div>
-        <div className="text-xs font-semibold text-ink-700">태그가 들어 있는 열</div>
-        <p className="text-xs text-ink-500">카드의 Tag. No 가 이 열들 중 하나에 들어 있는 줄을 보여 줘요 (예: From, To).</p>
-        <div className="mt-1.5 flex flex-wrap gap-1.5">
-          {Array.from({ length: sheet.used.c2 - sheet.used.c1 + 1 }, (_, i) => sheet.used.c1 + i).map((c) => {
-            const on = draft.cols.includes(c)
-            const title = sheet.cells.get(`${draft.head},${c}`)?.text || sheet.cells.get(`${draft.top},${c}`)?.text || ''
-            return (
-              <button
-                key={c}
-                onClick={() => toggleCol(c)}
-                aria-pressed={on}
-                title={title}
-                className={`max-w-40 truncate rounded-full px-2.5 py-0.5 text-xs ring-1 transition-colors ${on ? 'bg-brand-600 text-white ring-brand-600' : 'bg-surface text-ink-600 ring-ink-200 hover:bg-ink-100'}`}
-              >
-                <b className="tabular-nums">{colName(c)}</b>
-                {title && <span className="ml-1">{title}</span>}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center gap-2 text-sm text-ink-600">
-        시험해 보기
-        <input
-          value={probe}
-          onChange={(e) => setProbe(e.target.value)}
-          placeholder="Tag. No"
-          aria-label="시험해 볼 Tag. No"
-          className="w-40 rounded-md border border-ink-200 bg-surface px-2 py-0.5 text-sm uppercase outline-none focus:border-brand-500"
-        />
-        {probeCount != null && (
-          <span className={probeCount ? 'text-ok-700' : 'text-warn-700'}>{probeCount ? `${probeCount}줄 찾음` : draft.cols.length ? '맞는 줄이 없어요' : '태그 열을 골라 주세요'}</span>
-        )}
-        <button
-          onClick={async () => {
-            await updateCable(store, item.id, { sheet: draft.sheet, top: draft.top, head: draft.head, cols: draft.cols })
-            onSaved()
-          }}
-          disabled={!changed || !draft.cols.length}
-          className="ml-auto rounded-lg bg-brand-600 px-3 py-1 text-sm font-medium text-white hover:bg-brand-press disabled:opacity-40"
-        >
-          저장
-        </button>
       </div>
     </div>
   )
