@@ -52,7 +52,12 @@ function CableView({ store, entry, tag, onUpdate, onRemove }) {
   const useTag = !entry.all && count > 0
   const rowOk = useCallback((r) => !useTag || !!hit?.rows.has(r), [useTag, hit])
   const head = useMemo(() => (sheet ? sheetHead(sheet, hit?.rows.size ? Math.min(...hit.rows) : 0) : null), [sheet, hit])
-  const filters = useMemo(() => (sheet && head ? [{ r1: head.head, c1: sheet.used.c1, c2: sheet.used.c2, r2: sheet.used.r2, cols: {} }] : []), [sheet, head])
+  // 필터 단추: 파일에 자동 필터가 있으면 그 열들, 없으면 제목 줄 전체 (파일에 걸려 있던 값은 쓰지 않고 이 카드 필터만)
+  const filters = useMemo(() => {
+    if (!sheet || !head) return []
+    const f = head.filter
+    return [{ r1: head.head, c1: f ? f.c1 : sheet.used.c1, c2: f ? f.c2 : sheet.used.c2, r2: Math.max(f?.r2 ?? 0, sheet.used.r2), cols: {} }]
+  }, [sheet, head])
   const picks = useMemo(() => toPicks(entry.picks), [entry.picks])
   const range = sheet && head ? { r1: head.top, r2: sheet.used.r2, c1: sheet.used.c1, c2: Math.min(sheet.used.c2, sheet.used.c1 + 59) } : null
 

@@ -216,15 +216,29 @@ export function findTag(sheet, tag) {
   return { rows, cols }
 }
 
-// 시트 제목 줄 (짐작, 시트마다 한 번). 태그가 제목 줄보다 위에서 찾아지면 그 위로 당김
+// 시트 제목 줄 (시트마다 한 번): 자동 필터 줄, 없으면 짐작. 짐작한 제목 줄보다 위에서 태그가 찾아지면 그 위로 당김
+// → { top, head, filter?: 파일의 자동 필터 범위 }
 const headCache = new WeakMap()
+// 엑셀 자동 필터가 걸린 줄이 있으면 그 줄이 제목 끝 줄 (그 바로 위로 빈 줄 없이 붙은 줄도 제목, 4줄까지)
+function filterHeader(sheet) {
+  const f = sheet.filters?.[0]
+  if (!f) return null
+  const filled = (r) => {
+    for (let c = f.c1; c <= f.c2; c++) if (textAt(sheet, r, c).trim()) return true
+    return sheet.merges.some((m) => m.r1 <= r && m.r2 >= r && m.c2 >= f.c1 && m.c1 <= f.c2)
+  }
+  let top = f.r1
+  while (top > Math.max(1, f.r1 - 4) && filled(top - 1)) top--
+  return { top, head: f.r1, filter: f }
+}
+
 export function sheetHead(sheet, firstRow) {
   let h = headCache.get(sheet)
   if (!h) {
-    h = guessHeader(sheet)
+    h = filterHeader(sheet) ?? guessHeader(sheet)
     headCache.set(sheet, h)
   }
-  if (firstRow && firstRow <= h.head) {
+  if (!h.filter && firstRow && firstRow <= h.head) {
     const head = Math.max(sheet.used.r1, firstRow - 1)
     return { top: Math.min(h.top, head), head }
   }
