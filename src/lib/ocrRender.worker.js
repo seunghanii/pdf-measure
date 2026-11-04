@@ -2,6 +2,7 @@
 // 조각 그리기는 무거워서 화면 쪽에서 하면 그동안 스크롤이 멈추기 때문입니다.
 // 메시지: open { data } → tile { page, scale, left, top, w, h, mask, clean? } → { blob } 또는 { blank: true }
 // clean: 글자보다 큰 선(계기 동그라미 등)을 지우고 줌 (박스 안 태그 읽기)
+// rotate: 90 이면 그림을 시계 방향으로, -90 이면 반시계 방향으로 돌려 줌 (세로로 쓴 글자 읽기)
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs'
 import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
 
@@ -137,7 +138,23 @@ function eraseLineArt(ctx, w, h) {
   ctx.putImageData(img, 0, 0)
 }
 
-async function renderTile({ page, scale, left, top, w, h, mask, clean }) {
+// 그림을 90° 돌린 새 캔버스 (deg: 90 시계, -90 반시계)
+function rotated(canvas, deg) {
+  const { width: w, height: h } = canvas
+  const out = new OffscreenCanvas(h, w)
+  const ctx = out.getContext('2d')
+  if (deg > 0) {
+    ctx.translate(h, 0)
+    ctx.rotate(Math.PI / 2)
+  } else {
+    ctx.translate(0, w)
+    ctx.rotate(-Math.PI / 2)
+  }
+  ctx.drawImage(canvas, 0, 0)
+  return out
+}
+
+async function renderTile({ page, scale, left, top, w, h, mask, clean, rotate }) {
   const doc = await docPromise
   const pdfPage = await doc.getPage(page)
   const viewport = pdfPage.getViewport({ scale })
@@ -151,7 +168,8 @@ async function renderTile({ page, scale, left, top, w, h, mask, clean }) {
   for (const m of mask) ctx.fillRect(m.x * scale - left - 2, m.y * scale - top - 2, m.w * scale + 4, m.h * scale + 4)
   if (clean) eraseLineArt(ctx, w, h)
   if (isBlank(ctx, w, h)) return { blank: true }
-  return { blob: await canvas.convertToBlob({ type: 'image/png' }) }
+  const out = rotate ? rotated(canvas, rotate) : canvas
+  return { blob: await out.convertToBlob({ type: 'image/png' }) }
 }
 
 self.onmessage = async ({ data: msg }) => {

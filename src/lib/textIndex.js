@@ -15,7 +15,7 @@ const IMAGE_COVERAGE = 0.2 // 이미지(스캔 등)가 페이지의 이만큼 �
 
 const r1 = (v) => Math.round(v * 10) / 10
 
-// PDF 안에 들어 있는 글자 → { s, x, y, w, h, flat } (flat: 가로쓰기)
+// PDF 안에 들어 있는 글자 → { s, x, y, w, h, flat, ang } (flat: 가로쓰기, ang: 글자 진행 방향 라디안, 화면 좌표라 아래가 +)
 async function pdfTextItems(pdfPage) {
   const vp = pdfPage.getViewport({ scale: 1 })
   const tc = await pdfPage.getTextContent()
@@ -39,7 +39,7 @@ async function pdfTextItems(pdfPage) {
     const ys = pts.map((p) => p[1])
     const x = Math.min(...xs)
     const y = Math.min(...ys)
-    out.push({ s: it.str, x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y, flat: Math.abs(ang) < 0.05 })
+    out.push({ s: it.str, x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y, flat: Math.abs(ang) < 0.05, ang })
   }
   return out
 }

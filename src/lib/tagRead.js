@@ -4,10 +4,13 @@
 //    계기 동그라미·가로줄은 지우고 읽고(ocrRender.worker.js clean), 영어·숫자만 읽는 OCR 을 따로 씀.
 // 현장 태그 형식 00AAA00AA000 에 맞춰 자리마다 숫자/영문 헷갈림(G↔6, O↔0, S↔5, B↔8 …)을 고치고,
 // 여러 번 읽은 것 중 Inst list 에 있는 태그를 먼저 고름.
+// 글자가 90° 돌아가 있으면(세로로 쓴 태그, 시계·반시계 둘 다) PDF 글자는 글자 방향으로 줄을 다시 세우고,
+// OCR 은 그림을 90°·-90° 돌려서도 읽어 형식에 맞는 쪽을 씀. 박스가 세로로 길면 돌린 것부터 읽음.
 // 계기 풍선처럼 두 줄("PT" / "02GCX30CP001")이면 앞 글자와 번호를 '-' 로 이어 "PT-02GCX30CP001" (태그 찾기와 같은 모양)
 import { joinPicked, pickText } from './textSelect'
 import { normTag } from './instrument'
 import { pageTextItems } from './textIndex'
+import { mergeLine } from './textMerge'
 import { lookupTag } from './instList'
 
 const PAD = 2 // 박스 테두리에 걸친 글자도 잡게 조금 넓혀 봄 (pt)
@@ -153,46 +156,97 @@ function getRenderer(pdfDoc) {
 }
 
 // OCR 은 같은 그림도 크기에 따라 다르게 읽을 때가 있어(0 을 두 번 읽는 등) 크기 세 가지로 읽고 가장 많이 나온 태그를 씀
+// 글자가 세로(90° 돌아감)일 수도 있어서, 똑바로 읽어 형식에 맞는 태그가 없으면 그림을 돌려서(시계·반시계) 다시 읽음
+const tagScore = (v) => (v.listed ? 2 : v.fits ? 1 : 0)
+const rankVotes = (a, b) => tagScore(b) - tagScore(a) || b.n - a.n || b.conf - a.conf
+
 async function ocrBox(pdfDoc, pdfPage, r) {
   const { ocrRegion } = await import('./ocr')
   const renderer = await getRenderer(pdfDoc)
   let scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, TARGET_PX / Math.max(r.w, r.h)))
   scale = Math.min(scale, Math.sqrt(MAX_PIXELS / Math.max(1, r.w * r.h)))
   const votes = new Map()
-  const vote = (tag, text, conf) => {
-    const v = votes.get(tag) ?? { tag, text, n: 0, conf: 0, listed: !!lookupTag(tag), fits: !!fitTagFormat(tag.split('-').pop()) }
+  const vote = (tag, text, conf, rot) => {
+    const key = `${rot}|${tag}`
+    const v = votes.get(key) ?? { tag, text, rot, n: 0, conf: 0, listed: !!lookupTag(tag), fits: !!fitTagFormat(tag.split('-').pop()) }
     v.n++
     v.conf = Math.max(v.conf, conf)
-    votes.set(tag, v)
+    votes.set(key, v)
     return v
   }
-  for (const s of [scale, scale * 0.6, scale * 0.35]) {
-    if (s < 2) continue
-    const lines = await ocrRegion(renderer, pdfPage, r, s)
-    const text = joinPicked(lines.map((l) => ({ text: l.s, rect: l, cy: l.y + l.h / 2, h: l.h })))
-    const tag = tagFromText(text)
-    if (!tag) continue
-    const conf = lines.reduce((a, l) => a + l.conf, 0) / lines.length
-    const v = vote(tag, text, conf)
-    if (v.listed || (v.fits && v.n >= 2)) break // Inst list 에 있거나, 형식에 맞는 같은 태그가 두 번이면 충분
+  // 세로로 긴 박스는 세로 글자일 가능성이 커서 돌린 것부터
+  const rots = r.h > r.w * 1.3 ? [90, -90, 0] : [0, 90, -90]
+  for (const rot of rots) {
+    let done = false
+    for (const s of [scale, scale * 0.6, scale * 0.35]) {
+      if (s < 2) continue
+      const lines = await ocrRegion(renderer, pdfPage, r, s, rot)
+      const text = joinPicked(lines.map((l) => ({ text: l.s, rect: l, cy: l.y + l.h / 2, h: l.h })))
+      const tag = tagFromText(text)
+      if (!tag) {
+        // 돌린 그림을 크게 읽어도 글자가 하나도 안 나오면 작게 읽어 봐야 소용없음 (시간 아끼기)
+        if (rot && !lines.length) break
+        continue
+      }
+      const conf = lines.reduce((a, l) => a + l.conf, 0) / lines.length
+      const v = vote(tag, text, conf, rot)
+      if (v.listed || (v.fits && v.n >= 2)) {
+        done = true // Inst list 에 있거나, 형식에 맞는 같은 태그가 두 번이면 충분
+        break
+      }
+    }
+    if (done) break
+    // 이 방향에서 형식에 맞는 태그를 찾았으면 다른 방향은 안 읽음 (돌린 그림은 엉뚱한 글자로 읽히기 쉬움)
+    if ([...votes.values()].some((v) => v.fits || v.listed)) break
   }
   // Inst list 에 있는 태그 > 형식(00AAA00AA000)에 맞는 태그 > 여러 번 나온 것 > 확실한 것
-  const best = [...votes.values()].sort((a, b) => b.listed - a.listed || b.fits - a.fits || b.n - a.n || b.conf - a.conf)[0]
+  const best = [...votes.values()].sort(rankVotes)[0]
   return best ? { tag: best.tag, text: best.text, ocr: true } : null
+}
+
+// ---------- 돌아간 PDF 글자 ----------
+// 90° 쯤 돌아간 글자 덩어리를 글자 방향 기준 좌표로 바꿔(가로쓰기처럼) 줄을 이어 붙임
+const isQuarter = (ang) => ang != null && Math.abs(Math.abs(ang) - Math.PI / 2) < 0.1
+function rotatedText(items, r) {
+  const inBox = items.filter((i) => {
+    if (!isQuarter(i.ang)) return false
+    const cx = i.x + i.w / 2
+    const cy = i.y + i.h / 2
+    return cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h
+  })
+  if (!inBox.length) return ''
+  // 가장 많은 방향 (시계 / 반시계)
+  const up = inBox.filter((i) => i.ang < 0)
+  const group = up.length * 2 >= inBox.length ? up : inBox.filter((i) => i.ang > 0)
+  const ang = group[0].ang < 0 ? -Math.PI / 2 : Math.PI / 2
+  const cos = Math.cos(ang)
+  const sin = Math.sin(ang)
+  // u: 글자 진행 방향, v: 다음 줄 방향 (글자 기준 아래)
+  const local = group.map((i) => {
+    const cx = i.x + i.w / 2
+    const cy = i.y + i.h / 2
+    const cu = cx * cos + cy * sin
+    const cv = -cx * sin + cy * cos
+    const w = i.h // 90° 라 가로·세로가 바뀜
+    const h = i.w
+    return { s: i.s, x: cu - w / 2, y: cv - h / 2, w, h, flat: true }
+  })
+  return joinPicked(mergeLine(local).map((l) => ({ text: l.s, rect: l, cy: l.y + l.h / 2, h: l.h })))
 }
 
 // 박스 r(배율 1 페이지 좌표) 안의 태그 → { tag, text, ocr } | null
 // (도면 글자 색인의 OCR 결과는 도면 전체를 한꺼번에 읽은 것이라 덜 정확해서 쓰지 않고, 박스만 다시 읽음)
 export async function readTagInBox({ pdfDoc, page, rect }) {
   const r = widen(rect, PAD)
-  const fromItems = (items) => {
-    const text = joinPicked(pickText(items, r))
-    const tag = tagFromText(text)
-    return tag ? { tag, text, ocr: false } : null
-  }
   const pdfPage = await pdfDoc.getPage(page)
-  const items = (await pageTextItems(pdfPage)).map((i) => [i.s.trim(), i.x, i.y, i.w, i.h]).filter((i) => i[0])
-  const hit = fromItems(items)
-  if (hit) return hit
+  const all = (await pageTextItems(pdfPage)).filter((i) => i.s.trim())
+  const items = all.map((i) => [i.s.trim(), i.x, i.y, i.w, i.h])
+  // 똑바로 쓴 글자, 90° 돌아간 글자 둘 다 보고 Inst list > 형식에 맞음 > 똑바로 쓴 것 순
+  const hits = [joinPicked(pickText(items, r)), rotatedText(all, r)]
+    .map((text) => ({ text, tag: tagFromText(text) }))
+    .filter((h) => h.tag)
+    .map((h) => ({ ...h, n: 1, conf: 0, listed: !!lookupTag(h.tag), fits: !!fitTagFormat(h.tag.split('-').pop()) }))
+  const hit = hits.sort((a, b) => tagScore(b) - tagScore(a) || b.tag.length - a.tag.length)[0] // 같으면 종류(PT-)까지 붙은 것
+  if (hit) return { tag: hit.tag, text: hit.text, ocr: false }
   return ocrBox(pdfDoc, pdfPage, r)
 }
