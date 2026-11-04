@@ -339,10 +339,10 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
       )}
 
       {/* 계기 카드 칸 (계기 카드일 때만) */}
-      {memo.inst && <InstFields memo={memo} onChange={onChange} kinds={kinds} onAddKind={onAddKind} reading={tagReading} onReadTag={onReadTag && (() => onReadTag(true))} />}
+      {memo.inst && <InstFields memo={memo} onChange={onChange} kinds={kinds} onAddKind={onAddKind} reading={tagReading} onReadTag={onReadTag && (() => onReadTag(true))} compact={bottom} />}
 
       {/* 관련 도면 (여러 개) */}
-      <RelatedDocs memo={memo} library={library} onChange={onChange} onOpen={(l) => (l.photo ? openPhotoLink(l) : setPreviewing(l))} onPick={onPickLink} />
+      <RelatedDocs memo={memo} library={library} onChange={onChange} onOpen={(l) => (l.photo ? openPhotoLink(l) : setPreviewing(l))} onPick={onPickLink} compact={bottom} />
       {backlinks?.length > 0 && <Backlinks links={backlinks} library={library} onOpen={onOpenLink} />}
 
       {/* 글과 사진 (같이 스크롤) */}
