@@ -33,7 +33,7 @@ export default function CableScheduleDialog({ store, onClose }) {
         added.push(item)
       } catch (e) {
         console.warn('Cable schedule 올리기 실패', e)
-        setError(e?.message?.length < 80 ? e.message : `${f.name} 을(를) 올리지 못했어요.`)
+        setError(`${f.name}: ${e?.message?.length < 120 ? e.message : '올리지 못했어요.'}`)
       }
     }
     setBusy(false)
@@ -52,7 +52,7 @@ export default function CableScheduleDialog({ store, onClose }) {
       setDone(`${item.name} 로 바꿨어요. 이 파일을 쓰는 카드에 바로 보여요.`)
     } catch (e) {
       console.warn('Cable schedule 바꾸기 실패', e)
-      setError(e?.message?.length < 80 ? e.message : '파일을 바꾸지 못했어요.')
+      setError(`${file.name}: ${e?.message?.length < 120 ? e.message : '파일을 바꾸지 못했어요.'}`)
     } finally {
       setBusy(false)
     }
