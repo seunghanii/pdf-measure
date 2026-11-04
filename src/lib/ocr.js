@@ -154,8 +154,8 @@ function wordsOf(data, { scale, W, H, left, top, w, h }) {
           if (cx < minX || cy < minY || cx >= maxX || cy >= maxY) continue
           words.push({
             s: text,
-            x: (left + x0) / scale,
-            y: (top + y0) / scale,
+            x: (ox + x0) / scale,
+            y: (oy + y0) / scale,
             w: (x1 - x0) / scale,
             h: (y1 - y0) / scale,
             conf: word.confidence,
@@ -213,14 +213,17 @@ export async function ocrPage(renderer, pdfPage, { onProgress, signal, mask = []
 
 // 페이지의 한 부분(r: 배율 1 페이지 좌표)만 OCR → [{ s, x, y, w, h, conf }] 줄 단위 (계기 박스 안 태그 읽기)
 // 작은 범위라 크게 키워 읽음 (scale: 1pt 당 픽셀). 렌더러는 openRenderer 결과
-export async function ocrRegion(renderer, pdfPage, r, scale) {
+// rotate(90 | -90): 그림을 돌려 읽음 (세로로 쓴 글자). 이때 돌려진 좌표는 돌린 그림 기준 (줄 순서만 맞으면 되므로)
+export async function ocrRegion(renderer, pdfPage, r, scale, rotate = 0) {
   const worker = await getTagWorker()
   try {
     const left = Math.max(0, Math.floor(r.x * scale))
     const top = Math.max(0, Math.floor(r.y * scale))
     const w = Math.max(1, Math.ceil(r.w * scale))
     const h = Math.max(1, Math.ceil(r.h * scale))
-    const drawn = await renderer.tile({ page: pdfPage.pageNumber, mask: [], scale, left, top, w, h, clean: true })
+    const drawn = await renderer.tile({ page: pdfPage.pageNumber, mask: [], scale, left, top, w, h, clean: true, rotate })
+    const ox = rotate ? 0 : left
+    const oy = rotate ? 0 : top
     if (!drawn.blob) return []
     const { data } = await worker.recognize(drawn.blob, {}, { blocks: true, text: false })
     const lines = []
@@ -235,8 +238,8 @@ export async function ocrRegion(renderer, pdfPage, r, scale) {
           const y1 = Math.max(...words.map((wd) => wd.bbox.y1))
           lines.push({
             s: words.map((wd) => wd.text.trim()).join(' '),
-            x: (left + x0) / scale,
-            y: (top + y0) / scale,
+            x: (ox + x0) / scale,
+            y: (oy + y0) / scale,
             w: (x1 - x0) / scale,
             h: (y1 - y0) / scale,
             conf: Math.min(...words.map((wd) => wd.confidence)),
