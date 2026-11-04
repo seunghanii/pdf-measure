@@ -2,7 +2,7 @@
 // 1) 그 쪽의 PDF 글자(글자 정보)가 박스 안에 있으면 그것을,
 // 2) 없으면(스캔본, 글자를 선으로 바꾼 도면) 박스 부분만 OCR. 도면 전체 OCR 을 기다리지 않고, 화면 밖 웹 워커에서 그리고 읽음.
 //    계기 동그라미·가로줄은 지우고 읽고(ocrRender.worker.js clean), 영어·숫자만 읽는 OCR 을 따로 씀.
-// 현장 태그 형식 00AAA00AA000 에 맞춰 자리마다 숫자/영문 헷갈림(G↔6, O↔0, S↔5, B↔8 …)을 고치고,
+// 현장 태그 형식 00AAA00AA000(끝에 A·B 같은 영문 한 글자가 붙기도 함) 에 맞춰 자리마다 숫자/영문 헷갈림(G↔6, O↔0, S↔5, B↔8 …)을 고치고,
 // 여러 번 읽은 것 중 Inst list 에 있는 태그를 먼저 고름.
 // 글자가 90° 돌아가 있으면(세로로 쓴 태그, 시계·반시계 둘 다) PDF 글자는 글자 방향으로 줄을 다시 세우고,
 // OCR 은 그림을 90°·-90° 돌려서도 읽어 형식에 맞는 쪽을 씀. 박스가 세로로 길면 돌린 것부터 읽음.
@@ -37,7 +37,8 @@ function cleanLine(s) {
     .split(/\s+/)
     .map((t) => t.replace(/^-+|-+$/g, ''))
     .filter(Boolean)
-  if (tokens.length > 1) tokens = tokens.filter((t) => t.length > 1)
+  // (번호 뒤에 띄어 읽힌 끝 글자 "02GBK02CL001 A" 는 남김)
+  if (tokens.length > 1) tokens = tokens.filter((t, i) => t.length > 1 || (/^[A-Z]$/.test(t) && !NOT_SUFFIX.has(t) && /\d{3}$/.test(tokens[i - 1] ?? '')))
   return tokens.join(' ')
 }
 
@@ -45,7 +46,7 @@ function cleanLine(s) {
 // 0 하나를 "0O" 처럼 두 번 읽는 일이 잦아 붙어 있는 0·O 는 0 하나로, 나머지 숫자 옆 O → 0, I → 1
 const fixCode = (c) => c.replace(/0O|O0/g, '0').replace(/(?<=\d)[O]|[O](?=\d)/g, '0').replace(/(?<=\d)[I]|[I](?=\d)/g, '1')
 
-// ---------- 현장 태그 형식: 00AAA00AA000 (KKS, 예 02GCX30CP001) ----------
+// ---------- 현장 태그 형식: 00AAA00AA000 (KKS, 예 02GCX30CP001), 끝 영문 한 글자는 있어도 됨 (02GBK02CL001A) ----------
 // 자리마다 숫자(D)인지 영문(A)인지 정해져 있어서, OCR 이 헷갈린 글자(G↔6, O↔0, S↔5, B↔8 …)를 자리에 맞게 바꿈
 export const TAG_FORMAT = 'DDAAADDAADDD'
 const TO_DIGIT = { O: '0', Q: '0', D: '0', U: '0', C: '0', I: '1', L: '1', J: '1', Z: '2', E: '3', A: '4', H: '4', S: '5', G: '6', B: '8', T: '7', Y: '7', P: '9', R: '8' }
@@ -71,19 +72,45 @@ function fitExact(s) {
       fixes++
     } else return null
   }
-  return { code, fixes }
+  return { code, fixes, suffix: false }
 }
-// 한 글자를 두 번 읽은 경우(13글자)도: 한 글자씩 빼 보고 가장 덜 고친 것
+// 끝에 영문 한 글자가 더 붙은 태그(02GBK02CL001A, 02GBK02CL002B)
+// 끝 글자 자리: OCR 이 8↔B, 4↔A 로 헷갈림. I·O(KKS 가 안 씀)·J·L 은 계기 동그라미 테두리를 읽은 것일 때가 많아 끝 글자로 안 봄
+const SUFFIX_DIGIT = { 8: 'B', 4: 'A' }
+const NOT_SUFFIX = new Set(['I', 'O', 'J', 'L'])
+function fitSuffixed(s) {
+  const last = s[s.length - 1]
+  const f = fitExact(s.slice(0, -1))
+  if (!f) return null
+  if (isDigit(last)) return SUFFIX_DIGIT[last] ? { code: f.code + SUFFIX_DIGIT[last], fixes: f.fixes + 1, suffix: true } : null
+  return NOT_SUFFIX.has(last) ? null : { code: f.code + last, fixes: f.fixes, suffix: true }
+}
+// 12글자(기본) / 13글자(끝 글자 붙음, 또는 한 글자를 두 번 읽음) / 14글자(끝 글자 + 두 번 읽음)
+// 후보 중 Inst list 에 있는 것 > 덜 고친 것(한 글자 빼기도 고침 하나) > (같으면) 끝 글자 붙은 것.
+// 예: "02GBK02CL001A" → 끝 A 붙은 태그, "02GBK02CL0028" → 02GBK02CL002B (8 을 B 로),
+//     "02GBK02CL0011" → 02GBK02CL011 (1 을 두 번 읽음). Inst list 에 있으면 그쪽.
 export function fitTagFormat(raw) {
   const s = String(raw ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
-  let best = fitExact(s)
-  if (!best && s.length === TAG_FORMAT.length + 1)
-    for (let i = 0; i < s.length; i++) {
-      const f = fitExact(s.slice(0, i) + s.slice(i + 1))
-      if (f && (!best || f.fixes < best.fixes)) best = f
-    }
-  // 너무 많이 바꿔야 하면 이 형식이 아님 (숫자 자리 7개가 다 영문으로 읽힐 수는 있음)
-  return best && best.fixes <= 7 ? best : null
+  const n = TAG_FORMAT.length
+  if (s.length < n || s.length > n + 2) return null
+  const drops = (t) => [...t].map((_, i) => t.slice(0, i) + t.slice(i + 1))
+  const cands = []
+  const add = (f, dropped = 0) => {
+    if (!f) return
+    const fixes = f.fixes + dropped
+    if (fixes <= 8) cands.push({ ...f, fixes }) // 너무 많이 바꿔야 하면 이 형식이 아님
+  }
+  if (s.length === n) add(fitExact(s))
+  if (s.length === n + 1) {
+    add(fitSuffixed(s))
+    for (const t of drops(s)) add(fitExact(t), 1)
+  }
+  if (s.length === n + 2) for (const t of drops(s)) add(fitSuffixed(t), 1)
+  if (!cands.length) return null
+  const listed = (f) => (lookupTag(f.code) ? 1 : 0)
+  cands.sort((a, b) => listed(b) - listed(a) || a.fixes - b.fixes || b.suffix - a.suffix)
+  const { code, fixes } = cands[0]
+  return { code, fixes }
 }
 // 종류 줄(PT, FT, PDT …): 숫자로 읽힌 글자를 영문으로
 const kindLetters = (s) => {
@@ -199,8 +226,15 @@ async function ocrBox(pdfDoc, pdfPage, r) {
     // 이 방향에서 형식에 맞는 태그를 찾았으면 다른 방향은 안 읽음 (돌린 그림은 엉뚱한 글자로 읽히기 쉬움)
     if ([...votes.values()].some((v) => v.fits || v.listed)) break
   }
+  // 끝 글자(02GBK02CL001A)를 한 번은 놓쳐 읽기도 해서, 끝 글자 없는 같은 태그 표는 붙은 쪽에도 셈
+  const list = [...votes.values()]
+  for (const v of list) {
+    if (!v.fits || !/\d[A-Z]$/.test(v.tag)) continue
+    const plain = votes.get(`${v.rot}|${v.tag.slice(0, -1)}`)
+    if (plain && !plain.listed) v.n += plain.n
+  }
   // Inst list 에 있는 태그 > 형식(00AAA00AA000)에 맞는 태그 > 여러 번 나온 것 > 확실한 것
-  const best = [...votes.values()].sort(rankVotes)[0]
+  const best = list.sort(rankVotes)[0]
   return best ? { tag: best.tag, text: best.text, ocr: true } : null
 }
 
