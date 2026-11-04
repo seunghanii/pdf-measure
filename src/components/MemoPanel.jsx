@@ -9,6 +9,7 @@ import PhotoViewer from './PhotoViewer'
 import DocPreview from './DocPreview'
 import { InstFields, RelatedDocs } from './InstCard'
 import ExcelFiles from './ExcelFiles'
+import CableSchedules, { CablePicker } from './CableSchedules'
 import { MAX_EXCEL_BYTES, XLSM_TYPE, XLSX_TYPE, excelType, isExcelFile, isOldExcel, newFileId } from '../lib/excel'
 import { DEFAULT_STATUS, statusOf } from '../lib/instrument'
 
@@ -47,6 +48,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
   const [migrated] = useState(() => migrateMemo(memo))
   const [initialText] = useState(() => migrated?.text ?? memo.text ?? '')
   const [viewing, setViewing] = useState(null) // 크게 보는 사진 { ids, index }
+  const [cablePick, setCablePick] = useState(false) // Cable schedule 가져오기 창
   const [previewing, setPreviewing] = useState(null) // 미리 보는 관련 도면 { id, name, page, role }
   const [photoLink, setPhotoLink] = useState(null) // 크게 보는 연결 사진 { photo, name, role }
   const [busy, setBusy] = useState(0) // 사진 넣는 중
@@ -347,6 +349,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
 
       {/* 글과 사진 (같이 스크롤) */}
       <div className="min-h-0 flex-1 overflow-y-auto">
+        {memo.inst && <CableSchedules store={store} memo={memo} onChange={onChange} />}
         <ExcelFiles files={memo.files} onChangeFiles={(files) => onChange({ files })} loadBlob={loadBlob} />
         <div onBlur={flush}>
           <MemoEditor
@@ -414,6 +417,18 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
             e.target.value = ''
           }}
         />
+        {memo.inst && (
+          <button
+            onClick={() => setCablePick(true)}
+            className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-ink-600 ring-1 ring-ink-300 hover:bg-ink-100"
+            title="홈에 올려 둔 cable schedule 중 알맞은 것을 골라 이 계기 줄만 보기"
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M4 7h4a4 4 0 014 4v2a4 4 0 004 4h4M4 7a1.5 1.5 0 100-.01M20 17a1.5 1.5 0 100 .01" />
+            </svg>
+            Cable
+          </button>
+        )}
         <MemoHelp />
         <button onClick={onDelete} className="ml-auto rounded px-2 py-0.5 text-xs text-danger-500 hover:bg-danger-50">
           박스 삭제
@@ -435,6 +450,20 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
         </>
       )}
 
+      {cablePick && (
+        <CablePicker
+          store={store}
+          tag={memo.inst?.tag ?? ''}
+          have={(memo.cables ?? []).map((c) => c.id)}
+          onClose={() => setCablePick(false)}
+          onPick={(ids) => {
+            const have = memo.cables ?? []
+            const add = ids.filter((id) => !have.some((c) => c.id === id)).map((id) => ({ id }))
+            if (add.length) onChange({ cables: [...have, ...add] })
+            setCablePick(false)
+          }}
+        />
+      )}
       {viewing && (
         <PhotoViewer
           key={viewing.index}
