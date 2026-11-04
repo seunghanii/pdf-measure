@@ -3,7 +3,7 @@
 // 채우기 색, 테두리, 정렬(가로·세로·줄바꿈·들여쓰기), 표시 형식(0.00, #,##0, 날짜 …), 눈금선 표시 여부.
 // excel.js 가 처음 엑셀을 열 때만 불러옵니다.
 
-import { unzipSync, strFromU8 } from 'fflate'
+import { unzipSync, inflateSync, strFromU8 } from 'fflate'
 import { builtinFormat, formatValue } from './numfmt'
 
 const REL_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
@@ -353,10 +353,84 @@ function readFilters(files, path, root) {
   return out
 }
 
+// ---------- 압축 풀기 (엑셀 = zip) ----------
+const u16le = (str) => Uint8Array.from([...str].flatMap((ch) => [ch.charCodeAt(0), 0]))
+function hasBytes(data, pat) {
+  const n = Math.min(data.length, 4 * 1024 * 1024)
+  outer: for (let i = 0; i + pat.length <= n; i++) {
+    for (let j = 0; j < pat.length; j++) if (data[i + j] !== pat[j]) continue outer
+    return true
+  }
+  return false
+}
+// zip 이 아닌 파일이 왜 아닌지 (암호·보안 레이블로 잠긴 엑셀, 예전 .xls 등)
+function notZipReason(data) {
+  const cfb = data[0] === 0xd0 && data[1] === 0xcf && data[2] === 0x11 && data[3] === 0xe0
+  if (cfb) {
+    if (hasBytes(data, u16le('EncryptedPackage')) || hasBytes(data, u16le('EncryptionInfo')))
+      return '민감도 레이블(암호)로 잠긴 엑셀이라 읽을 수 없어요. 엑셀에서 레이블을 해제하거나, 값만 새 파일로 복사해 저장해 올려 주세요.'
+    return '예전 엑셀(.xls) 형식이에요. 엑셀에서 .xlsx 로 다시 저장해 올려 주세요.'
+  }
+  if (data[0] === 0x50 && data[1] === 0x4b) return null
+  return '엑셀(.xlsx) 파일이 아니에요. 엑셀에서 열어 .xlsx 로 다시 저장해 올려 주세요.'
+}
+// 끝의 목차(central directory)가 망가졌거나 못 찾을 때: 앞에서부터 파일 머리(PK 03 04)를 따라 읽음
+function unzipByLocalHeaders(data, keep) {
+  const files = {}
+  const b2 = (o) => data[o] | (data[o + 1] << 8)
+  const b4 = (o) => (data[o] | (data[o + 1] << 8) | (data[o + 2] << 16) | (data[o + 3] << 24)) >>> 0
+  const nextSig = (from) => {
+    for (let i = from; i + 4 <= data.length; i++)
+      if (data[i] === 0x50 && data[i + 1] === 0x4b && ((data[i + 2] === 3 && data[i + 3] === 4) || (data[i + 2] === 1 && data[i + 3] === 2) || (data[i + 2] === 7 && data[i + 3] === 8))) return i
+    return data.length
+  }
+  let o = 0
+  while (o + 30 <= data.length && b4(o) === 0x04034b50) {
+    const flag = b2(o + 6)
+    const method = b2(o + 8)
+    let size = b4(o + 18)
+    const nameLen = b2(o + 26)
+    const start = o + 30 + nameLen + b2(o + 28)
+    const name = strFromU8(data.subarray(o + 30, o + 30 + nameLen), !(flag & 0x800))
+    let end = start + size
+    if (flag & 8 || size === 0xffffffff || end > data.length) {
+      end = nextSig(start)
+      size = end - start
+    }
+    if (keep(name) && !(flag & 1)) {
+      const raw = data.subarray(start, end)
+      if (method === 0) files[name] = raw.slice()
+      else if (method === 8) files[name] = inflateSync(raw)
+    }
+    o = end
+    if (flag & 8 && b4(o) === 0x08074b50) o += 16
+    else if (flag & 8 && b4(o) !== 0x04034b50) o = nextSig(o + 1)
+  }
+  return files
+}
+export function openZip(buf, keep = () => true) {
+  const data = buf instanceof Uint8Array ? buf : new Uint8Array(buf)
+  const why = notZipReason(data)
+  if (why) throw new Error(why)
+  try {
+    return unzipSync(data, { filter: (f) => keep(f.name) })
+  } catch (e) {
+    let files = {}
+    try {
+      files = unzipByLocalHeaders(data, keep)
+    } catch {
+      // 아래에서 원래 오류로
+    }
+    if (Object.keys(files).length) return files
+    console.warn('엑셀 압축 풀기 실패', e)
+    throw new Error('엑셀 파일이 망가져 읽을 수 없어요. 엑셀에서 열어 다른 이름으로 다시 저장해 올려 주세요.')
+  }
+}
+
 // 엑셀 Blob/ArrayBuffer → { sheets: [{ sheet, data, ...양식 }], styles }
 export async function parseXlsx(blob) {
   const buf = blob instanceof ArrayBuffer ? blob : await blob.arrayBuffer()
-  const files = unzipSync(new Uint8Array(buf), { filter: (f) => /\.(xml|rels)$/i.test(f.name) })
+  const files = openZip(buf, (name) => /\.(xml|rels)$/i.test(name))
   const wbRels0 = readRels(files, '_rels/.rels')
   const wbPath = Object.values(wbRels0).find((r) => /officeDocument$/.test(r.type))?.target ?? 'xl/workbook.xml'
   const wb = parseXml(files, wbPath)
