@@ -164,43 +164,81 @@ export function parseCsv(text) {
   return rows
 }
 
-// 제목 줄로 열 자리 찾기 (못 찾으면 A=Tag. No, B=Description, C=Type)
-function columns(head) {
-  const h = head.map((c) => String(c ?? '').toLowerCase().replace(/[^a-z가-힣]/g, ''))
-  const find = (re, def) => {
-    const i = h.findIndex((c) => re.test(c))
-    return i >= 0 ? i : def
-  }
-  return { tag: find(/^(tag|tagno|tagnumber|태그)/, 0), desc: find(/^(desc|description|service|설명)/, 1), type: find(/^(type|kind|종류|타입)/, 2) }
+// 제목 칸 글 → 어느 열인지 ('tag' | 'desc' | 'type' | null). 영문·한글만 남겨 소문자로 비교
+const HEAD_LEN = 30
+function headKind(cell) {
+  const c = String(cell ?? '').toLowerCase().replace(/[^a-z가-힣]/g, '')
+  if (!c || c.length > HEAD_LEN) return null
+  if (/^(tag|tagno|tagnumber|tagname|태그|태그번호)$/.test(c) || /^(inst|instrument|equipment|equip|item)tag(no|number|name)?$/.test(c)) return 'tag'
+  if (/^(desc|description|servicedescription|service|설명|서비스)$/.test(c) || /description$/.test(c)) return 'desc'
+  if (/^(type|kind|종류|타입|형식)$/.test(c) || /^(inst|instrument|equipment|equip)type$/.test(c)) return 'type'
+  return null
 }
 
-// 표(2차원 배열, 1행은 제목) → { rows, skipped, dup }
-export function rowsFromTable(table) {
-  const [head = [], ...body] = table
-  const col = columns(head)
-  const byKey = new Map()
-  let skipped = 0
-  let dup = 0
-  for (const r of body) {
+// 제목 줄 찾기: 위에서 HEAD_ROWS 줄 안에서 제목 칸이 가장 많이 맞는 줄 (Tag 칸 2점, 나머지 1점, 같으면 위쪽)
+// → { row, tag, desc, type } (열 번호, 없으면 -1) | null
+const HEAD_ROWS = 50
+function findHeader(table) {
+  let best = null
+  for (let r = 0; r < Math.min(table.length, HEAD_ROWS); r++) {
+    const col = { row: r, tag: -1, desc: -1, type: -1 }
+    const cells = table[r] ?? []
+    for (let c = 0; c < cells.length; c++) {
+      const k = headKind(cells[c])
+      if (k && col[k] < 0) col[k] = c
+    }
+    const score = (col.tag >= 0 ? 2 : 0) + (col.desc >= 0 ? 1 : 0) + (col.type >= 0 ? 1 : 0)
+    if (score && (!best || score > best.score)) best = { ...col, score }
+  }
+  return best
+}
+
+const emptyResult = () => ({ byKey: new Map(), skipped: 0, dup: 0 })
+
+// 표 하나를 읽어 acc 에 더함. 제목 줄은 어디에 있어도 찾음 (예: D3 에 Description → D열 4행부터).
+// 제목을 못 찾으면 fallback 일 때만 1행 제목·A/B/C 로 읽음. 읽은 Tag 수, Tag 열을 못 찾으면 -1
+function addTable(table, acc, fallback) {
+  const found = findHeader(table)
+  const col = found ?? (fallback ? { row: 0, tag: 0, desc: 1, type: 2 } : null)
+  if (!col || col.tag < 0) return -1
+  let n = 0
+  for (let i = col.row + 1; i < table.length; i++) {
+    const r = table[i] ?? []
     const tag = str(r[col.tag], 80).toUpperCase()
-    if (!listKey(tag)) {
-      if (r.some((c) => str(c, 1))) skipped++
+    const k = listKey(tag)
+    if (!k) {
+      if (r.some((c) => str(c, 1))) acc.skipped++
       continue
     }
-    const k = listKey(tag)
-    if (byKey.has(k)) dup++ // 같은 Tag. No 가 또 나오면 아래 줄로
-    byKey.set(k, { tag, desc: str(r[col.desc], 300), type: str(r[col.type], 20).toUpperCase() })
+    if (acc.byKey.has(k)) acc.dup++ // 같은 Tag. No 가 또 나오면 아래 줄(뒤 시트)로
+    acc.byKey.set(k, { tag, desc: col.desc >= 0 ? str(r[col.desc], 300) : '', type: col.type >= 0 ? str(r[col.type], 20).toUpperCase() : '' })
+    n++
   }
-  return { rows: [...byKey.values()], skipped, dup }
+  return n
 }
 
-// 올린 파일 → { rows, skipped, dup }. CSV 가 기본, .xlsx/.xlsm 도 첫 번째 보이는 시트로 읽음
+// 표(2차원 배열) → { rows, skipped, dup }
+export function rowsFromTable(table) {
+  const acc = emptyResult()
+  addTable(table, acc, true)
+  return { rows: [...acc.byKey.values()], skipped: acc.skipped, dup: acc.dup }
+}
+
+// 엑셀 시트 여러 개 → 보이는 시트를 모두 합쳐 { rows, skipped, dup, sheets: [{ name, count }] }
+// count -1 = 제목(Tag. No) 칸을 못 찾아 건너뛴 시트
+export function rowsFromSheets(sheets) {
+  const shown = sheets.filter((s) => !s.hidden)
+  const list = shown.length ? shown : sheets
+  const acc = emptyResult()
+  const info = list.map((s) => ({ name: s.sheet ?? '', count: addTable(s.data ?? [], acc, list.length === 1) }))
+  return { rows: [...acc.byKey.values()], skipped: acc.skipped, dup: acc.dup, sheets: info }
+}
+
+// 올린 파일 → { rows, skipped, dup, sheets? }. CSV 가 기본, .xlsx/.xlsm 은 보이는 시트를 모두 합침
 export async function readInstFile(file) {
   if (/\.xls[xm]$/i.test(file.name)) {
     const { parseXlsx } = await import('./xlsx')
-    const sheets = await parseXlsx(file)
-    const sheet = sheets.find((s) => !s.hidden) ?? sheets[0]
-    return rowsFromTable(sheet?.data ?? [])
+    return rowsFromSheets(await parseXlsx(file))
   }
   if (/\.xls$/i.test(file.name)) throw new Error('예전 엑셀(.xls)은 못 읽어요. CSV 로 저장해서 올려 주세요.')
   return rowsFromTable(parseCsv(decode(await file.arrayBuffer())))
