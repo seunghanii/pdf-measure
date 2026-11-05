@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { downloadCsv, instListCsv, listKey, readInstFile, replaceInstList, useInstList } from '../lib/instList'
 
-// 홈 "Inst list setting": CSV(1행 제목 A Tag. No, B Description, C Type)를 올려 계기 목록 전체를 바꿈.
+// 홈 "Inst list setting": CSV/엑셀(제목 칸 Tag. No · Description · Type 을 찾아 그 아래, 엑셀은 모든 시트 합침)을 올려 계기 목록 전체를 바꿈.
 // 이 목록은 Equipment 박스에 Tag. No 가 들어갈 때 Description·Type 을 채우는 데 씀 (lib/instList.js)
 const SHOW = 200 // 표에 한 번에 보이는 줄
 
@@ -84,7 +84,7 @@ export default function InstListDialog({ store, onClose }) {
     setBusy(true)
     try {
       const res = await readInstFile(file)
-      if (!res.rows.length) setError('파일에서 Tag. No 를 하나도 찾지 못했어요. 1행은 제목(Tag. No, Description, Type), 2행부터 목록인지 봐 주세요.')
+      if (!res.rows.length) setError('파일에서 Tag. No 를 하나도 찾지 못했어요. 제목 칸에 “Tag. No” 가 적혀 있는지 봐 주세요.')
       else setPending({ name: file.name, ...res, diff: compare(list.rows, res.rows) })
     } catch (e) {
       console.warn('Inst list 읽기 실패', e)
@@ -165,9 +165,9 @@ export default function InstListDialog({ store, onClose }) {
         </div>
 
         <div className="mt-4 rounded-xl bg-ink-50 px-4 py-3 text-sm text-ink-600 ring-1 ring-ink-200">
-          <div className="font-semibold text-ink-800">CSV 양식</div>
+          <div className="font-semibold text-ink-800">파일 양식</div>
           <div className="mt-1">
-            1행은 제목: <b>A</b> Tag. No · <b>B</b> Description · <b>C</b> Type. 2행부터 목록. 엑셀에서 “CSV(쉼표로 분리)”로 저장해 올리면 돼요 (.xlsx 도 읽어요).
+            제목 칸 <b>Tag. No</b> · <b>Description</b> · <b>Type</b> 을 찾아 그 아래 줄을 모두 읽어요. 제목은 어느 줄·열에 있어도 돼요 (못 찾으면 1행 제목, A·B·C 열). 엑셀(.xlsx·.xlsm)은 보이는 시트를 모두 합쳐요.
           </div>
           <div className="mt-1 text-ink-500">올릴 때마다 지금 목록 전체를 새 파일 내용으로 바꿔요.</div>
         </div>
@@ -184,6 +184,15 @@ export default function InstListDialog({ store, onClose }) {
               {pending.dup > 0 && <span className="text-warn-700">같은 Tag. No {pending.dup}줄 (아래 줄로 씀)</span>}
               {pending.skipped > 0 && <span className="text-warn-700">Tag. No 없는 줄 {pending.skipped}개 건너뜀</span>}
             </div>
+            {pending.sheets?.length > 1 && (
+              <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-ink-500 tabular-nums">
+                {pending.sheets.map((sh, i) => (
+                  <span key={i} className={sh.count < 0 ? 'text-warn-700' : ''}>
+                    {sh.name}: {sh.count < 0 ? '제목 칸 없음, 건너뜀' : `${sh.count.toLocaleString()}줄`}
+                  </span>
+                ))}
+              </div>
+            )}
             <Table rows={pending.rows} />
             {pending.rows.length > SHOW && <div className="mt-1 text-xs text-ink-400">처음 {SHOW}줄만 보여요.</div>}
             <div className="mt-4 flex justify-end gap-2">
