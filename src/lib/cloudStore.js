@@ -14,10 +14,10 @@
 // 특별한 줄은 모두 size 가 0 이라 실제 도면(size > 0)과 구분됩니다.
 import { cacheDelete, cacheGet, cachePrune, cachePut, summarize, SUMMARY_VERSION } from './storage'
 import { normalizeLibrary } from './library'
-import { loadLocalNote, newerNote, normalizeNote, saveLocalNote } from './homeNote'
-import { loadLocalCal, newerCal, normalizeCal, saveLocalCal } from './calEvents'
-import { loadLocalCables, newerCables, normalizeCables, saveLocalCables } from './cableSchedule'
-import { loadLocalInstList, newerInstList, normalizeInstList, saveLocalInstList } from './instList'
+import { loadLocalNote, normalizeNote, saveLocalNote } from './homeNote'
+import { loadLocalCal, normalizeCal, saveLocalCal } from './calEvents'
+import { loadLocalCables, normalizeCables, saveLocalCables } from './cableSchedule'
+import { loadLocalInstList, normalizeInstList, saveLocalInstList } from './instList'
 import { base64ToBlob, blobToBase64 } from './images'
 
 export const BUCKET = 'pdfs'
@@ -106,6 +106,51 @@ export function createCloudStore(supabase, user) {
         { onConflict: 'user_id,file_key' },
       )
       .then(check)
+
+  // ---------- 홈 메모장·달력·Inst list·Cable schedule (특별한 줄 하나 + 이 브라우저 사본) ----------
+  // 사본은 서버에 못 올린 것을 지키고, 서버 것이 바뀌지 않았으면 다시 받지 않게 함.
+  // 앱을 켤 때 서버의 고친 시각(at)만 먼저 물어봄: 사본과 같으면 내려받지 않고(Inst list 는 1만 줄이면 약 1MB),
+  // 사본이 더 새로우면(못 올린 것) 다시 올리고, 서버가 더 새로우면 받아서 사본도 바꿈.
+  const SPECIALS = {
+    note: { key: NOTE_KEY, name: '홈 메모장', load: loadLocalNote, save: saveLocalNote, normalize: normalizeNote },
+    cal: { key: CAL_KEY, name: '달력 일정', load: loadLocalCal, save: saveLocalCal, normalize: normalizeCal },
+    inst: { key: INST_LIST_KEY, name: 'Inst list', load: loadLocalInstList, save: saveLocalInstList, normalize: normalizeInstList },
+    cable: { key: CABLE_KEY, name: 'Cable schedule', load: loadLocalCables, save: saveLocalCables, normalize: normalizeCables },
+  }
+  const specialRow = (key, cols) => table().select(cols).eq('user_id', uid).eq('file_key', key).maybeSingle()
+
+  async function syncSpecial({ key, name, load, save, normalize }) {
+    const local = load(uid)
+    let head
+    let known = true
+    try {
+      head = check(await specialRow(key, 'at:state->>at'))
+    } catch (e) {
+      console.warn(`${name} 시각 확인 실패, 통째로 받음`, e)
+      known = false // 모르면 아래에서 통째로 받아 비교
+    }
+    const serverAt = Number(head?.at) || 0
+    if (known && local.at > serverAt) {
+      track(upsertSpecial(key, name, local)).catch((e) => console.warn(`${name} 다시 올리기 실패`, e))
+      return local
+    }
+    // 서버에 줄이 없거나(사본도 비어 있음) 같은 판이면 사본 그대로
+    if (known && (!head || (local.at && serverAt === local.at))) return local
+    const server = normalize(check(await specialRow(key, 'state'))?.state)
+    if (server.at < local.at) {
+      // 사본이 더 새로움: 시각 확인이 안 됐을 때나, 받는 사이 이 창에서 고쳤을 때
+      track(upsertSpecial(key, name, local)).catch((e) => console.warn(`${name} 다시 올리기 실패`, e))
+      return local
+    }
+    if (server.at === local.at && local.at) return local
+    save(server, uid)
+    return server
+  }
+
+  function saveSpecial({ key, name, save }, value) {
+    save(value, uid)
+    return track(upsertSpecial(key, name, value))
+  }
 
   const imagePath = (imageId) => `${uid}/img/${imageId}`
 
@@ -395,69 +440,15 @@ export function createCloudStore(supabase, user) {
       return track(p)
     },
 
-    // 홈 메모장: 서버 글과 이 브라우저 사본 중 나중에 고친 것 (사본이 더 새로우면 = 못 올린 글, 다시 올림)
-    async getHomeNote() {
-      const local = loadLocalNote(uid)
-      const row = check(await table().select('state').eq('user_id', uid).eq('file_key', NOTE_KEY).maybeSingle())
-      const server = normalizeNote(row?.state)
-      const note = newerNote(server, local)
-      if (note !== server && note.at) track(upsertSpecial(NOTE_KEY, '홈 메모장', note)).catch((e) => console.warn('메모장 다시 올리기 실패', e))
-      else saveLocalNote(server, uid)
-      return note
-    },
-
-    saveHomeNote(note) {
-      saveLocalNote(note, uid)
-      return track(upsertSpecial(NOTE_KEY, '홈 메모장', note))
-    },
-
-    // 달력 일정: 메모장과 같은 방식 (서버와 이 브라우저 사본 중 나중에 고친 것)
-    async getCalendar() {
-      const local = loadLocalCal(uid)
-      const row = check(await table().select('state').eq('user_id', uid).eq('file_key', CAL_KEY).maybeSingle())
-      const server = normalizeCal(row?.state)
-      const cal = newerCal(server, local)
-      if (cal !== server && cal.at) track(upsertSpecial(CAL_KEY, '달력 일정', cal)).catch((e) => console.warn('일정 다시 올리기 실패', e))
-      else saveLocalCal(server, uid)
-      return cal
-    },
-
-    saveCalendar(cal) {
-      saveLocalCal(cal, uid)
-      return track(upsertSpecial(CAL_KEY, '달력 일정', cal))
-    },
-
-    // Inst list: 달력과 같은 방식 (서버와 이 브라우저 사본 중 나중에 올린 것)
-    async getInstList() {
-      const local = loadLocalInstList(uid)
-      const row = check(await table().select('state').eq('user_id', uid).eq('file_key', INST_LIST_KEY).maybeSingle())
-      const server = normalizeInstList(row?.state)
-      const list = newerInstList(server, local)
-      if (list !== server && list.at) track(upsertSpecial(INST_LIST_KEY, 'Inst list', list)).catch((e) => console.warn('Inst list 다시 올리기 실패', e))
-      else saveLocalInstList(server, uid)
-      return list
-    },
-
-    saveInstList(list) {
-      saveLocalInstList(list, uid)
-      return track(upsertSpecial(INST_LIST_KEY, 'Inst list', list))
-    },
-
-    // Cable schedule 목록: Inst list 와 같은 방식 (파일 자체는 saveImage 로 보관함에)
-    async getCableSchedules() {
-      const local = loadLocalCables(uid)
-      const row = check(await table().select('state').eq('user_id', uid).eq('file_key', CABLE_KEY).maybeSingle())
-      const server = normalizeCables(row?.state)
-      const c = newerCables(server, local)
-      if (c !== server && c.at) track(upsertSpecial(CABLE_KEY, 'Cable schedule', c)).catch((e) => console.warn('Cable schedule 다시 올리기 실패', e))
-      else saveLocalCables(server, uid)
-      return c
-    },
-
-    saveCableSchedules(c) {
-      saveLocalCables(c, uid)
-      return track(upsertSpecial(CABLE_KEY, 'Cable schedule', c))
-    },
+    // 홈 메모장·달력·Inst list·Cable schedule: 서버와 이 브라우저 사본 중 나중에 고친 것 (syncSpecial)
+    getHomeNote: () => syncSpecial(SPECIALS.note),
+    saveHomeNote: (note) => saveSpecial(SPECIALS.note, note),
+    getCalendar: () => syncSpecial(SPECIALS.cal),
+    saveCalendar: (cal) => saveSpecial(SPECIALS.cal, cal),
+    getInstList: () => syncSpecial(SPECIALS.inst),
+    saveInstList: (list) => saveSpecial(SPECIALS.inst, list),
+    getCableSchedules: () => syncSpecial(SPECIALS.cable),
+    saveCableSchedules: (c) => saveSpecial(SPECIALS.cable, c),
 
     // 개정판으로 바꾸기: 같은 자리(경로)에 새 PDF 를 덮어 올림. keepKey 가 있으면 지금 PDF 를 예전 판 자리에 복사해 둠.
     // 돌려주는 값 { kept }: 예전 판 PDF 를 보관했는지 (서버에 없고 이 기기에도 사본이 없으면 못 함)

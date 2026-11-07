@@ -42,7 +42,6 @@ let trashedDocs = {}
 export function setTrashedDocs(map) {
   trashedDocs = map ?? {}
 }
-export const isDocTrashed = (id) => !!trashedDocs[id]
 export const withoutTrashed = (list) => (list ?? []).filter((d) => !trashedDocs[d.id])
 
 export function normalizeDocTrash(map) {

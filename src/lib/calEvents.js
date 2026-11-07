@@ -3,7 +3,6 @@
 // holidays: 주말 요일 말고 따로 지정한 휴무일 (빨간 숫자)
 // 로그인했으면 documents 특별한 줄 __calendar__ (스키마 변경 없음), 아니면 이 브라우저.
 // 이 브라우저에도 늘 사본을 둠 (서버에 못 올린 일정을 지키고 다음에 다시 올림) — 홈 메모장(lib/homeNote.js)과 같은 방식.
-import { dayKey } from './calendar'
 import { INST_STATUSES, statusOf } from './instrument'
 
 const KEY = 'pdf-measure:cal-events'
@@ -27,8 +26,6 @@ export function normalizeCal(c) {
   const holidays = Array.isArray(c.holidays) ? [...new Set(c.holidays.filter(isDay))].sort() : []
   return { events: c.events.map(cleanEvent).filter(Boolean), holidays, at: Number(c.at) || 0 }
 }
-
-export const newerCal = (a, b) => (normalizeCal(b).at > normalizeCal(a).at ? normalizeCal(b) : normalizeCal(a))
 
 const keyOf = (scope) => (scope ? `${KEY}:${scope}` : KEY)
 
@@ -56,16 +53,6 @@ export const eventOn = (e, key) => (e.end ? e.date <= key && key <= e.end : e.da
 // 시간 있는 일정은 시간 순, 그다음 종일 일정
 const byTime = (a, b) => (a.time ?? '99') .localeCompare(b.time ?? '99') || a.title.localeCompare(b.title)
 
-// 날짜 키 → 그날 일정 (보이는 날짜 칸들만)
-export function eventsByDay(events, keys) {
-  const map = new Map()
-  for (const key of keys) {
-    const list = events.filter((e) => eventOn(e, key)).sort(byTime)
-    if (list.length) map.set(key, list)
-  }
-  return map
-}
-
 // 모든 도면 Equipment 의 작업 완료 날짜 → { 'YYYY-MM-DD': [{ key, tag, label, color, step, doc, row }] }
 // list: 홈 도면 목록 (summary.inst 에 inst.done 이 들어 있음, SUMMARY_VERSION 6 이상)
 const STEP_ORDER = Object.fromEntries(INST_STATUSES.map((s, i) => [s.id, i]))
@@ -86,8 +73,6 @@ export function equipByDay(list) {
   for (const items of map.values()) items.sort((a, b) => STEP_ORDER[a.step] - STEP_ORDER[b.step] || collator.compare(a.tag, b.tag))
   return map
 }
-
-export const todayKey = () => dayKey(new Date())
 
 // 한 주(7칸) 일정 줄 배치: 여러 날 일정이 칸마다 같은 줄에 오게 해서 막대로 이어 보이게 함.
 // 돌려주는 값: 7칸 각각의 줄 목록 [{ e, contLeft, contRight, showTitle } | null] (null = 빈 줄, 위아래 맞춤용)

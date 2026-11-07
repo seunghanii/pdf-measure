@@ -8,8 +8,6 @@ const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y)
 // 처음 순서 (지금 PDF 그대로)
 export const initialOrder = (numPages) => Array.from({ length: numPages }, (_, i) => ({ src: i + 1 }))
 
-export const sameOrder = (order, numPages) => order.length === numPages && order.every((e, i) => e.src === i + 1)
-
 // 원래 쪽 번호 → 새 쪽 번호 (지운 쪽은 없음)
 export function pageMap(order) {
   const map = new Map()

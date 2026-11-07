@@ -43,8 +43,6 @@ export function saveLocalInstList(list, scope) {
   }
 }
 
-export const newerInstList = (a, b) => (normalizeInstList(b).at > normalizeInstList(a).at ? normalizeInstList(b) : normalizeInstList(a))
-
 // ---------- 지금 목록 (모듈 하나에 보관, 바뀌면 알림) ----------
 let current = EMPTY_INST_LIST
 let index = null // { exact: Map(열쇠 → 줄), keys: [[열쇠, 줄]] }

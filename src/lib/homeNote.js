@@ -28,5 +28,3 @@ export function saveLocalNote(note, scope) {
   }
 }
 
-// 서버 글과 이 브라우저 사본 중 나중에 고친 쪽
-export const newerNote = (a, b) => (normalizeNote(b).at > normalizeNote(a).at ? normalizeNote(b) : normalizeNote(a))

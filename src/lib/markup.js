@@ -120,8 +120,6 @@ export function resizeRect(r, dir, p) {
 
 let measureCtx = null
 
-export const TEXT_ALIGNS = ['left', 'center', 'right']
-
 // 너비를 줄인 텍스트 상자의 최소 너비 (pt)
 export const minTextBoxWidth = (fontSize) => fontSize * 2.3
 
