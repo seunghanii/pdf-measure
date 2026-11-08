@@ -62,7 +62,7 @@ const selCarry = new Map()
 // [1, 3, 5] → '1, 3, 5쪽', 많으면 '7개 쪽'
 const pagesLabel = (list) => (list.length <= 3 ? `${list.join(', ')}쪽` : `${list.length}개 쪽`)
 
-export default function PageNavigator({ docId, pdfDoc, pageNum, onGo, measurements, onEdit, busy, syncing, undoLabel, onUndo, onClose }) {
+export default function PageNavigator({ docId, pdfDoc, pageNum, onGo, measurements, onEdit, busy, undoLabel, onUndo, onClose }) {
   const n = pdfDoc.numPages
   const listRef = useRef(null)
   const [menu, setMenu] = useState(null) // { page, confirm }
@@ -316,13 +316,6 @@ export default function PageNavigator({ docId, pdfDoc, pageNum, onGo, measuremen
           </svg>
         </button>
       </div>
-
-      {syncing && (
-        <div className={`flex shrink-0 items-center gap-1.5 border-b border-ink-200 px-3 py-1 text-[11px] ${syncing === 'retry' ? 'text-danger-600' : 'text-ink-500'}`} role="status">
-          <span className={`h-2.5 w-2.5 shrink-0 animate-spin rounded-full border-[1.5px] ${syncing === 'retry' ? 'border-danger-200 border-t-danger-600' : 'border-brand-200 border-t-brand-600'}`} aria-hidden="true" />
-          {syncing === 'retry' ? '서버 연결이 안 돼 다시 시도 중…' : '서버에 저장 중… (계속 쓰셔도 돼요)'}
-        </div>
-      )}
 
       {selecting && (
         <div className="flex shrink-0 items-center gap-2 border-b border-ink-200 bg-ink-50 px-3 py-1.5 text-xs">

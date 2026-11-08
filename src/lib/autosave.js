@@ -9,7 +9,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { normalizeActivity, trackActivity } from './activity'
 import { mergeState } from './stateMerge'
-import { isPageSyncPending, settlePageSync } from './pageSync'
 
 // 서버 시각 글자는 모양이 달라도(…Z / …+00:00) 같은 시각이면 같음
 const sameStamp = (a, b) => a === b || (a != null && b != null && Date.parse(a) === Date.parse(b))
@@ -53,16 +52,6 @@ export function useAutosave({ store, docId, measurements, categories, calibratio
   const epochRef = useRef(0)
   const rebaseRef = useRef(null) // { epoch, from: 합치기 전 이 창 상태, to: 합친 상태 }
   const handlers = useRef({ onRemote, onReload })
-  // 페이지 편집을 뒤에서 서버에 올리는 중이면(lib/pageSync.js) 끝난 뒤 그 저장 시각·상태를 기준으로
-  const pageSeen = useRef(0)
-  const waitPageSync = useCallback(async () => {
-    const done = await settlePageSync(docId)
-    if (done && done.seq > pageSeen.current) {
-      pageSeen.current = done.seq
-      if (cloud && done.stamp) stampRef.current = done.stamp
-      if (done.state) baseRef.current = done.state
-    }
-  }, [docId, cloud])
   useLayoutEffect(() => {
     handlers.current = { onRemote, onReload }
   })
@@ -114,9 +103,6 @@ export function useAutosave({ store, docId, measurements, categories, calibratio
           q.next = null
           setSyncStatus('saving')
           try {
-            await waitPageSync()
-            if (stopped.current) break
-            q.saving = true
             for (let attempt = 0; ; attempt++) {
               try {
                 const at = await store.saveState(docId, st, cloud && stampRef.current !== undefined ? { expect: stampRef.current } : undefined)
@@ -141,11 +127,9 @@ export function useAutosave({ store, docId, measurements, categories, calibratio
                 applyRemote(from, st)
               }
             }
-            q.saving = false
             if (stopped.current) break
             setSyncStatus(q.next ? 'saving' : 'saved')
           } catch (e) {
-            q.saving = false
             lastSent.current = null // 실패하면 같은 내용이라도 다음에 다시 보냄
             console.warn('저장 실패', e)
             setSyncStatus('error')
@@ -154,7 +138,7 @@ export function useAutosave({ store, docId, measurements, categories, calibratio
         q.busy = false
       })()
     },
-    [docId, store, cloud, syncFromServer, applyRemote, waitPageSync],
+    [docId, store, cloud, syncFromServer, applyRemote],
   )
 
   const latest = useRef(null)
@@ -174,8 +158,7 @@ export function useAutosave({ store, docId, measurements, categories, calibratio
       stop: async () => {
         stopped.current = true
         latest.current = null
-        // (페이지 편집 서버 저장을 기다리는 중인 것은 멈추면 그냥 끝나므로 기다리지 않음)
-        while (queue.current.saving) await new Promise((r) => setTimeout(r, 50))
+        while (queue.current.busy) await new Promise((r) => setTimeout(r, 50))
       },
       resume: () => {
         stopped.current = false
@@ -235,11 +218,10 @@ export function useAutosave({ store, docId, measurements, categories, calibratio
     let busy = false
     const check = async () => {
       if (document.visibilityState === 'hidden' || busy || Date.now() - last < 3000) return
-      if (stopped.current || queue.current.busy || latest.current || isPageSyncPending(docId)) return
+      if (stopped.current || queue.current.busy || latest.current) return
       last = Date.now()
       busy = true
       try {
-        await waitPageSync()
         const peek = await store.peekState(docId)
         if (!peek || sameStamp(peek.updatedAt, stampRef.current)) return
         if (stopped.current || queue.current.busy || latest.current) return
@@ -263,7 +245,7 @@ export function useAutosave({ store, docId, measurements, categories, calibratio
       window.removeEventListener('focus', check)
       document.removeEventListener('visibilitychange', check)
     }
-  }, [cloud, active, store, docId, syncFromServer, applyRemote, waitPageSync])
+  }, [cloud, active, store, docId, syncFromServer, applyRemote])
 
   return syncStatus
 }
