@@ -797,7 +797,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
             // 최근 수정 기록: 그 도면을 열고 그 쪽·항목 자리로 (지운 항목·여러 개 묶음은 그 쪽으로만)
             await openRecent(item)
             const rect = ev.r && ev.a !== 'del' ? { x: ev.r[0], y: ev.r[1], w: ev.r[2], h: ev.r[3] } : null
-            setSearchJump({ id: item.id, page: ev.p ?? 1, rect, peekId: rect ? ev.id : null, nonce: Date.now() })
+            setSearchJump({ id: item.id, page: ev.p ?? 1, rect, peekId: rect ? ev.id : null, openId: ev.open ? ev.id : null, nonce: Date.now() })
           }}
           library={library}
           onUpdateLibrary={updateLibrary}

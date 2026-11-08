@@ -276,7 +276,7 @@ function MarkupShape({ m, zoom, selected, showHandles, showResize, draft }) {
         {!draft && instLabelText(m.inst) && (
           <text
             className="inst-label"
-            x={r.x + 1}
+            x={r.x + (m.inst?.issue ? 9 : 1)}
             y={r.y - 4}
             fontSize="11"
             fontWeight="700"
@@ -289,6 +289,13 @@ function MarkupShape({ m, zoom, selected, showHandles, showResize, draft }) {
           >
             {instLabelText(m.inst)}
           </text>
+        )}
+        {/* 이슈 체크가 켜진 Equipment: 왼쪽 위 빨간 ! (화면 크기와 관계없이 박스 크기에 맞춰 조금 작게) */}
+        {!draft && m.inst?.issue && (
+          <g className="inst-issue" pointerEvents="none">
+            <circle cx={r.x} cy={r.y} r={7} fill="#dc2626" stroke="white" strokeWidth={1.5} />
+            <path d={`M${r.x} ${r.y - 3.6}v4.2M${r.x} ${r.y + 3.2}v.1`} stroke="white" strokeWidth={2} strokeLinecap="round" />
+          </g>
         )}
         {!draft && r.w > s + 6 && r.h > s + 6 && (
           <g className="memo-icon" pointerEvents="none">

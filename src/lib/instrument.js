@@ -9,6 +9,7 @@
 import { isMarkup, rectOf } from './markup'
 import { isDefaultName } from './categories'
 import { lookupTag } from './instList'
+import { issueSummary } from './issues'
 
 export const INST_STATUSES = [
   { id: 'pre', label: 'Not Installed', color: '#64748b' },
@@ -323,6 +324,9 @@ export function instRows(measurements) {
       docs: memoLinks(m).map((l) => (l.photo ? { photo: 1, name: l.name, page: 1, role: l.role ?? '' } : { id: l.id, name: l.name, page: l.page ?? 1, role: l.role ?? '' })),
       hidden: m.hidden ? 1 : 0,
     })
+    // 이슈 체크가 켜진 카드만: 열린 이슈 글 (홈 'Issue' 칸)
+    const iss = issueSummary(i)
+    if (iss) Object.assign(out[out.length - 1], { issue: 1, iss })
   }
   return out
 }

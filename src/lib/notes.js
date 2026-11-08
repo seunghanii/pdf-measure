@@ -40,6 +40,9 @@ export function noteItems(measurements, categories) {
           if (title && title === head[0]) s = s.slice(title.length).replace(/^ · /, '')
           s = [head.join(' · '), s.trim()].filter(Boolean).join(' · ')
         }
+        // 이슈 글도 (clear 한 것 포함) 찾히게
+        const iss = Array.isArray(i.issues) ? i.issues.map((x) => String(x?.text ?? '').trim()).filter(Boolean) : []
+        if (iss.length) s = [s.trim(), `Issue ${iss.join(' · ')}`].filter(Boolean).join(' · ')
       }
     }
     s = s
