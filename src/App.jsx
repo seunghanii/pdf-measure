@@ -17,6 +17,7 @@ import { AccountMenu, PasswordDialog } from './components/Account'
 import SearchPanel, { SearchIcon } from './components/SearchPanel'
 import ThemeMenu from './components/ThemeMenu'
 import { ensureIndexed, forgetIndex, reindex, replaceIndex } from './lib/indexer'
+import { enqueuePageSync, isPageSyncPending, settlePageSync } from './lib/pageSync'
 import { linkRevision, resolveFile } from './lib/revision'
 
 export default function App() {
@@ -339,8 +340,36 @@ function Session({ store, user, onLogout, onChangePassword }) {
   // keepKey: 지금 PDF 를 보관할 이름, buildState(kept): 보관 여부를 받아 저장할 state,
   // dropRevKey: 예전 판으로 되돌릴 때 목록에서 빠지는 그 판 (보관한 PDF 도 지움)
   const replaceDoc = useCallback(
-    async (id, { file, pdfDoc, keepKey, buildState, dropRevKey, notice, index }) => {
+    async (id, { file, pdfDoc, keepKey, buildState, dropRevKey, notice, index, background, afterSave, onSyncFail }) => {
       const s = storeRef.current
+      // 페이지 편집: 화면은 바로 새 PDF 로, 서버 저장(PDF 업로드·상태·색인)은 뒤에서 (lib/pageSync.js)
+      if (background) {
+        const state = buildState(!!keepKey)
+        replaceIndex(s, id, file.name, index, () => (pdfDoc.loadingTask?.destroyed ? null : pdfDoc))
+        enqueuePageSync(id, {
+          keep: !!keepKey,
+          run: async () => {
+            const { kept } = await s.replaceFile(id, file, { keepKey })
+            const st = kept === !!keepKey ? state : buildState(kept)
+            const stamp = await s.saveState(id, st)
+            updateLibrary((lib) => linkRevision(lib, id, fileIdOf(file)))
+            afterSave?.(kept)
+            refreshRecent()
+            return { stamp, state: st }
+          },
+          onGiveUp: (e) => {
+            onSyncFail?.(e)
+            setError('페이지를 바꾼 PDF 를 서버에 저장하지 못했어요 (50MB 넘음). 새로고침하면 예전 PDF 로 돌아가요.')
+          },
+        })
+        const old = docsRef.current.find((d) => d.id === id)?.pdfDoc
+        setOpenPdf(id, pdfDoc)
+        setDocs((prev) =>
+          prev.map((d) => (d.id === id ? { ...d, name: file.name, pdfDoc, savedState: state, savedSize: file.size, rev: (d.rev ?? 0) + 1, notice } : d)),
+        )
+        if (old && old !== pdfDoc) setTimeout(() => old.loadingTask?.destroy(), 1000)
+        return
+      }
       const { kept } = await s.replaceFile(id, file, { keepKey })
       const state = buildState(kept)
       const stamp = await s.saveState(id, state)
@@ -404,6 +433,8 @@ function Session({ store, user, onLogout, onChangePassword }) {
       setError('')
       setLoading(true)
       try {
+        // 페이지 편집을 아직 서버에 올리는 중이면 끝난 뒤에 받음 (예전 PDF 를 열지 않게)
+        if (isPageSyncPending(item.id)) await settlePageSync(item.id)
         const blob = await storeRef.current.getFile(item.id)
         if (!blob) throw new Error('missing')
         return (await openDoc(item.id, new File([blob], item.name, { type: 'application/pdf' }), { fromRecent: true })) !== false
