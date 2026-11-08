@@ -35,7 +35,7 @@ import { useMemoDock } from '../lib/memoDock'
 import PageNavigator, { carryThumbs } from './PageNavigator'
 import { loadPdf } from '../lib/pdf'
 import { MAX_UPLOAD_BYTES } from '../lib/cloudStore'
-import { buildPdf, popPageEdit, setPageEditCarry, takePageEditCarry, invertOrder, loadPageNavOpen, pageEditUndo, rememberPageEdit, remapIndex, remapState, savePageNavOpen, undoState } from '../lib/pageEdit'
+import { buildPdf, popPageEdit, setPageEditCarry, takePageEditCarry, invertOrder, loadPageNavOpen, pageEditUndo, rememberPageEdit, remapIndex, remapState, rotatedSizes, savePageNavOpen, undoState } from '../lib/pageEdit'
 import { readTagInBox } from '../lib/tagRead'
 
 // 메모장은 마크다운 읽는 도구까지 필요할 때만 불러옴
@@ -1213,7 +1213,8 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
       carryThumbs(pdfDoc, newPdf, order)
       const key = newRevKey()
       const before = nowState()
-      const next = remapState(before, order, pdfDoc.numPages, { editKey: key })
+      const sizes = await rotatedSizes(pdfDoc, order)
+      const next = remapState(before, order, pdfDoc.numPages, { editKey: key, sizes })
       if (focus) next.pageNum = focus
       // 쪽 번호로 건 연결·링크 박스 기본 이름도 새 쪽으로, 다른 도면의 연결을 위해 편집 기록을 남김
       const map = orderToMap(order, pdfDoc.numPages)
@@ -1226,7 +1227,7 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
       // 이 창에서 처음 편집이면 편집 전 PDF 를 예전 판으로 보관 (창을 닫으면 되돌리기는 사라지므로)
       const backup = !pageEditUndo(doc.id)
       if (backup) parts.push("편집 전 PDF 는 '개정' 창에 '페이지 편집 전' 판으로 보관했어요.")
-      await savePages({ file, newPdf, next, index: remapIndex(textIndex, order, pdfDoc.numPages), notice: parts.join(' '), backup })
+      await savePages({ file, newPdf, next, index: remapIndex(textIndex, order, pdfDoc.numPages, sizes), notice: parts.join(' '), backup })
       rememberPageEdit(doc.id, {
         key,
         label,
@@ -1257,8 +1258,9 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
     let newPdf = null
     try {
       newPdf = await loadPdf(await entry.file.arrayBuffer())
-      carryThumbs(pdfDoc, newPdf, invertOrder(entry.order, entry.oldNumPages))
-      const next = undoState(nowState(), entry)
+      const inv = invertOrder(entry.order, entry.oldNumPages)
+      carryThumbs(pdfDoc, newPdf, inv)
+      const next = undoState(nowState(), entry, await rotatedSizes(pdfDoc, inv))
       const map = orderToMap(invertOrder(entry.order, entry.oldNumPages), pdfDoc.numPages)
       next.measurements = fixLinksAfterPageEdit(next.measurements, measurements, { docId: doc.id, fileName, map, oldNumPages: pdfDoc.numPages, newNumPages: entry.oldNumPages })
       next.pageLog = pushPageLog(revs.pageLog, map)
@@ -1352,6 +1354,7 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
         <div className="relative flex min-h-0 min-w-0 flex-1">
         {pageNavOpen && (
           <PageNavigator
+            docId={doc.id}
             pdfDoc={pdfDoc}
             pageNum={pageNum}
             onGo={jumpTo}

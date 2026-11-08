@@ -1,14 +1,61 @@
 // 페이지 편집 (왼쪽 위 페이지 탐색 창): 빈 페이지 넣기·페이지 지우기·순서 바꾸기.
 // PDF 를 새로 만들어 같은 도면(id 그대로)의 파일만 바꾸고, 측정·마크업·박스·기준선·글자 색인의 쪽 번호를 새 순서에 맞춤.
-// order: 새 PDF 의 쪽 목록. 원래 쪽은 { src: 원래 쪽 번호(1부터) }, 새 빈 쪽은 { blank: { w, h } } (pt, pdf.js 화면 크기)
+// order: 새 PDF 의 쪽 목록. 원래 쪽은 { src: 원래 쪽 번호(1부터), rot?: 90|180|270 (시계 방향으로 더 돌림) },
+//        새 빈 쪽은 { blank: { w, h } } (pt, pdf.js 화면 크기)
 import { PT_TO_PAPER_MM } from './units'
+import { itemCorners, rectOf } from './markup'
 
 const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y)
 
 // 처음 순서 (지금 PDF 그대로)
 export const initialOrder = (numPages) => Array.from({ length: numPages }, (_, i) => ({ src: i + 1 }))
 
-export const sameOrder = (order, numPages) => order.length === numPages && order.every((e, i) => e.src === i + 1)
+export const sameOrder = (order, numPages) => order.length === numPages && order.every((e, i) => e.src === i + 1 && !e.rot)
+
+const normRot = (r) => (((Math.round((r ?? 0) / 90) * 90) % 360) + 360) % 360
+
+// 돌릴 쪽의 화면 크기 (돌리기 전, 배율 1). 돌린 쪽이 없으면 빈 Map
+export async function rotatedSizes(pdfDoc, order) {
+  const out = new Map()
+  for (const e of order) {
+    if (!e.src || !normRot(e.rot) || out.has(e.src)) continue
+    const vp = (await pdfDoc.getPage(e.src)).getViewport({ scale: 1 })
+    out.set(e.src, { w: vp.width, h: vp.height })
+  }
+  return out
+}
+
+// 화면 좌표 한 점을 쪽과 함께 시계 방향 rot 도 돌림 (w, h: 돌리기 전 쪽 크기)
+export function rotatePoint(p, rot, w, h) {
+  switch (normRot(rot)) {
+    case 90:
+      return { ...p, x: h - p.y, y: p.x }
+    case 180:
+      return { ...p, x: w - p.x, y: h - p.y }
+    case 270:
+      return { ...p, x: p.y, y: w - p.x }
+    default:
+      return p
+  }
+}
+
+// 항목도 쪽과 함께 돌림. 사진·텍스트는 모양은 그대로 두고 자리(가운데)만 옮김, 나머지는 점을 모두 돌림
+export function rotateItem(m, rot, size) {
+  if (!normRot(rot) || !size || !m.points?.length) return m
+  const { w, h } = size
+  if (m.type === 'image' || m.type === 'text') {
+    const r = m.type === 'image' ? rectOf(m.points[0], m.points[1] ?? m.points[0]) : rectOf(...cornersBox(itemCorners(m)))
+    const c = rotatePoint({ x: r.x + r.w / 2, y: r.y + r.h / 2 }, rot, w, h)
+    const dx = c.x - (r.x + r.w / 2)
+    const dy = c.y - (r.y + r.h / 2)
+    return { ...m, points: m.points.map((p) => ({ ...p, x: p.x + dx, y: p.y + dy })) }
+  }
+  return { ...m, points: m.points.map((p) => rotatePoint(p, rot, w, h)) }
+}
+const cornersBox = (pts) => [
+  { x: Math.min(...pts.map((p) => p.x)), y: Math.min(...pts.map((p) => p.y)) },
+  { x: Math.max(...pts.map((p) => p.x)), y: Math.max(...pts.map((p) => p.y)) },
+]
 
 // 원래 쪽 번호 → 새 쪽 번호 (지운 쪽은 없음)
 export function pageMap(order) {
@@ -27,24 +74,30 @@ function nearest(map, page, numPages) {
 // 새 순서에 맞춘 상태. 지운 쪽의 항목은 휴지통으로 (7일 동안 되살리기 가능, 되살리면 가까운 쪽에 나타남)
 // 지운 쪽에 기준선이 있으면 같은 축척(1:N)으로 바꿔 둠
 // editKey: 이 편집 이름 (휴지통에 넣은 항목에 붙여, 되돌릴 때 원래 쪽으로 꺼냄)
-export function remapState({ measurements, trash, calibration, pageNum }, order, numPages, { now = Date.now(), editKey = null } = {}) {
+// sizes: rotatedSizes 결과 (돌린 쪽이 있을 때 꼭 넘김)
+export function remapState({ measurements, trash, calibration, pageNum }, order, numPages, { now = Date.now(), editKey = null, sizes = null } = {}) {
   const map = pageMap(order)
+  const rots = new Map()
+  for (const e of order) if (e.src && normRot(e.rot) && sizes?.has(e.src)) rots.set(e.src, normRot(e.rot))
+  const turn = (m, p) => (rots.has(p) ? rotateItem(m, rots.get(p), sizes.get(p)) : m)
   const keep = []
   const gone = []
-  for (const m of measurements) {
-    const p = m.page ?? 1
+  for (const m0 of measurements) {
+    const p = m0.page ?? 1
+    const m = turn(m0, p)
     if (map.has(p)) keep.push(map.get(p) === p ? m : { ...m, page: map.get(p) })
     else if (p > numPages) keep.push(m) // 이미 없는 쪽 (예전 개정판에서 남은 것) 은 그대로
     else gone.push({ item: { ...m, page: nearest(map, p, numPages) }, at: now, ...(editKey && { pageEdit: editKey, fromPage: p }) })
   }
-  const fixTrash = (t) => {
-    const p = t.item.page ?? 1
+  const fixTrash = (t0) => {
+    const p = t0.item.page ?? 1
+    const t = rots.has(p) ? { ...t0, item: turn(t0.item, p) } : t0
     if (map.has(p)) return map.get(p) === p ? t : { ...t, item: { ...t.item, page: map.get(p) } }
     return p > numPages ? t : { ...t, item: { ...t.item, page: nearest(map, p, numPages) } }
   }
   let cal = calibration
   if (cal?.mode === 'line') {
-    if (map.has(cal.page)) cal = { ...cal, page: map.get(cal.page) }
+    if (map.has(cal.page)) cal = { ...turn(cal, cal.page), page: map.get(cal.page) }
     else if (cal.page <= numPages) {
       const d = distance(cal.points[0], cal.points[1])
       cal = d > 0 ? { mode: 'ratio', ratio: cal.realMm / d / PT_TO_PAPER_MM } : null
@@ -59,17 +112,21 @@ export function remapState({ measurements, trash, calibration, pageNum }, order,
   }
 }
 
-// 되돌리기용 거꾸로 순서: 편집 전 쪽 p 가 편집 뒤 몇 쪽이었는지 ({ src: 새 쪽 } | { gone: true })
+// 되돌리기용 거꾸로 순서: 편집 전 쪽 p 가 편집 뒤 몇 쪽이었는지 ({ src: 새 쪽, rot?: 반대로 돌림 } | { gone: true })
 export function invertOrder(order, oldNumPages) {
   const map = pageMap(order)
-  return Array.from({ length: oldNumPages }, (_, i) => (map.has(i + 1) ? { src: map.get(i + 1) } : { gone: true }))
+  const rot = new Map(order.filter((e) => e.src && normRot(e.rot)).map((e) => [e.src, 360 - normRot(e.rot)]))
+  return Array.from({ length: oldNumPages }, (_, i) =>
+    map.has(i + 1) ? { src: map.get(i + 1), ...(rot.has(i + 1) && { rot: rot.get(i + 1) }) } : { gone: true },
+  )
 }
 
 // 되돌리기: 지금 상태를 편집 전 쪽 순서로 되돌리고, 그 편집이 휴지통에 넣은 항목은 원래 쪽으로 꺼냄
 // (편집 뒤에 그린 것도 남김. 새로 넣었던 빈 쪽에 그린 항목은 휴지통으로)
-export function undoState(state, entry) {
+// sizes: rotatedSizes(지금 PDF, invertOrder(...)) — 돌린 편집을 되돌릴 때 필요
+export function undoState(state, entry, sizes = null) {
   const inv = invertOrder(entry.order, entry.oldNumPages)
-  const out = remapState(state, inv, entry.order.length)
+  const out = remapState(state, inv, entry.order.length, { sizes })
   const have = new Set(out.measurements.map((m) => m.id))
   const back = []
   const trash = []
@@ -83,22 +140,39 @@ export function undoState(state, entry) {
 }
 
 // 글자 색인도 새 순서로 (OCR 을 다시 하지 않게). 빈 쪽은 글자 없음
-export function remapIndex(index, order, numPages) {
+// 글자 색인 한 항목: [글자, x, y, w, h, ...]
+function rotateIndexPage(pg, rot, size) {
+  if (!pg?.items || !normRot(rot) || !size) return pg
+  const items = pg.items.map((it) => {
+    const [t, x, y, w, h, ...rest] = it
+    const a = rotatePoint({ x, y }, rot, size.w, size.h)
+    const b = rotatePoint({ x: x + w, y: y + h }, rot, size.w, size.h)
+    return [t, Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y), ...rest]
+  })
+  return { ...pg, items }
+}
+export function remapIndex(index, order, numPages, sizes = null) {
   if (!index?.pages || index.pages.length !== numPages) return null
-  return { ...index, pages: order.map((e) => (e.src ? index.pages[e.src - 1] : { items: [] })) }
+  return {
+    ...index,
+    pages: order.map((e) => (e.src ? rotateIndexPage(index.pages[e.src - 1], e.rot, sizes?.get(e.src)) : { items: [] })),
+  }
 }
 
 // 새 PDF 만들기 → File (이름은 그대로)
 export async function buildPdf(pdfDoc, order, name) {
-  const { PDFDocument } = await import('pdf-lib')
+  const { PDFDocument, degrees } = await import('pdf-lib')
   const src = await PDFDocument.load(await pdfDoc.getData(), { ignoreEncryption: true })
   const out = await PDFDocument.create()
   const srcIdx = order.filter((e) => e.src).map((e) => e.src - 1)
   const copied = await out.copyPages(src, srcIdx)
   let k = 0
   for (const e of order) {
-    if (e.src) out.addPage(copied[k++])
-    else out.addPage([e.blank.w, e.blank.h])
+    if (e.src) {
+      const pg = copied[k++]
+      if (normRot(e.rot)) pg.setRotation(degrees(normRot((pg.getRotation().angle ?? 0) + e.rot)))
+      out.addPage(pg)
+    } else out.addPage([e.blank.w, e.blank.h])
   }
   try {
     const title = src.getTitle()
