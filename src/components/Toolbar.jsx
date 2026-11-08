@@ -50,10 +50,13 @@ export default function Toolbar({
     <header className="relative z-20 border-b border-ink-200 bg-surface">
       {/* 좁은 화면(폰·세로 아이패드)에서는 줄을 바꾸지 않고 한 줄로 옆으로 밀어 봄 */}
       <div className="no-scrollbar flex flex-wrap items-center gap-x-2.5 gap-y-2 px-3 py-2 max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:overscroll-x-contain max-lg:*:shrink-0">
-      <div className={`flex items-center gap-2 ${pdfDoc ? 'max-sm:hidden' : ''}`}>
-        <Logo />
-        <span className="hidden text-[15px] font-semibold tracking-tight text-ink-900 xl:inline">JCP 도면 관리</span>
-      </div>
+      {/* 도면을 볼 때는 로고·앱 이름 없이 도구만 */}
+      {!pdfDoc && (
+        <div className="flex items-center gap-2">
+          <Logo />
+          <span className="hidden text-[15px] font-semibold tracking-tight text-ink-900 xl:inline">JCP 도면 관리</span>
+        </div>
+      )}
 
       {/* PDF 열기는 홈의 '도면 열기' 칸과 탭 줄 + 버튼에서 */}
       {pdfDoc && (
