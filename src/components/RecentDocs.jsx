@@ -1,4 +1,4 @@
-// 홈 오른쪽 아래 "최근 연 도면": 마지막으로 연 시각(last_opened) 순서로 10개.
+// 홈 오른쪽 아래 "최근 열어본 도면": 마지막으로 연 시각(last_opened) 순서로 10개.
 // 목록(recent)은 저장소가 이미 연 시각 순서로 주므로 앞에서 10개만 자름.
 // 서버 저장이면 연 시각도 서버에 있어 다른 컴퓨터에서 연 도면도 함께 보임.
 import { useState } from 'react'
@@ -56,7 +56,7 @@ export default function RecentDocs({ list, library, openIds, onOpen }) {
           <circle cx="12" cy="12" r="9" />
           <path d="M12 7v5l3 2" />
         </svg>
-        최근 연 도면
+        최근 열어본 도면
         <svg viewBox="0 0 24 24" aria-hidden="true" className={`ml-auto h-4 w-4 transition-transform ${hidden ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M6 9l6 6 6-6" />
         </svg>
@@ -87,19 +87,16 @@ export default function RecentDocs({ list, library, openIds, onOpen }) {
                       )}
                       {isOpen && <span className="shrink-0 rounded bg-brand-100 px-1.5 py-0.5 text-xs text-brand-700">열려 있음</span>}
                     </div>
-                    {(alias || last) && (
-                      <div className="flex min-w-0 items-center gap-2 text-xs text-ink-400">
-                        {last && (
-                          <span className="flex min-w-0 shrink items-center gap-1" title={path.map((f) => f.name).join(' › ')}>
-                            <span style={{ color: colorHex(last.color) }}>
-                              <FolderIcon className="h-3 w-3 shrink-0" color="currentColor" />
-                            </span>
-                            <span className="truncate">{path.map((f) => f.name).join(' › ')}</span>
-                          </span>
-                        )}
-                        {alias && <span className="min-w-0 truncate">{fileBase(item.name)}</span>}
+                    {/* 폴더 경로와 원래 파일 이름은 각각 한 줄씩: 길면 잘리지 않고 다음 줄로 넘어감 */}
+                    {last && (
+                      <div className="flex min-w-0 items-start gap-1 text-xs text-ink-400">
+                        <span className="mt-0.5 shrink-0" style={{ color: colorHex(last.color) }}>
+                          <FolderIcon className="h-3 w-3" color="currentColor" />
+                        </span>
+                        <span className="min-w-0 [overflow-wrap:anywhere]">{path.map((f) => f.name).join(' › ')}</span>
                       </div>
                     )}
+                    {alias && <div className="min-w-0 text-xs text-ink-400 [overflow-wrap:anywhere]">{fileBase(item.name)}</div>}
                   </div>
                   <span className="shrink-0 text-xs text-ink-400 tabular-nums">{timeAgo(item.lastOpened)}</span>
                 </button>
