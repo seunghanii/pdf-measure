@@ -7,7 +7,7 @@ import { toPictureFile } from '../lib/clipPicture'
 import MemoEditor, { MemoHelp } from './MemoEditor'
 import PhotoViewer from './PhotoViewer'
 import DocPreview from './DocPreview'
-import { InstFields, RelatedDocs } from './InstCard'
+import { InstFields, IssueFields, RelatedDocs } from './InstCard'
 import ExcelFiles from './ExcelFiles'
 import CableSchedules, { CablePicker } from './CableSchedules'
 import { MAX_EXCEL_BYTES, XLSM_TYPE, XLSX_TYPE, excelType, isExcelFile, isOldExcel, newFileId } from '../lib/excel'
@@ -342,6 +342,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
 
       {/* 계기 카드 칸 (계기 카드일 때만) */}
       {memo.inst && <InstFields memo={memo} onChange={onChange} kinds={kinds} onAddKind={onAddKind} reading={tagReading} onReadTag={onReadTag && (() => onReadTag(true))} compact={bottom} />}
+      {memo.inst && <IssueFields key={memo.id} memo={memo} onChange={onChange} compact={bottom} />}
 
       {/* 관련 도면 (여러 개) */}
       <RelatedDocs memo={memo} library={library} onChange={onChange} onOpen={(l) => (l.photo ? openPhotoLink(l) : setPreviewing(l))} onPick={onPickLink} compact={bottom} />

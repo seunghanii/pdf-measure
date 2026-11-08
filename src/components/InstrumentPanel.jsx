@@ -82,6 +82,7 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
   const [scope, setScope] = useState('doc') // 'doc' 이 도면 | 'all' 모든 도면
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState(null) // null: 전체
+  const [issueOnly, setIssueOnly] = useState(false) // 이슈 체크가 켜진 것만
   const [others, setOthers] = useState(null) // 다른 도면들의 계기 줄 (모든 도면을 처음 고를 때 받음)
 
   useEffect(() => {
@@ -117,7 +118,8 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
     for (const r of matched) c.set(r.status, (c.get(r.status) ?? 0) + 1)
     return c
   }, [matched])
-  const rows = status ? matched.filter((r) => r.status === status) : matched
+  const issueCount = matched.filter((r) => r.issue).length
+  const rows = matched.filter((r) => (!status || r.status === status) && (!issueOnly || r.issue))
   const done = counts.get('checked') ?? 0
 
   // 같은 태그가 여러 번 (도면을 옮겨 그렸거나 잘못 적은 것) → 표시
@@ -174,6 +176,16 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
               {s.label} <span className="tabular-nums">{counts.get(s.id) ?? 0}</span>
             </button>
           ))}
+          {(issueCount > 0 || issueOnly) && (
+            <button
+              onClick={() => setIssueOnly((v) => !v)}
+              aria-pressed={issueOnly}
+              title="이슈 체크가 켜진 Equipment 만"
+              className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${issueOnly ? 'bg-danger-600 text-white' : 'text-danger-700 ring-1 ring-danger-200 hover:bg-danger-50'}`}
+            >
+              Issue <span className="tabular-nums">{issueCount}</span>
+            </button>
+          )}
         </div>
         {matched.length > 0 && (
           <div className="flex items-center gap-2 text-xs text-ink-500">
@@ -236,6 +248,11 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
                           중복
                         </span>
                       )}
+                      {r.issue ? (
+                        <span className="ml-1 rounded bg-danger-600 px-1 text-[10px] font-semibold text-white" title={(r.iss ?? []).map((x) => `· ${x.t}`).join('\n') || '이슈 체크'}>
+                          Issue {r.iss?.length || ''}
+                        </span>
+                      ) : null}
                       {r.hidden ? <span className="ml-1 text-[11px] text-ink-400">· 숨김</span> : null}
                       {r.desc && (
                         <div className="mt-0.5 max-w-48 truncate text-[11px] text-ink-500" title={r.desc}>

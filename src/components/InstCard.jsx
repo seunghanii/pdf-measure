@@ -4,6 +4,7 @@ import { useInstList } from '../lib/instList'
 import { convertTyped, hasHangul } from '../lib/hangulKeys'
 import { useImageUrl } from '../lib/images'
 import BoxIcon from './BoxIcon'
+import { addIssue, clearIssue, clearedIssues, editIssue, fmtIssueDay, hasIssue, openIssues, setIssueFlag } from '../lib/issues'
 
 // 메모장 안의 계기 카드 칸: Tag. No, Description, 종류, 상태
 // onChange(patch): 메모 항목에 합칠 값. kinds: 계기 종류 목록, onAddKind(약어): 목록에 더하기 (모든 도면 공통)
@@ -516,5 +517,145 @@ function LinkThumb({ id }) {
         </svg>
       )}
     </span>
+  )
+}
+
+// ---------- 이슈 ----------
+// Issue 체크 + 이슈 글 목록. 이슈마다 Clear 체크, 모두 clear 되면 Issue 체크도 꺼짐.
+// 글은 지우지 않고 '이슈 기록'으로 남김 (적은 날·clear 한 날)
+export function IssueFields({ memo, onChange, compact = false }) {
+  const inst = memo.inst
+  const on = hasIssue(inst)
+  const open = openIssues(inst)
+  const past = clearedIssues(inst)
+  const [draft, setDraft] = useState('')
+  const [showPast, setShowPast] = useState(false)
+  const [editing, setEditing] = useState(null) // 고치는 이슈 id
+  const set = (next) => onChange({ inst: next })
+
+  const add = () => {
+    if (!draft.trim()) return
+    set(addIssue(inst, draft))
+    setDraft('')
+  }
+  const toggleFlag = () => {
+    if (on && open.length && !window.confirm(`열린 이슈 ${open.length}개를 모두 Clear 로 표시할까요?\n이슈 글은 기록으로 남아요.`)) return
+    set(setIssueFlag(inst, !on))
+  }
+
+  const label = 'text-[11px] font-semibold tracking-wide text-ink-500'
+  return (
+    <div className={`flex flex-col gap-1.5 border-b border-ink-100 px-3 ${compact ? 'py-1.5' : 'py-2'} ${on ? 'bg-danger-50/40' : ''}`}>
+      <div className="flex items-center gap-2">
+        <label className="flex cursor-pointer items-center gap-2">
+          <span className={`${label} ${compact ? '' : 'w-20'} shrink-0`}>Issue</span>
+          <input type="checkbox" checked={on} onChange={toggleFlag} className="h-4 w-4 accent-danger-600" aria-label="Issue 체크" />
+          {on && (
+            <span className="rounded-full bg-danger-600 px-2 py-px text-[11px] font-semibold text-white tabular-nums">
+              {open.length ? `열림 ${open.length}` : '적을 이슈 없음'}
+            </span>
+          )}
+        </label>
+        {past.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowPast((v) => !v)}
+            aria-expanded={showPast}
+            className="ml-auto rounded px-1.5 py-0.5 text-[11px] text-ink-500 hover:bg-ink-100 hover:text-ink-800"
+            title="Clear 한 이슈 기록 보기"
+          >
+            이슈 기록 {past.length} {showPast ? '▴' : '▾'}
+          </button>
+        )}
+      </div>
+      {on && (
+        <>
+          {open.length > 0 && (
+            <ul className={`flex max-h-48 flex-col gap-1 overflow-y-auto ${compact ? '' : 'pl-[5.5rem]'}`} aria-label="열린 이슈">
+              {open.map((x) => (
+                <li key={x.id} className="flex items-start gap-2 rounded-md bg-surface px-2 py-1 ring-1 ring-danger-200">
+                  <input
+                    type="checkbox"
+                    checked={false}
+                    onChange={() => set(clearIssue(inst, x.id, true))}
+                    className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-ok-600"
+                    aria-label={`Clear: ${x.text}`}
+                    title="Clear 로 표시"
+                  />
+                  {editing === x.id ? (
+                    <textarea
+                      autoFocus
+                      defaultValue={x.text}
+                      rows={2}
+                      onBlur={(e) => {
+                        const t = e.target.value.trim()
+                        if (t && t !== x.text) set(editIssue(inst, x.id, t))
+                        setEditing(null)
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                          e.preventDefault()
+                          e.currentTarget.blur()
+                        }
+                        if (e.key === 'Escape') {
+                          e.stopPropagation()
+                          setEditing(null)
+                        }
+                      }}
+                      className="min-w-0 flex-1 resize-none rounded border border-ink-200 px-1.5 py-0.5 text-xs outline-none focus:border-brand-500"
+                      aria-label="이슈 고치기"
+                    />
+                  ) : (
+                    <button type="button" onClick={() => setEditing(x.id)} className="min-w-0 flex-1 text-left text-xs whitespace-pre-wrap text-ink-800" title="눌러서 고치기">
+                      {x.text}
+                    </button>
+                  )}
+                  <span className="shrink-0 pt-px text-[10px] text-ink-400 tabular-nums">{fmtIssueDay(x.at)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className={`flex items-center gap-1.5 ${compact ? '' : 'pl-[5.5rem]'}`}>
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                  e.preventDefault()
+                  add()
+                }
+              }}
+              placeholder="이슈 적고 Enter (예: 케이블 길이 부족)"
+              autoFocus={on && !open.length}
+              className="min-w-0 flex-1 rounded-md border border-ink-200 px-2 py-1 text-xs outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+              aria-label="새 이슈"
+            />
+            <button type="button" onClick={add} disabled={!draft.trim()} className="shrink-0 rounded-md bg-ink-800 px-2 py-1 text-xs font-medium text-surface hover:bg-ink-700 disabled:opacity-40">
+              추가
+            </button>
+          </div>
+        </>
+      )}
+      {showPast && past.length > 0 && (
+        <ul className={`flex max-h-40 flex-col gap-1 overflow-y-auto ${compact ? '' : 'pl-[5.5rem]'}`} aria-label="이슈 기록">
+          {[...past].sort((a, b) => b.clear - a.clear).map((x) => (
+            <li key={x.id} className="flex items-start gap-2 rounded-md bg-ink-50 px-2 py-1">
+              <input
+                type="checkbox"
+                checked
+                onChange={() => set(clearIssue(inst, x.id, false))}
+                className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-ok-600"
+                aria-label={`다시 열기: ${x.text}`}
+                title="체크를 풀면 다시 열린 이슈가 돼요"
+              />
+              <span className="min-w-0 flex-1 text-xs whitespace-pre-wrap text-ink-500 line-through decoration-ink-300">{x.text}</span>
+              <span className="shrink-0 pt-px text-[10px] text-ink-400 tabular-nums" title="적은 날 → Clear 한 날">
+                {fmtIssueDay(x.at)} → {fmtIssueDay(x.clear)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   )
 }
