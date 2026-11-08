@@ -1098,6 +1098,9 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
     setMeasurements((prev) => prev.map((m) => (inGroup(m) ? { ...m, hidden } : m)))
   }
 
+  // (훅이라 아래 '안 보이는 탭이면 그리지 않음' 보다 먼저) 페이지 편집을 뒤에서 서버에 올리는 중인지 (실패해 다시 시도 중이면 'retry')
+  const pageSyncing = useSyncExternalStore(subscribePageSync, () => (isPageSyncPending(doc.id) ? (pageSyncFailed(doc.id) ? 'retry' : 'saving') : ''))
+
   if (!active) return null
 
   // ---------- 개정판으로 바꾸기 ----------
@@ -1160,8 +1163,6 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
   // ---------- 페이지 편집 (빈 페이지 넣기·지우기·순서 바꾸기) ----------
   // order: lib/pageEdit.js 의 새 쪽 목록, label: 되돌리기에 보일 이름, focus: 편집 뒤 볼 쪽 (새 번호)
   const pageUndo = pageEditUndo(doc.id)
-  // 페이지 편집을 뒤에서 서버에 올리는 중인지 (실패해 다시 시도 중이면 'retry')
-  const pageSyncing = useSyncExternalStore(subscribePageSync, () => (isPageSyncPending(doc.id) ? (pageSyncFailed(doc.id) ? 'retry' : 'saving') : ''))
   const canUndoPages = !!pageUndo && pageUndo.pdf === pdfDoc
   const nowState = () => ({ measurements, trash, calibration, pageNum })
   // backup: 편집 전 PDF 를 예전 판 '페이지 편집 전' 으로 보관 (이 창에서 이 도면을 처음 편집할 때만, 그런 보관본은 하나만 둠)
