@@ -14,13 +14,29 @@ export const listKey = (s) => String(s ?? '').toUpperCase().replace(/[^A-Z0-9가
 
 const str = (v, n) => String(v ?? '').trim().slice(0, n)
 
+// 한 칸에 적힌 Tag. No 를 실제 태그들로 (KKS 형식 00AAA00AA000)
+// - 숫자로 시작하는 태그는 띄어쓰기·줄바꿈을 모두 뺌 ("00PGB 18CT001" → "00PGB18CT001")
+// - 계통 번호를 / 로 묶은 것: "02LAC11/12/13CP501" → 02LAC11CP501, 02LAC12CP501, 02LAC13CP501
+// - 끝 번호를 / 로 묶은 것: "00PGB18CT302/304/306" → 00PGB18CT302, 00PGB18CT304, 00PGB18CT306
+// 그 밖의 글(장비 이름 등)은 그대로
+export function splitTag(raw) {
+  let t = String(raw ?? '').toUpperCase().trim()
+  if (/^\d{2}/.test(t)) t = t.replace(/\s+/g, '')
+  if (!t.includes('/')) return [t]
+  let m = t.match(/^(\d{2}[A-Z]{3})(\d{2}(?:\/\d{2})+)([A-Z]{2}\d{3}[A-Z]?)$/)
+  if (m) return m[2].split('/').map((n) => m[1] + n + m[3])
+  m = t.match(/^(\d{2}[A-Z]{3}\d{2}[A-Z]{2})(\d{3}[A-Z]?(?:\/\d{3}[A-Z]?)+)$/)
+  if (m) return m[2].split('/').map((n) => m[1] + n)
+  return [t]
+}
+
 export function normalizeInstList(l) {
   if (!l || !Array.isArray(l.rows)) return EMPTY_INST_LIST
   const rows = []
   for (const r of l.rows.slice(0, MAX_ROWS)) {
-    const tag = str(r?.tag, 80).toUpperCase()
-    if (!listKey(tag)) continue
-    rows.push({ tag, desc: str(r?.desc, 300), type: str(r?.type, 20).toUpperCase() })
+    const desc = str(r?.desc, 300)
+    const type = str(r?.type, 20).toUpperCase()
+    for (const tag of splitTag(str(r?.tag, 80))) if (listKey(tag)) rows.push({ tag, desc, type })
   }
   return { rows, name: str(l.name, 200), at: Number(l.at) || 0 }
 }
@@ -71,7 +87,15 @@ export function loadInstList(store) {
   setCurrent(EMPTY_INST_LIST)
   store
     .getInstList?.()
-    .then((l) => loadedFrom === store && setCurrent(normalizeInstList(l)))
+    .then((l) => {
+      if (loadedFrom !== store) return
+      const list = normalizeInstList(l)
+      setCurrent(list)
+      // 예전에 올린 목록에 묶인 태그·띄어쓰기가 있었으면 나눈 목록으로 한 번 다시 저장
+      const before = Array.isArray(l?.rows) ? l.rows.map((r) => r?.tag).join('\n') : ''
+      if (list.rows.length && before !== list.rows.map((r) => r.tag).join('\n'))
+        store.saveInstList?.(list)?.catch?.((e) => console.warn('Inst list 다시 저장 실패', e))
+    })
     .catch((e) => console.warn('Inst list 를 불러오지 못함', e))
 }
 
@@ -204,15 +228,19 @@ function addTable(table, acc, fallback) {
   let n = 0
   for (let i = col.row + 1; i < table.length; i++) {
     const r = table[i] ?? []
-    const tag = str(r[col.tag], 80).toUpperCase()
-    const k = listKey(tag)
-    if (!k) {
+    const tags = splitTag(str(r[col.tag], 80)).filter((t) => listKey(t))
+    if (!tags.length) {
       if (r.some((c) => str(c, 1))) acc.skipped++
       continue
     }
-    if (acc.byKey.has(k)) acc.dup++ // 같은 Tag. No 가 또 나오면 아래 줄(뒤 시트)로
-    acc.byKey.set(k, { tag, desc: col.desc >= 0 ? str(r[col.desc], 300) : '', type: col.type >= 0 ? str(r[col.type], 20).toUpperCase() : '' })
-    n++
+    const desc = col.desc >= 0 ? str(r[col.desc], 300) : ''
+    const type = col.type >= 0 ? str(r[col.type], 20).toUpperCase() : ''
+    for (const tag of tags) {
+      const k = listKey(tag)
+      if (acc.byKey.has(k)) acc.dup++ // 같은 Tag. No 가 또 나오면 아래 줄(뒤 시트)로
+      acc.byKey.set(k, { tag, desc, type })
+      n++
+    }
   }
   return n
 }
