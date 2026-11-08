@@ -88,7 +88,8 @@ export default function InstListDialog({ store, onClose }) {
       else setPending({ name: file.name, ...res, diff: compare(list.rows, res.rows) })
     } catch (e) {
       console.warn('Inst list 읽기 실패', e)
-      setError(e?.message?.includes('.xls') ? e.message : '파일을 읽지 못했어요. CSV(쉼표로 구분) 파일인지 봐 주세요.')
+      // 엑셀 읽기가 알려 준 이유(민감도 레이블로 잠김, 예전 .xls 등)는 그대로 보여 줌
+      setError(/[가-힣]/.test(e?.message ?? '') && e.message.length < 160 ? e.message : '파일을 읽지 못했어요. CSV(쉼표로 구분)나 엑셀(.xlsx) 파일인지 봐 주세요.')
     } finally {
       setBusy(false)
     }
