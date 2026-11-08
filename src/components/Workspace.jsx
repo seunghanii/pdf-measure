@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { distance } from '../lib/geometry'
 import { PT_TO_PAPER_MM, UNITS, calibrationInput } from '../lib/units'
 import { TYPE_INFO } from '../lib/measure'
@@ -36,6 +36,7 @@ import PageNavigator, { carryThumbs } from './PageNavigator'
 import { loadPdf } from '../lib/pdf'
 import { MAX_UPLOAD_BYTES } from '../lib/cloudStore'
 import { buildPdf, popPageEdit, setPageEditCarry, takePageEditCarry, invertOrder, loadPageNavOpen, pageEditUndo, rememberPageEdit, remapIndex, remapState, rotatedSizes, savePageNavOpen, undoState } from '../lib/pageEdit'
+import { isPageSyncPending, pageSyncFailed, subscribePageSync } from '../lib/pageSync'
 import { readTagInBox } from '../lib/tagRead'
 
 // 메모장은 마크다운 읽는 도구까지 필요할 때만 불러옴
@@ -1097,6 +1098,9 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
     setMeasurements((prev) => prev.map((m) => (inGroup(m) ? { ...m, hidden } : m)))
   }
 
+  // (훅이라 아래 '안 보이는 탭이면 그리지 않음' 보다 먼저) 페이지 편집을 뒤에서 서버에 올리는 중인지 (실패해 다시 시도 중이면 'retry')
+  const pageSyncing = useSyncExternalStore(subscribePageSync, () => (isPageSyncPending(doc.id) ? (pageSyncFailed(doc.id) ? 'retry' : 'saving') : ''))
+
   if (!active) return null
 
   // ---------- 개정판으로 바꾸기 ----------
@@ -1168,9 +1172,8 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
     const oldBackups = backup ? revs.revisions.filter((r) => r.pageBackup) : []
     try {
       const now = Date.now()
-      let keptBackup = false
       const revisionsAfter = (kept) =>
-        (keptBackup = backup && !!kept)
+        backup && kept
           ? [
               { ...currentRev, label: `${currentRev.label} · 페이지 편집 전`, key: keepKey, file: true, replacedAt: now, pv: pageLogV(revs.pageLog), pageBackup: true },
               ...revs.revisions.filter((r) => !r.pageBackup),
@@ -1192,9 +1195,12 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
         activity: autosaveCtl.current?.activity?.() ?? [],
       })
       setPageEditCarry(doc.id, { tool: tool === 'calibrate' ? 'select' : tool })
-      await onReplaceFile({ file, pdfDoc: newPdf, buildState, index, notice, ...(keepKey && { keepKey }) })
-      // 예전 '페이지 편집 전' 보관본은 새것으로 바꿈
-      if (keptBackup) for (const r of oldBackups) store.removeRevisionFile(doc.id, r.key).catch((e) => console.warn('예전 보관본 지우기 실패', e))
+      // 화면은 바로 바꾸고 서버 저장은 뒤에서 (App.replaceDoc background, lib/pageSync.js)
+      // 서버에 다 올린 뒤: 예전 '페이지 편집 전' 보관본은 새것으로 바꿈
+      const afterSave = (kept) => {
+        if (backup && kept) for (const r of oldBackups) store.removeRevisionFile(doc.id, r.key).catch((e) => console.warn('예전 보관본 지우기 실패', e))
+      }
+      await onReplaceFile({ file, pdfDoc: newPdf, buildState, index, notice, background: true, afterSave, ...(keepKey && { keepKey }) })
     } catch (e) {
       takePageEditCarry(doc.id)
       autosaveCtl.current?.resume()
@@ -1203,7 +1209,7 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
   }
   const editPages = async (order, { label, focus }) => {
     if (pageBusy || !onReplaceFile) return
-    setPageBusy('페이지를 저장하고 있어요…')
+    setPageBusy('페이지를 바꾸고 있어요…')
     setNotice('')
     let newPdf = null
     try {
@@ -1338,7 +1344,7 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
         onRevision={onReplaceFile ? () => setRevisionOpen(true) : null}
         revLabel={revs.rev?.label}
         saving={saving}
-        syncStatus={cloud ? syncStatus : null}
+        syncStatus={cloud ? (pageSyncing ? 'saving' : syncStatus) : null}
       />
 
       {notice && (
@@ -1361,6 +1367,7 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
             measurements={measurements}
             onEdit={onReplaceFile && !boxPick ? editPages : null}
             busy={pageBusy}
+            syncing={pageSyncing}
             undoLabel={canUndoPages ? pageUndo.label : null}
             onUndo={undoPages}
             onClose={() => setPageNavOpen(false)}
