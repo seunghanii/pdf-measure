@@ -576,6 +576,11 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
     },
     [openMemoAt],
   )
+  // 홈 'Issue' 에서 누르고 왔으면 그 Equipment 카드도 엶
+  useEffect(() => {
+    if (rawSearchJump?.openId) openMemoAt(rawSearchJump.openId, null, null, { force: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawSearchJump?.nonce])
 
   // 메모 글·이름·연결 고치기. 메모장을 연 동안의 변경은 되돌리기 한 번으로 묶음
   const memoGesture = useRef(null)

@@ -3,6 +3,7 @@ import { AuthPanel, MigrationCard } from './Account'
 import Library, { FolderDialog, FolderIcon } from './Library'
 import RecentDocs from './RecentDocs'
 import RecentActivity from './RecentActivity'
+import IssueBoard from './IssueBoard'
 import HomeCalendar from './Calendar'
 import { addFolder, editFolder } from '../lib/library'
 import { TRASH_DAYS, leftLabel } from '../lib/trash'
@@ -144,6 +145,7 @@ export default function EmptyState({
         {/* 오른쪽 칸: 위 최근 수정, 아래 최근 연 도면 10개 */}
         {side && (
           <aside className="mt-8 min-w-0 space-y-8 lg:col-start-3 lg:row-span-2 lg:row-start-1 lg:mt-0">
+            <IssueBoard list={list} library={library} onOpen={(doc, row) => onOpenActivity(doc, { a: 'edit', id: row.id, p: row.page, r: row.rect, open: true })} />
             <RecentActivity list={list} library={library} onGo={onOpenActivity} />
             <RecentDocs list={list} library={library} openIds={openIds} onOpen={onOpenRecent} />
           </aside>

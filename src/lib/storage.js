@@ -123,8 +123,8 @@ export async function listRecent() {
 // 홈 목록에 보여 줄 요약: 측정·마크업 개수와 축척, 홈 검색용 직접 넣은 글(notes)
 // v: 요약 모양 판. 검색에 넣는 글이 바뀌면 올려서 예전 요약을 한 번 다시 쓰게 함 (2: 메모 제목 추가, 3: 숨긴 항목도 넣고 항목 id·숨김 표시,
 // 4: 계기 카드 속성을 검색에 넣고 계기 목록(inst) 추가, 5: 계기 카드 Description, 6: 계기 카드 작업 완료 날짜 done, 7: 최근 수정 기록 activity,
-// 8: 박스 이름 names — 이미 이름을 바꾼 박스도 연결 쪽에 바로 보이게 예전 요약을 다시 씀)
-export const SUMMARY_VERSION = 8
+// 8: 박스 이름 names — 이미 이름을 바꾼 박스도 연결 쪽에 바로 보이게 예전 요약을 다시 씀, 9: Equipment 이슈 issue·iss)
+export const SUMMARY_VERSION = 9
 export function summarize(state) {
   return {
     v: SUMMARY_VERSION,
