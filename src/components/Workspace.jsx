@@ -686,6 +686,16 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
     },
     [beginEdit, updateItem],
   )
+  // Equipment 목록의 Type 칸에서 바로 고르기
+  const setCardKind = useCallback(
+    (id, kind) => {
+      const inst = measurementsRef.current.find((m) => m.id === id)?.inst
+      if (!inst || (inst.kind ?? '') === kind) return
+      beginEdit()
+      updateItem(id, { inst: { ...inst, kind } })
+    },
+    [beginEdit, updateItem],
+  )
   // Equipment 박스 안 글자로 Tag. No 채우기 (PDF 글자, 없으면 박스 부분만 OCR)
   // force: '박스 읽기' 단추 (이미 적힌 태그도 바꾸고, 못 읽으면 알림). 아니면 새 박스: 그사이 사용자가 태그를 쳤으면 그대로 둠
   const [tagReading, setTagReading] = useState(() => new Set())
@@ -1441,6 +1451,8 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
                   onOpenLink?.({ id: row.docId, name: row.docName, page: row.page, rect: { x, y, w, h } })
                 }}
                 onSetStatus={setCardStatus}
+                onSetKind={setCardKind}
+                onAddKind={onAddKind}
                 onPreview={(hit) => jumpToHit({ page: hit.page, rect: hit.rect })}
                 onCreateCards={createCards}
                 kinds={instKinds}
