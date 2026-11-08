@@ -8,6 +8,9 @@ import { kindList } from './lib/instrument'
 import { EMPTY_LIBRARY, cleanRoles, displayName, forgetDoc, loadOpenFolder, moveDoc, saveOpenFolder, setAlias } from './lib/library'
 import { isExpired, setTrashedDocs, trashDoc, untrashDoc } from './lib/trash'
 import { cloudConfigured, networkHint, signOut, supabase } from './lib/supabase'
+
+// 오류 이름·글 짧게 (원인을 알아볼 수 있게 안내 끝에 붙임)
+const errText = (e) => `${e?.name ?? '오류'}: ${String(e?.message ?? e ?? '').slice(0, 120)}`
 import Workspace from './components/Workspace'
 import Toolbar from './components/Toolbar'
 import TabBar from './components/TabBar'
@@ -443,7 +446,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
         setError(
           e?.code === 'no_file'
             ? `"${item.name}" 의 PDF 파일은 서버에 없어요. 같은 PDF 를 다시 열면 저장된 측정값이 그대로 이어져요.`
-            : (networkHint(e) ?? `다시 열 수 없어요: ${item.name}. 목록에서 삭제하고 파일을 새로 열어 주세요.`),
+            : (networkHint(e) ?? `다시 열 수 없어요: ${item.name}. 페이지를 새로고침한 뒤 다시 열어 보고, 그래도 안 되면 알려 주세요. (${errText(e)})`),
         )
       } finally {
         setLoading(false)
