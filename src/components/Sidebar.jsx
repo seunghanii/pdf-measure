@@ -6,6 +6,7 @@ import { CATEGORY_COLORS, CATEGORY_PRESETS, categoryTotals } from '../lib/catego
 import { itemGroup } from '../lib/instrument'
 import { TRASH_DAYS, leftLabel } from '../lib/trash'
 import { loadUncalHidden, saveUncalHidden } from '../lib/scalePanel'
+import { loadFolded, saveFolded } from '../lib/sectionFold'
 import { useInstLabelsOff } from '../lib/instLabels'
 import { SIDEBAR_DEFAULT_W, clampSidebarWidth, setSidebarWidth, useSidebarWidth } from '../lib/sidebarWidth'
 
@@ -51,6 +52,13 @@ export default function Sidebar({
   const [scaleOpen, setScaleOpen] = useState(false)
   // 축척이 없을 때도 접을 수 있음 (접은 상태는 이 브라우저에 기억)
   const [uncalHidden, setUncalHidden] = useState(loadUncalHidden)
+  const [folded, setFolded] = useState(loadFolded)
+  const toggleFold = (g) =>
+    setFolded((list) => {
+      const next = list.includes(g) ? list.filter((x) => x !== g) : [...list, g]
+      saveFolded(next)
+      return next
+    })
   const scaleShown = mmPerPt ? scaleOpen : !uncalHidden
   const toggleScale = () => {
     if (mmPerPt) setScaleOpen((v) => !v)
@@ -312,6 +320,8 @@ export default function Sidebar({
             </>
           }
           group="measure"
+          folded={folded.includes('measure')}
+          onToggleFold={() => toggleFold('measure')}
           {...rowProps}
         />
         <ItemSection
@@ -327,6 +337,8 @@ export default function Sidebar({
             </button>
           }
           group="markup"
+          folded={folded.includes('markup')}
+          onToggleFold={() => toggleFold('markup')}
           {...rowProps}
         />
         {/* 계기 카드는 마크업과 따로: "마크업 전체 삭제"에 들어가지 않음, 한꺼번에 지우는 버튼도 없음 */}
@@ -335,6 +347,8 @@ export default function Sidebar({
           items={cards}
           empty="툴바의 'Equipment'(E)로 박스를 그리거나, 위 'Tag 찾기'로 만들어요."
           group="inst"
+          folded={folded.includes('inst')}
+          onToggleFold={() => toggleFold('inst')}
           {...rowProps}
           actions={
             <button className="text-ink-500 hover:underline" onClick={() => setLabelsOff((v) => !v)} title="도면 위 Equipment 박스 이름표를 모두 숨기거나 보이기 (모든 도면)">
@@ -459,15 +473,26 @@ function EyeButton({ hidden, onClick, label }) {
   )
 }
 
-function ItemSection({ title, items, total = items.length, head, empty, actions, group, mmPerPt, unit, pageNum, numPages, selectedIds, onSetAllHidden, rowActions, categories }) {
+function ItemSection({ title, items, total = items.length, head, empty, actions, group, mmPerPt, unit, pageNum, numPages, selectedIds, onSetAllHidden, rowActions, categories, folded, onToggleFold }) {
   const allHidden = items.length > 0 && items.every((m) => m.hidden)
   return (
     <section className="border-b border-ink-100 last:border-b-0">
-      <div className="flex items-center justify-between px-4 pt-4 pb-2">
-        <h3 className="text-xs font-semibold tracking-wide text-ink-500">
-          {title} ({total === items.length ? total : `${items.length}/${total}`})
-        </h3>
-        {total > 0 && (
+      <div className={`flex items-center justify-between gap-2 px-4 ${folded ? 'py-2.5' : 'pt-4 pb-2'}`}>
+        {/* 제목을 누르면 이 칸을 접고 펼침 (모든 도면 공통, 이 브라우저에 기억) */}
+        <button
+          onClick={onToggleFold}
+          aria-expanded={!folded}
+          title={folded ? `${title} 펼치기` : `${title} 접기`}
+          className="-mx-1.5 -my-0.5 flex min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-left transition-colors hover:bg-ink-50"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" className={`h-3.5 w-3.5 shrink-0 text-ink-400 transition-transform ${folded ? '-rotate-90' : ''}`} fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+          <h3 className="truncate text-xs font-semibold tracking-wide text-ink-500">
+            {title} ({total === items.length ? total : `${items.length}/${total}`})
+          </h3>
+        </button>
+        {!folded && total > 0 && (
           <div className="flex items-center gap-3 text-xs">
             <button
               className="text-ink-500 hover:underline"
@@ -480,23 +505,27 @@ function ItemSection({ title, items, total = items.length, head, empty, actions,
           </div>
         )}
       </div>
-      {head}
-      <ul className="px-2 pb-3">
-        {items.length === 0 && <li className="px-2 py-3 text-center text-sm text-ink-400">{empty}</li>}
-        {items.map((m) => (
-          <ItemRow
-            key={m.id}
-            m={m}
-            mmPerPt={mmPerPt}
-            unit={unit}
-            otherPage={m.page !== pageNum}
-            gonePage={numPages > 0 && m.page > numPages}
-            selected={selectedIds.includes(m.id)}
-            actions={rowActions}
-            categories={isMarkup(m.type) ? null : categories}
-          />
-        ))}
-      </ul>
+      {!folded && (
+        <>
+          {head}
+          <ul className="px-2 pb-3">
+            {items.length === 0 && <li className="px-2 py-3 text-center text-sm text-ink-400">{empty}</li>}
+            {items.map((m) => (
+              <ItemRow
+                key={m.id}
+                m={m}
+                mmPerPt={mmPerPt}
+                unit={unit}
+                otherPage={m.page !== pageNum}
+                gonePage={numPages > 0 && m.page > numPages}
+                selected={selectedIds.includes(m.id)}
+                actions={rowActions}
+                categories={isMarkup(m.type) ? null : categories}
+              />
+            ))}
+          </ul>
+        </>
+      )}
     </section>
   )
 }
