@@ -100,7 +100,8 @@ function Chevron({ dir, className = 'h-4 w-4' }) {
 
 const navBtn = 'flex h-7 w-7 items-center justify-center rounded-md text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-800'
 
-export default function HomeCalendar({ store, list = [], library, onOpenEquip }) {
+// full: 홈 '달력' 화면처럼 큰 달력을 그 자리에 바로 (창으로 띄우지 않음)
+export default function HomeCalendar({ store, list = [], library, onOpenEquip, full = false }) {
   const today = useToday()
   const [weekend, setWeekend] = useState(loadWeekend)
   const [month, setMonth] = useState(() => startOfMonth(new Date()))
@@ -146,6 +147,27 @@ export default function HomeCalendar({ store, list = [], library, onOpenEquip })
     setWeekend(days)
     saveWeekend(days)
   }
+
+  if (full)
+    return (
+      <CalendarDialog
+        inline
+        initial={today}
+        today={today}
+        weekend={weekend}
+        onWeekend={changeWeekend}
+        pubShow={pubShow}
+        onPubShow={changePubShow}
+        events={cal.events}
+        onSaveEvents={saveEvents}
+        holidays={holidays}
+        onToggleHoliday={toggleHoliday}
+        equip={equip}
+        library={library}
+        onOpenEquip={(item) => onOpenEquip?.(item.doc, item.row)}
+        onClose={() => {}}
+      />
+    )
 
   return (
     <section>
@@ -323,7 +345,7 @@ function MonthGrid({ month, today, weekend, holidays, pubShow, events, equip, on
 }
 
 // 크게 보기 Calendar 창
-function CalendarDialog({ initial, today, weekend, onWeekend, pubShow, onPubShow, holidays, onToggleHoliday, events, onSaveEvents, equip, library, onOpenEquip, onClose }) {
+function CalendarDialog({ inline = false, initial, today, weekend, onWeekend, pubShow, onPubShow, holidays, onToggleHoliday, events, onSaveEvents, equip, library, onOpenEquip, onClose }) {
   const [month, setMonth] = useState(() => startOfMonth(initial))
   const [selected, setSelected] = useState(initial)
   const [settings, setSettings] = useState(false)
@@ -337,7 +359,7 @@ function CalendarDialog({ initial, today, weekend, onWeekend, pubShow, onPubShow
 
   const closeRef = useRef(null)
   useLayoutEffect(() => {
-    closeRef.current = () => (editing ? setEditing(null) : onClose(month))
+    closeRef.current = () => (editing ? setEditing(null) : inline ? null : onClose(month))
   })
   useEffect(() => {
     const onKey = (e) => {
@@ -368,13 +390,17 @@ function CalendarDialog({ initial, today, weekend, onWeekend, pubShow, onPubShow
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-2 sm:p-4" onMouseDown={() => onClose(month)}>
+    <div className={inline ? 'flex min-h-0 flex-1' : 'fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-2 sm:p-4'} onMouseDown={inline ? undefined : () => onClose(month)}>
       <div
-        role="dialog"
-        aria-modal="true"
+        role={inline ? 'region' : 'dialog'}
+        aria-modal={inline ? undefined : 'true'}
         aria-label="Calendar"
         onMouseDown={(e) => e.stopPropagation()}
-        className="flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-surface shadow-xl"
+        className={
+          inline
+            ? 'flex min-h-0 w-full flex-col overflow-hidden rounded-2xl bg-surface shadow-sm ring-1 ring-ink-200'
+            : 'flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-surface shadow-xl'
+        }
       >
         {/* 머리줄 */}
         <div className="flex flex-wrap items-center gap-2 border-b border-ink-200 px-4 py-3">
@@ -414,11 +440,11 @@ function CalendarDialog({ initial, today, weekend, onWeekend, pubShow, onPubShow
               </svg>
               <span className="hidden sm:inline">휴무 설정</span>
             </button>
-            <button onClick={() => onClose(month)} className={navBtn} title="닫기 (Esc)" aria-label="닫기">
+            {!inline && <button onClick={() => onClose(month)} className={navBtn} title="닫기 (Esc)" aria-label="닫기">
               <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <path d="M6 6l12 12M18 6L6 18" />
               </svg>
-            </button>
+            </button>}
           </div>
         </div>
 

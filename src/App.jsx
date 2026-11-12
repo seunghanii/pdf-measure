@@ -18,6 +18,9 @@ import EmptyState from './components/EmptyState'
 import { AccountMenu, PasswordDialog } from './components/Account'
 import SearchPanel, { SearchIcon } from './components/SearchPanel'
 import ThemeMenu from './components/ThemeMenu'
+import HomeNav from './components/HomeNav'
+
+const MOD_KEY = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘' : 'Ctrl+'
 import { ensureIndexed, forgetIndex, reindex, replaceIndex } from './lib/indexer'
 import { enqueuePageSync, isPageSyncPending, settlePageSync } from './lib/pageSync'
 import { linkRevision, resolveFile } from './lib/revision'
@@ -96,7 +99,27 @@ function Session({ store, user, onLogout, onChangePassword }) {
   const [uploading, setUploading] = useState([]) // 서버에 올리는 중인 파일 이름
   const [loading, setLoading] = useState(false)
   const [restored, setRestored] = useState(false)
-  const [searchOpen, setSearchOpen] = useState(false) // 홈 화면 돋보기
+  const [searchOpen, setSearchOpen] = useState(false) // 찾기·명령 창 (⌘K / Ctrl+K)
+  // 홈 안 화면: 'home' 현황판 | 'equip' Equipment | 'docs' 도면 폴더 | 'calendar' 달력 (이 탭 동안만 기억)
+  const [homeView, setHomeView] = useState(() => {
+    try {
+      return sessionStorage.getItem('pdf-measure:home-view') || 'home'
+    } catch {
+      return 'home'
+    }
+  })
+  const [equipFilter, setEquipFilter] = useState(null)
+  const showHome = useCallback((view, filter = null) => {
+    setHomeView(view)
+    setEquipFilter(filter)
+    setActiveId(null)
+    try {
+      sessionStorage.setItem('pdf-measure:home-view', view)
+    } catch {
+      // 무시
+    }
+  }, [])
+  const homeFileRef = useRef(null)
   const [pickerOpen, setPickerOpen] = useState(false) // 탭 줄 + 버튼: 도면 골라 새 탭으로
   const [searchJump, setSearchJump] = useState(null) // 검색에서 고른 위치 { id, page, rect }
   const [pendingRev, setPendingRev] = useState(null) // 열자마자 개정판 바꾸기 창을 띄울 도면 { id, file, nonce }
@@ -725,16 +748,38 @@ function Session({ store, user, onLogout, onChangePassword }) {
 
       {activeId === null && (
         <Toolbar
+          left={<HomeNav view={homeView} onView={(v) => showHome(v)} />}
           right={
             <>
               <button
                 onClick={() => setSearchOpen(true)}
-                title="도면 이름·별명, 도면 속 글자 검색 (Ctrl+F)"
+                title="도면 이름·별명, Tag. No, 도면 속 글자 찾기와 명령 (⌘K / Ctrl+K)"
                 className="flex items-center gap-1.5 rounded-lg border border-ink-200 bg-surface px-2.5 py-1.5 text-sm text-ink-600 shadow-xs transition-colors hover:border-ink-300 hover:bg-ink-50 hover:text-ink-900"
               >
                 <SearchIcon />
-                <span className="hidden sm:inline">검색</span>
+                <span className="hidden sm:inline">찾기</span>
+                <kbd className="hidden rounded bg-ink-100 px-1 font-sans text-[11px] text-ink-500 lg:inline">{MOD_KEY}K</kbd>
               </button>
+              <button
+                onClick={() => homeFileRef.current?.click()}
+                className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium whitespace-nowrap text-white shadow-xs transition-colors hover:bg-brand-press"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                <span className="hidden sm:inline">PDF 열기</span>
+              </button>
+              <input
+                ref={homeFileRef}
+                type="file"
+                accept="application/pdf,.pdf"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  openFiles([...(e.target.files ?? [])])
+                  e.target.value = ''
+                }}
+              />
               <ThemeMenu />
               {cloudConfigured && <AccountMenu user={user} onLogout={logout} onChangePassword={onChangePassword} />}
             </>
@@ -828,6 +873,10 @@ function Session({ store, user, onLogout, onChangePassword }) {
           showLogin={cloudConfigured && !user}
           store={store}
           onMigrated={refreshRecent}
+          view={homeView}
+          onView={showHome}
+          equipFilter={equipFilter}
+          onSearch={() => setSearchOpen(true)}
         />
       )}
 

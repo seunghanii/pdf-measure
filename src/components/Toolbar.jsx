@@ -42,6 +42,7 @@ export default function Toolbar({
   saving,
   syncStatus, // 서버 저장 상태: 'saved' | 'saving' | 'error' (로그인했을 때만)
   right, // 홈 화면 오른쪽 (계정)
+  left, // 홈 화면 로고 옆 (홈 안 화면 고르기)
 }) {
   const numPages = pdfDoc?.numPages ?? 0
   const headerRef = useRef(null)
@@ -58,6 +59,7 @@ export default function Toolbar({
           <span className="hidden text-[15px] font-semibold tracking-tight text-ink-900 xl:inline">JCP 도면 관리</span>
         </div>
       )}
+      {!pdfDoc && left}
 
       {/* PDF 열기는 홈의 '도면 열기' 칸과 탭 줄 + 버튼에서 */}
       {pdfDoc && (

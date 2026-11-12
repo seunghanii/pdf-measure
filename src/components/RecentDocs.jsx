@@ -26,7 +26,7 @@ function saveHidden(v) {
 }
 
 // 연 적이 있는 도면만 (연 시각이 없거나 0 인 줄은 빼고), 연 시각 순서로 앞에서 count 개
-function recentOpened(list, count = RECENT_COUNT) {
+export function recentOpened(list, count = RECENT_COUNT) {
   return list
     .filter((d) => d.lastOpened > 0)
     .sort((a, b) => b.lastOpened - a.lastOpened)

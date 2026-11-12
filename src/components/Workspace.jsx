@@ -38,6 +38,7 @@ import { MAX_UPLOAD_BYTES } from '../lib/cloudStore'
 import { buildPdf, popPageEdit, setPageEditCarry, takePageEditCarry, invertOrder, loadPageNavOpen, pageEditUndo, rememberPageEdit, remapIndex, remapState, rotatedSizes, savePageNavOpen, undoState } from '../lib/pageEdit'
 import { isPageSyncPending, pageSyncFailed, subscribePageSync } from '../lib/pageSync'
 import { readTagInBox } from '../lib/tagRead'
+import { makeThumb } from '../lib/thumbs'
 
 // 메모장은 마크다운 읽는 도구까지 필요할 때만 불러옴
 const MemoPanel = lazy(() => import('./MemoPanel'))
@@ -1155,6 +1156,17 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
 
   // (훅이라 아래 '안 보이는 탭이면 그리지 않음' 보다 먼저) 페이지 편집을 뒤에서 서버에 올리는 중인지 (실패해 다시 시도 중이면 'retry')
   const pageSyncing = useSyncExternalStore(subscribePageSync, () => (isPageSyncPending(doc.id) ? (pageSyncFailed(doc.id) ? 'retry' : 'saving') : ''))
+
+  // 홈 '이어서 보기' 카드용 첫 쪽 작은 그림: 열고 3초 뒤 한가할 때 한 번 (lib/thumbs.js)
+  useEffect(() => {
+    if (!pdfDoc) return
+    const t = setTimeout(() => {
+      const run = () => makeThumb(doc.id, pdfDoc).catch((e) => console.warn('첫 쪽 그림 실패', e))
+      if (window.requestIdleCallback) window.requestIdleCallback(run, { timeout: 5000 })
+      else run()
+    }, 3000)
+    return () => clearTimeout(t)
+  }, [doc.id, pdfDoc])
 
   if (!active) return null
 
