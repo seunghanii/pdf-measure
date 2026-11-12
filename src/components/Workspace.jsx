@@ -699,7 +699,6 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
   }, [boxPick, active, onFinishBoxPick])
 
   // ---------- 계기 카드 ----------
-  const instCount = useMemo(() => measurements.filter(isInst).length, [measurements])
   // 목록에서 이 도면 카드로: 그 자리로 이동(확대·깜빡임)하고 선택. open: 카드(메모장)도 엶 (두 번 누름)
   const goToCard = useCallback(
     (row, open) => {
