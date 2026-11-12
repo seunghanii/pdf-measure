@@ -148,12 +148,13 @@ export default function Sidebar({
           <circle cx="12" cy="12" r="8" />
           <path d="M4 12h16" />
         </svg>
-        <span className="text-xs font-semibold tracking-wide text-ink-500">Equipment</span>
-        <span className="text-xs text-ink-400 tabular-nums">{instCount}개</span>
-        <button onClick={() => onOpenInstruments?.('list')} className="ml-auto rounded-md px-2 py-0.5 text-xs font-medium text-ink-700 ring-1 ring-ink-300 hover:bg-ink-100">
-          Equipment 목록
+        <span className="text-xs font-semibold tracking-wide whitespace-nowrap text-ink-500">Equipment</span>
+        <span className="text-xs whitespace-nowrap text-ink-400 tabular-nums">{instCount}개</span>
+        {/* 좁아도 글자가 두 줄로 잘리지 않게 (줄 이름이 이미 Equipment 라서 단추는 '목록') */}
+        <button onClick={() => onOpenInstruments?.('list')} className="ml-auto shrink-0 rounded-md px-2 py-0.5 text-xs font-medium whitespace-nowrap text-ink-700 ring-1 ring-ink-300 hover:bg-ink-100" title="Equipment 목록 열기">
+          목록
         </button>
-        <button onClick={() => onOpenInstruments?.('find')} className="rounded-md px-2 py-0.5 text-xs font-medium text-ink-700 ring-1 ring-ink-300 hover:bg-ink-100" title="도면 글자에서 FT-1001 같은 Tag 를 찾아 Equipment 만들기">
+        <button onClick={() => onOpenInstruments?.('find')} className="shrink-0 rounded-md px-2 py-0.5 text-xs font-medium whitespace-nowrap text-ink-700 ring-1 ring-ink-300 hover:bg-ink-100" title="도면 글자에서 FT-1001 같은 Tag 를 찾아 Equipment 만들기">
           Tag 찾기
         </button>
       </div>

@@ -64,6 +64,7 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
   const [tool, setTool] = useState(() => carried?.tool ?? (saved?.calibration ? 'length' : loadUncalHidden() ? 'select' : 'calibrate'))
   const [measurements, setMeasurements] = useState(saved?.measurements ?? [])
   const [history, setHistory] = useState([])
+  const [future, setFuture] = useState([]) // 되돌린 것 (다시 실행 Ctrl+Shift+Z / Ctrl+Y). 새로 고치면 비움
   // 휴지통: 지운 항목 [{ item, at }]. 7일 지난 것은 열 때 뺌 (lib/trash.js)
   const [trash, setTrash] = useState(() => liveItemTrash(saved?.trash))
   const [categories, setCategories] = useState(saved?.categories ?? []) // 측정 분류 [{ id, name, color }]
@@ -204,10 +205,12 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
 
   const measurementsRef = useRef(measurements)
   const historyRef = useRef(history)
+  const futureRef = useRef(future)
   const trashRef = useRef(trash)
   useLayoutEffect(() => {
     measurementsRef.current = measurements
     historyRef.current = history
+    futureRef.current = future
     trashRef.current = trash
   })
 
@@ -222,6 +225,7 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
   const commit = useCallback((updater) => {
     const prev = measurementsRef.current
     setHistory((h) => [...h.slice(-49), prev])
+    setFuture((f) => (f.length ? [] : f))
     setMeasurements(typeof updater === 'function' ? updater(prev) : updater)
   }, [])
 
@@ -229,13 +233,23 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
   const beginEdit = useCallback(() => {
     const prev = measurementsRef.current
     setHistory((h) => [...h.slice(-49), prev])
+    setFuture((f) => (f.length ? [] : f))
   }, [])
 
   const undo = useCallback(() => {
     const h = historyRef.current
     if (!h.length) return
+    setFuture((f) => [...f.slice(-49), measurementsRef.current])
     setMeasurements(h[h.length - 1])
     setHistory(h.slice(0, -1))
+  }, [])
+
+  const redo = useCallback(() => {
+    const f = futureRef.current
+    if (!f.length) return
+    setHistory((h) => [...h.slice(-49), measurementsRef.current])
+    setMeasurements(f[f.length - 1])
+    setFuture(f.slice(0, -1))
   }, [])
 
   const readNewTag = useRef(null) // 방금 그린 Equipment 박스 (그려지면 박스 안 글자로 Tag. No 채움)
@@ -305,6 +319,7 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
       const recolor = (ms) => ms.map((m) => (m.cat === id ? withCategory(m, cat) : m))
       setMeasurements(recolor)
       setHistory((h) => h.map(recolor))
+      setFuture((f) => f.map(recolor))
     }
   }
   // 분류를 지우면 그 분류였던 항목은 분류 없음으로
@@ -313,6 +328,7 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
     setCategories((list) => list.filter((c) => c.id !== id))
     setMeasurements(strip)
     setHistory((h) => h.map(strip))
+    setFuture((f) => f.map(strip))
     if (markupStyle.measureCat === id) setMarkupStyle((st) => ({ ...st, measureCat: null }))
   }
   // 항목들에 분류 붙이기 (catId 가 null 이면 떼기). Ctrl+Z 로 되돌릴 수 있음
@@ -504,7 +520,7 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
         const ids = await store.listImageIds(doc.id)
         if (!ids.length) return
         const used = new Set()
-        for (const list of [measurementsRef.current, ...historyRef.current, trashRef.current.map((t) => t.item)])
+        for (const list of [measurementsRef.current, ...historyRef.current, ...futureRef.current, trashRef.current.map((t) => t.item)])
           for (const m of list) {
             if (m.type === 'image') used.add(m.imageId)
             if (m.type === 'memo') {
@@ -996,9 +1012,16 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
         return
       }
       if (isTypingTarget(e.target) || pendingCalibration) return
-      if (ctrl && e.key.toLowerCase() === 'z') {
+      // 되돌리기 Ctrl+Z, 다시 실행 Ctrl+Shift+Z 또는 Ctrl+Y (맥은 Cmd)
+      if (ctrl && (e.code === 'KeyZ' || e.key.toLowerCase() === 'z')) {
         e.preventDefault()
-        undo()
+        if (e.shiftKey) redo()
+        else undo()
+        return
+      }
+      if (ctrl && !e.shiftKey && (e.code === 'KeyY' || e.key.toLowerCase() === 'y')) {
+        e.preventDefault()
+        redo()
         return
       }
       // Ctrl+A: 화면에 보이는 항목 전체 선택
@@ -1067,7 +1090,7 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [active, cropping, deleteItems, instPanel, jumpTo, memoOpen, pageNum, pdfDoc, pendingCalibration, savePdf, selectedIds, setSidebarOpen, sidebarOpen, tool, undo])
+  }, [active, cropping, deleteItems, instPanel, jumpTo, memoOpen, pageNum, pdfDoc, pendingCalibration, savePdf, selectedIds, setSidebarOpen, sidebarOpen, tool, undo, redo])
 
   const visibleMeasurements = useMemo(() => measurements.filter((m) => !m.hidden), [measurements])
 
@@ -1323,6 +1346,8 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
         setTool={setTool}
         canUndo={history.length > 0}
         onUndo={undo}
+        canRedo={future.length > 0}
+        onRedo={redo}
         markupStyle={shownStyle}
         onChangeMarkupStyle={changeMarkupStyle}
         selectedMarkupType={selectedMarkupType}
