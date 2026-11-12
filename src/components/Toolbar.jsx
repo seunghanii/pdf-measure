@@ -134,7 +134,7 @@ export default function Toolbar({
       </div>
       {/* 마크업 설정 바: 오른쪽 목록이 열려 있으면 목록 맨 위에 붙고(도면을 가리지 않음), 닫혀 있거나 좁은 화면이면 툴바 아래에 떠서 보임 */}
       {pdfDoc && styleBar && (
-        <div className={`absolute top-full left-1/2 z-20 mt-2 max-w-[calc(100%-1rem)] -translate-x-1/2 max-lg:w-max ${styleDocked ? 'md:hidden' : ''}`}>
+        <div className={`absolute top-full left-1/2 z-20 mt-2 max-w-[calc(100%-1rem)] -translate-x-1/2 max-lg:w-max ${styleDocked ? 'lg:hidden' : ''}`}>
           <MarkupStyleBar {...styleBar} />
         </div>
       )}

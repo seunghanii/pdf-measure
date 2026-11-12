@@ -1157,6 +1157,23 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
   // (훅이라 아래 '안 보이는 탭이면 그리지 않음' 보다 먼저) 페이지 편집을 뒤에서 서버에 올리는 중인지 (실패해 다시 시도 중이면 'retry')
   const pageSyncing = useSyncExternalStore(subscribePageSync, () => (isPageSyncPending(doc.id) ? (pageSyncFailed(doc.id) ? 'retry' : 'saving') : ''))
 
+  // 찾기·명령 창(⌘K)에서 보낸 도면 명령 (App.jsx commands)
+  const commandRef = useRef(null)
+  commandRef.current = (cmd) => {
+    if (cmd.startsWith('mode:')) return chooseMode(cmd.slice(5))
+    if (cmd === 'fit') return setFitKey((k) => k + 1)
+    if (cmd === 'export') return savePdf()
+    if (cmd === 'tagfind') return setInstPanel('find')
+    if (cmd === 'equiplist') return setInstPanel('list')
+    if (cmd === 'pages') return setPageNavOpen(true)
+  }
+  useEffect(() => {
+    if (!active) return
+    const on = (e) => e.detail?.id === doc.id && commandRef.current?.(e.detail.cmd)
+    window.addEventListener('jcp:command', on)
+    return () => window.removeEventListener('jcp:command', on)
+  }, [active, doc.id])
+
   // 홈 '이어서 보기' 카드용 첫 쪽 작은 그림: 열고 3초 뒤 한가할 때 한 번 (lib/thumbs.js)
   useEffect(() => {
     if (!pdfDoc) return
@@ -1432,7 +1449,7 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+      <div className="relative flex min-h-0 flex-1 flex-col lg:flex-row">
         <div className="relative flex min-h-0 min-w-0 flex-1">
         <ToolRail
           mode={mode}
@@ -1574,7 +1591,7 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
         </div>
         </div>
         {!sidebarOpen && (
-          <div className="flex shrink-0 justify-center border-t border-ink-200 bg-surface p-1 md:w-10 md:flex-col md:justify-start md:border-t-0 md:border-l md:py-3">
+          <div className="flex shrink-0 justify-center border-t border-ink-200 bg-surface p-1 lg:w-10 lg:flex-col lg:justify-start lg:border-t-0 lg:border-l lg:py-3">
             <SidebarToggle open={false} onClick={() => setSidebarOpen(true)} />
           </div>
         )}
@@ -1731,7 +1748,7 @@ function SidebarToggle({ open, onClick }) {
       title={open ? '목록 접기 (도면 넓게 보기)' : '목록 펼치기'}
       className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-800"
     >
-      <svg viewBox="0 0 24 24" className="h-4 w-4 rotate-90 md:rotate-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <svg viewBox="0 0 24 24" className="h-4 w-4 rotate-90 lg:rotate-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d={open ? 'M6 6l6 6-6 6M13 6l6 6-6 6' : 'M18 6l-6 6 6 6M11 6l-6 6 6 6'} />
       </svg>
     </button>

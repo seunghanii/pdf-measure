@@ -56,6 +56,7 @@ export default function Sidebar({
   // 축척이 없을 때도 접을 수 있음 (접은 상태는 이 브라우저에 기억)
   const [uncalHidden, setUncalHidden] = useState(loadUncalHidden)
   const [folded, setFolded] = useState(loadFolded)
+  const [sheetFull, setSheetFull] = useState(false) // 좁은 화면 시트 높이
   const toggleFold = (g) =>
     setFolded((list) => {
       const next = list.includes(g) ? list.filter((x) => x !== g) : [...list, g]
@@ -141,10 +142,20 @@ export default function Sidebar({
 
   return (
     <aside
-      className={`${collapsed ? 'hidden' : 'flex'} relative max-h-[35vh] w-full shrink-0 flex-col border-t border-ink-200 bg-surface md:max-h-none md:w-(--sb-w) md:border-t-0 md:border-l`}
+      className={`${collapsed ? 'hidden' : 'flex'} flex-col border-ink-200 bg-surface max-lg:absolute max-lg:inset-x-0 max-lg:bottom-0 max-lg:z-30 max-lg:rounded-t-2xl max-lg:border-t max-lg:shadow-[0_-8px_28px_rgba(0,0,0,0.18)] ${
+        sheetFull ? 'max-lg:h-[85%]' : 'max-lg:h-[45%]'
+      } lg:relative lg:w-(--sb-w) lg:shrink-0 lg:border-l`}
       style={{ '--sb-w': `${clampSidebarWidth(sidebarW)}px` }}
     >
       {!collapsed && <ResizeHandle width={sidebarW} />}
+      {/* 좁은 화면(아이패드 세로 등): 아래에서 올라오는 시트. 손잡이를 누르면 반쯤 ↔ 크게 */}
+      <button
+        onClick={() => setSheetFull((v) => !v)}
+        aria-label={sheetFull ? '목록 작게' : '목록 크게'}
+        className="flex w-full shrink-0 justify-center pt-2 pb-1 lg:hidden"
+      >
+        <span className="h-1.5 w-10 rounded-full bg-ink-300" />
+      </button>
       {top}
       {/* 탭: 작업 모드를 바꾸면 그 탭으로 바뀌고, 여기서 직접 골라 볼 수도 있음 */}
       <div className="flex gap-0.5 border-b border-ink-200 px-3 py-1.5" role="tablist" aria-label="목록">
@@ -167,7 +178,7 @@ export default function Sidebar({
           )
         })}
       </div>
-      {styleBar && <div className="hidden md:block">{styleBar}</div>}
+      {styleBar && <div className="hidden lg:block">{styleBar}</div>}
       {/* 계기 카드: 목록 보기, 도면 글자에서 태그 찾기 */}
       {panel === 'equip' && (
       <div className="flex items-center gap-1.5 border-b border-ink-200 px-4 py-2">
@@ -1068,7 +1079,7 @@ function ResizeHandle({ width }) {
         e.stopPropagation()
         setSidebarWidth(clampSidebarWidth(clampSidebarWidth(width) + (e.key === 'ArrowLeft' ? 20 : -20)))
       }}
-      className="group absolute inset-y-0 -left-1.5 z-10 hidden w-3 cursor-col-resize touch-none md:block"
+      className="group absolute inset-y-0 -left-1.5 z-10 hidden w-3 cursor-col-resize touch-none lg:block"
     >
       <div className="mx-auto h-full w-0.5 bg-transparent transition-colors group-hover:bg-brand-400 group-focus-visible:bg-brand-500 group-active:bg-brand-500" />
     </div>

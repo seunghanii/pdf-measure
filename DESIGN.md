@@ -50,3 +50,12 @@ Tailwind 기본 색은 꺼 두었습니다(`--color-*: initial`). 아래 이름�
 - 아이콘만 있는 버튼은 `aria-label`, 켜고 끄는 버튼은 `aria-pressed`.
 - `prefers-reduced-motion`이면 전환 효과를 끔.
 - `transition: all` 쓰지 않기, 애니메이션은 `transform`/`opacity`만.
+
+## 화면 구조 (2026-11 개편)
+
+- **홈**: 툴바의 화면 고르기(`components/HomeNav.jsx`) — 홈 현황판(`HomeDashboard.jsx`) · Equipment 표(`HomeEquipment.jsx`) · 도면 폴더 · 달력(`Calendar.jsx` `full`). 지금 화면은 이 탭 동안만 기억(`sessionStorage pdf-measure:home-view`).
+- **도면 화면**: 위 가운데 작업 모드(보기 · Equipment · 측정 · 마크업, `lib/workMode.js`). 모드가 왼쪽 세로 도구 줄(`ToolRail`)과 오른쪽 목록 탭을 정합니다. 단축키로 도구를 고르면 모드도 따라갑니다. 마지막 모드는 `localStorage pdf-measure:work-mode`.
+- **마크업 설정 바**: 오른쪽 목록이 열려 있고 넓은 화면(lg 이상)이면 목록 탭 아래에 붙고, 아니면 툴바 아래에 뜹니다 (`MarkupStyleBar docked`).
+- **좁은 화면(lg 미만, 아이패드 세로)**: 오른쪽 목록은 아래에서 올라오는 시트(45% ↔ 85%).
+- **찾기·명령 창**: 어디서든 ⌘K / Ctrl+K (`SearchPanel` + App `commands`). 도면 안 명령은 `jcp:command` 이벤트로 열린 Workspace 에 전합니다.
+- 홈 '이어서 보기' 첫 쪽 그림은 도면을 열 때 만들어 이 브라우저에 보관(`lib/thumbs.js`).
