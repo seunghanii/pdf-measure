@@ -3,7 +3,8 @@ import { TYPE_INFO, describe } from '../lib/measure'
 import { UNITS, calibrationInput, formatArea, formatLength, parseNumber } from '../lib/units'
 import { isMarkup, kindName } from '../lib/markup'
 import { CATEGORY_COLORS, CATEGORY_PRESETS, categoryTotals } from '../lib/categories'
-import { itemGroup } from '../lib/instrument'
+import { listGroup } from '../lib/instrument'
+import { PANELS } from '../lib/workMode'
 import { TRASH_DAYS, leftLabel } from '../lib/trash'
 import { loadUncalHidden, saveUncalHidden } from '../lib/scalePanel'
 import { loadFolded, saveFolded } from '../lib/sectionFold'
@@ -45,6 +46,9 @@ export default function Sidebar({
   trash = [], // 휴지통 [{ item, at }]
   onRestore, // (ids) 되살리기
   onPurge, // (ids | undefined) 완전 삭제, 없으면 비우기
+  panel = 'equip', // 보이는 탭 'equip' | 'measure' | 'markup' (작업 모드를 따라감)
+  onPanel,
+  styleBar, // 마크업 설정 바 (넓은 화면에서 탭 아래에 붙임)
 }) {
   const [ratioText, setRatioText] = useState('100')
   const [showRatio, setShowRatio] = useState(false)
@@ -72,9 +76,10 @@ export default function Sidebar({
   }
 
   const measures = useMemo(() => measurements.filter((m) => !isMarkup(m.type)), [measurements])
-  const markups = useMemo(() => measurements.filter((m) => itemGroup(m) === 'markup'), [measurements])
+  const markups = useMemo(() => measurements.filter((m) => listGroup(m) === 'markup'), [measurements])
+  const boxes = useMemo(() => measurements.filter((m) => listGroup(m) === 'box'), [measurements])
   const [labelsOff, setLabelsOff] = useInstLabelsOff()
-  const cards = useMemo(() => measurements.filter((m) => itemGroup(m) === 'inst'), [measurements])
+  const cards = useMemo(() => measurements.filter((m) => listGroup(m) === 'inst'), [measurements])
   const totals = useMemo(() => categoryTotals(measures, categories), [measures, categories])
   // 분류 줄을 누르면 그 분류 항목만 목록에 보여 줌 (null: 전체, '': 분류 없음)
   const [catFilter, setCatFilter] = useState(null)
@@ -142,23 +147,43 @@ export default function Sidebar({
     >
       {!collapsed && <ResizeHandle width={sidebarW} />}
       {top}
+      {/* 탭: 작업 모드를 바꾸면 그 탭으로 바뀌고, 여기서 직접 골라 볼 수도 있음 */}
+      <div className="flex gap-0.5 border-b border-ink-200 px-3 py-1.5" role="tablist" aria-label="목록">
+        {PANELS.map((p) => {
+          const n = p.id === 'equip' ? cards.length + boxes.length : p.id === 'measure' ? measures.length : markups.length
+          const on = panel === p.id
+          return (
+            <button
+              key={p.id}
+              role="tab"
+              aria-selected={on}
+              onClick={() => onPanel?.(p.id)}
+              className={`flex min-w-0 flex-auto items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-sm whitespace-nowrap transition-colors pointer-coarse:py-2.5 ${
+                on ? 'bg-ink-100 font-semibold text-ink-900' : 'text-ink-500 hover:bg-ink-50 hover:text-ink-800'
+              }`}
+            >
+              <span className="truncate">{p.label}</span>
+              <span className={`text-xs tabular-nums ${on ? 'text-ink-500' : 'text-ink-400'}`}>{n}</span>
+            </button>
+          )
+        })}
+      </div>
+      {styleBar && <div className="hidden md:block">{styleBar}</div>}
       {/* 계기 카드: 목록 보기, 도면 글자에서 태그 찾기 */}
+      {panel === 'equip' && (
       <div className="flex items-center gap-1.5 border-b border-ink-200 px-4 py-2">
-        <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-ink-400" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-          <circle cx="12" cy="12" r="8" />
-          <path d="M4 12h16" />
-        </svg>
-        <span className="text-xs font-semibold tracking-wide whitespace-nowrap text-ink-500">Equipment</span>
-        <span className="text-xs whitespace-nowrap text-ink-400 tabular-nums">{instCount}개</span>
+        <span className="text-xs text-ink-500">모든 도면</span>
         {/* 좁아도 글자가 두 줄로 잘리지 않게 (줄 이름이 이미 Equipment 라서 단추는 '목록') */}
-        <button onClick={() => onOpenInstruments?.('list')} className="ml-auto shrink-0 rounded-md px-2 py-0.5 text-xs font-medium whitespace-nowrap text-ink-700 ring-1 ring-ink-300 hover:bg-ink-100" title="Equipment 목록 열기">
-          목록
+        <button onClick={() => onOpenInstruments?.('list')} className="ml-auto shrink-0 rounded-md px-2 py-0.5 text-xs font-medium whitespace-nowrap text-ink-700 ring-1 ring-ink-300 hover:bg-ink-100" title="이 도면과 다른 도면의 Equipment 목록 열기">
+          Equipment 목록
         </button>
         <button onClick={() => onOpenInstruments?.('find')} className="shrink-0 rounded-md px-2 py-0.5 text-xs font-medium whitespace-nowrap text-ink-700 ring-1 ring-ink-300 hover:bg-ink-100" title="도면 글자에서 FT-1001 같은 Tag 를 찾아 Equipment 만들기">
           Tag 찾기
         </button>
       </div>
+      )}
       {/* 축척 */}
+      {panel === 'measure' && (
       <section className="border-b border-ink-200 p-4">
         <button
           onClick={toggleScale}
@@ -281,9 +306,11 @@ export default function Sidebar({
           </div>
         )}
       </section>
+      )}
 
       {/* 측정 목록 · 마크업 목록 */}
       <div className="min-h-0 flex-1 overflow-auto">
+        {panel === 'measure' && (
         <ItemSection
           title="측정 목록"
           items={shownMeasures}
@@ -325,14 +352,16 @@ export default function Sidebar({
           onToggleFold={() => toggleFold('measure')}
           {...rowProps}
         />
+        )}
+        {panel === 'markup' && (
         <ItemSection
           title="마크업"
           items={markups}
-          empty="형광펜, 텍스트, 펜, 도형, 화살표, 박스 도구로 표시를 남겨 보세요."
+          empty="형광펜, 텍스트, 펜, 도형, 화살표, 사진으로 표시를 남겨 보세요."
           actions={
             <button
               className="text-danger-500 hover:underline"
-              onClick={() => window.confirm('모든 마크업을 삭제할까요? Equipment 는 그대로 두고, 삭제한 마크업은 휴지통에 7일 동안 남아요.') && onClear('markup')}
+              onClick={() => window.confirm('모든 마크업을 삭제할까요? Equipment·메모·링크 박스는 그대로 두고, 삭제한 마크업은 휴지통에 7일 동안 남아요.') && onClear('markup')}
             >
               전체 삭제
             </button>
@@ -342,11 +371,14 @@ export default function Sidebar({
           onToggleFold={() => toggleFold('markup')}
           {...rowProps}
         />
+        )}
         {/* 계기 카드는 마크업과 따로: "마크업 전체 삭제"에 들어가지 않음, 한꺼번에 지우는 버튼도 없음 */}
+        {panel === 'equip' && (
+        <>
         <ItemSection
           title="Equipment"
           items={cards}
-          empty="툴바의 'Equipment'(E)로 박스를 그리거나, 위 'Tag 찾기'로 만들어요."
+          empty="왼쪽 도구 줄의 Equipment(E)로 박스를 그리거나, 위 'Tag 찾기'로 만들어요."
           group="inst"
           folded={folded.includes('inst')}
           onToggleFold={() => toggleFold('inst')}
@@ -357,12 +389,24 @@ export default function Sidebar({
             </button>
           }
         />
+        <ItemSection
+          title="메모·링크 박스"
+          items={boxes}
+          empty="메모 박스(N)는 누르면 메모장이, 링크 박스(K)는 연결한 도면이 열려요."
+          group="box"
+          folded={folded.includes('box')}
+          onToggleFold={() => toggleFold('box')}
+          {...rowProps}
+        />
+        </>
+        )}
         <TrashSection trash={trash} onRestore={onRestore} onPurge={onPurge} />
       </div>
 
       <details className="border-t border-ink-200 px-4 py-3 text-xs text-ink-500">
         <summary className="cursor-pointer font-medium text-ink-600">사용 팁 · 단축키</summary>
         <ul className="mt-2 list-disc space-y-1 pl-4">
+          <li>위 가운데 보기 · Equipment · 측정 · 마크업 중 하나를 고르면 왼쪽 도구 줄과 이 목록이 그 일에 맞게 바뀌어요. 단축키로 도구를 고르면 모드도 따라 바뀌어요</li>
           <li>Ctrl + 마우스 휠: 확대/축소, 스페이스바 누른 채 드래그: 화면 이동</li>
           <li>Shift 누른 채 클릭: 수평/수직/45° 로 고정 (자석이 켜져 있으면 그 방향의 선에 붙음)</li>
           <li>자석(S 키로 켜고 끄기): 도면 선의 끝점·교차점·선 위와 이미 찍은 점에 커서가 붙어요. 스캔한 이미지 도면은 선이 없어서 찍은 점에만 붙어요</li>

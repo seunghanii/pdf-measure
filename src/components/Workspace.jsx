@@ -5,14 +5,15 @@ import { TYPE_INFO } from '../lib/measure'
 import { canCategorize, newCategoryId, nextCategoryColor, withCategory } from '../lib/categories'
 import { DEFAULT_BOX_OPACITY, FULL_CROP, MARKUP_STROKE, STROKE_TYPES, isCropped, isMarkup, rectOf, shapeOf, strokeOf } from '../lib/markup'
 import { ImageSource, freshImageIds, getImageBlob, isImageFile, newImageId, prepareImage, rememberImage } from '../lib/images'
-import { TOOLS, toolForDigit } from '../lib/tools'
+import { MARKUP_TOOL_IDS, TOOLS, toolForDigit } from '../lib/tools'
+import { BASIC_TOOL_IDS, loadMode, modeForTool, saveMode } from '../lib/workMode'
 import { toggleSnap } from '../lib/snapSetting'
 import { useAutosave } from '../lib/autosave'
 import { useDocIndex } from '../lib/indexer'
 import { isTypingTarget } from '../lib/dom'
 import { clipFor, clipboardMarker, copyItems, currentClip, makeClip, pasteItems } from '../lib/itemClipboard'
 import PdfViewer from './PdfViewer'
-import Toolbar from './Toolbar'
+import Toolbar, { MarkupStyleBar, ToolRail } from './Toolbar'
 import Sidebar from './Sidebar'
 import CalibrationDialog from './CalibrationDialog'
 import DocSearch from './DocSearch'
@@ -24,11 +25,10 @@ import { backlinksFor, refreshLinkNames } from '../lib/backlinks'
 import { linkBoxName } from '../lib/drawingNo'
 import { composeMap, fixLinksAfterPageEdit, orderToMap, pageLogV, pushPageLog, renameMovedLinkBox } from '../lib/pageLinks'
 import { memoFileIds } from '../lib/excel'
-import { DEFAULT_STATUS, cardBoxFor, donePatch, doneUpTo, instForTag, tagPatch, isInst, itemGroup, linksPatch, memoLinkPhotoIds, memoLinks, statusOf } from '../lib/instrument'
+import { DEFAULT_STATUS, cardBoxFor, donePatch, doneUpTo, instForTag, tagPatch, isInst, listGroup, linksPatch, memoLinkPhotoIds, memoLinks, statusOf } from '../lib/instrument'
 import { liveItemTrash, pushItems, withoutTrashed } from '../lib/trash'
 import { MAX_ZOOM, MIN_ZOOM } from '../lib/zoom'
 import { adaptState, newRevKey, revisionReport } from '../lib/revision'
-import { loadUncalHidden } from '../lib/scalePanel'
 import RevisionDialog from './RevisionDialog'
 import NotepadFloat from './NotepadFloat'
 import { useMemoDock } from '../lib/memoDock'
@@ -61,7 +61,25 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
   // 기준 길이 없는 도면은 기준선 긋기로 시작 (오른쪽 축척 칸을 접어 두었으면 선택 도구로)
   // 페이지 편집 뒤 다시 그려질 때는 쓰던 도구 그대로
   const carried = useState(() => takePageEditCarry(doc.id))[0]
-  const [tool, setTool] = useState(() => carried?.tool ?? (saved?.calibration ? 'length' : loadUncalHidden() ? 'select' : 'calibrate'))
+  // 작업 모드(보기·Equipment·측정·마크업): 왼쪽 도구 줄과 오른쪽 목록 탭을 정함. 단축키로 도구를 고르면 모드도 따라감
+  const [mode, setModeState] = useState(() => modeForTool(carried?.tool) ?? loadMode())
+  const [tool, setTool] = useState(() => carried?.tool ?? (mode === 'measure' && saved?.calibration ? 'length' : 'select'))
+  // 오른쪽 목록 탭: 모드를 바꾸면 그 탭으로 (보기 모드는 보던 탭 그대로)
+  const [panel, setPanel] = useState(() => (mode === 'view' ? 'equip' : mode))
+  const setMode = useCallback((m) => {
+    setModeState(m)
+    saveMode(m)
+    if (m !== 'view') setPanel(m)
+  }, [])
+  const toolMode = modeForTool(tool)
+  useEffect(() => {
+    if (toolMode && toolMode !== mode) setMode(toolMode)
+  }, [toolMode, mode, setMode])
+  // 모드 단추를 누르면: 지금 도구가 그 모드 것이 아니면 선택 도구로
+  const chooseMode = (m) => {
+    setMode(m)
+    if (!BASIC_TOOL_IDS.includes(tool) && modeForTool(tool) !== m) setTool(m === 'measure' && calibration ? 'length' : 'select')
+  }
   const [measurements, setMeasurements] = useState(saved?.measurements ?? [])
   const [history, setHistory] = useState([])
   const [future, setFuture] = useState([]) // 되돌린 것 (다시 실행 Ctrl+Shift+Z / Ctrl+Y). 새로 고치면 비움
@@ -1128,7 +1146,7 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
   }
   // group: 'measure' | 'markup' | 'inst'
   const setAllHidden = (hidden, group) => {
-    const inGroup = (m) => itemGroup(m) === group
+    const inGroup = (m) => listGroup(m) === group
     if (hidden) {
       const ids = new Set(measurementsRef.current.filter(inGroup).map((m) => m.id))
       setSelectedIds((s) => s.filter((x) => !ids.has(x)))
@@ -1322,6 +1340,43 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
     if (r.file) store.removeRevisionFile(doc.id, r.key).catch((e) => console.warn('예전 판 PDF 지우기 실패', e))
   }
 
+  // 마크업 설정 바 (마크업 도구를 골랐거나 선택 도구로 마크업을 골랐을 때). 오른쪽 목록 맨 위 또는 툴바 아래
+  const styleBar =
+    MARKUP_TOOL_IDS.includes(tool) || (tool === 'select' && selectedMarkupType)
+      ? {
+          kind: selectedMarkupType && tool === 'select' ? selectedMarkupType : tool,
+          title: tool === 'select' ? '선택한 마크업' : TOOLS.find((t) => t.id === tool)?.label,
+          style: shownStyle,
+          onChange: changeMarkupStyle,
+          showStroke: tool === 'select' && !!selStroke,
+          showShape: tool === 'select' && !!selShape,
+          memoActions:
+            tool === 'select' && onlyMemos
+              ? {
+                  onOpen: () => openMemoAt(selMemos[0].id, null, null, { force: true }),
+                  onLink: () => {
+                    setMemoOpen(null)
+                    setLinkPicking({ id: selMemos[0].id })
+                  },
+                  linked: memoLinks(selMemos[0]).length > 0,
+                }
+              : null,
+          imageActions:
+            tool === 'select' && onlyImages
+              ? {
+                  cropping: !!cropping,
+                  cropped: selImages.some(isCropped),
+                  onToggleCrop: () => (cropping ? setCroppingId(null) : startCrop(selImage.id)),
+                  onResetCrop: () => resetCrop(selImages.map((m) => m.id)),
+                  onHide: () => {
+                    setCroppingId(null)
+                    selImages.forEach((m) => toggleHidden(m.id))
+                  },
+                }
+              : null,
+        }
+      : null
+
   return (
     <ImageSource.Provider value={imageSource}>
       <input
@@ -1342,44 +1397,14 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
         zoom={zoom}
         setZoom={setZoom}
         onFit={() => setFitKey((k) => k + 1)}
-        tool={tool}
-        setTool={setTool}
+        mode={mode}
+        onMode={chooseMode}
         canUndo={history.length > 0}
         onUndo={undo}
         canRedo={future.length > 0}
         onRedo={redo}
-        markupStyle={shownStyle}
-        onChangeMarkupStyle={changeMarkupStyle}
-        selectedMarkupType={selectedMarkupType}
-        selectedHasStroke={tool === 'select' && !!selStroke}
-        selectedHasShape={tool === 'select' && !!selShape}
-        onInsertImage={() => imageInputRef.current?.click()}
-        memoActions={
-          tool === 'select' && onlyMemos
-            ? {
-                onOpen: () => openMemoAt(selMemos[0].id, null, null, { force: true }),
-                onLink: () => {
-                  setMemoOpen(null)
-                  setLinkPicking({ id: selMemos[0].id })
-                },
-                linked: memoLinks(selMemos[0]).length > 0,
-              }
-            : null
-        }
-        imageActions={
-          tool === 'select' && onlyImages
-            ? {
-                cropping: !!cropping,
-                cropped: selImages.some(isCropped),
-                onToggleCrop: () => (cropping ? setCroppingId(null) : startCrop(selImage.id)),
-                onResetCrop: () => resetCrop(selImages.map((m) => m.id)),
-                onHide: () => {
-                  setCroppingId(null)
-                  selImages.forEach((m) => toggleHidden(m.id))
-                },
-              }
-            : null
-        }
+        styleBar={styleBar}
+        styleDocked={sidebarOpen}
         onSave={savePdf}
         onRevision={onReplaceFile ? () => setRevisionOpen(true) : null}
         revLabel={revs.rev?.label}
@@ -1398,6 +1423,14 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
 
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <div className="relative flex min-h-0 min-w-0 flex-1">
+        <ToolRail
+          mode={mode}
+          tool={tool}
+          setTool={setTool}
+          markupStyle={shownStyle}
+          onChangeMarkupStyle={changeMarkupStyle}
+          onInsertImage={() => imageInputRef.current?.click()}
+        />
         {pageNavOpen && (
           <PageNavigator
             docId={doc.id}
@@ -1415,6 +1448,22 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
         )}
         <div className="relative flex min-h-0 min-w-0 flex-1">
           {!pageNavOpen && <PageNavButton pageNum={pageNum} numPages={pdfDoc.numPages} onClick={() => setPageNavOpen(true)} />}
+          {/* 축척 칩: 정해진 축척을 늘 작게 보여 주고, 누르면 측정 모드 + 오른쪽 축척 칸 */}
+          {calibration && (
+            <button
+              onClick={() => {
+                chooseMode('measure')
+                setSidebarOpen(true)
+              }}
+              title="축척 · 누르면 측정 모드로 바꾸고 오른쪽에서 축척을 고쳐요"
+              className="absolute bottom-[22px] left-[4.25rem] z-10 flex h-8 items-center gap-1.5 rounded-full bg-ink-800/85 px-3 text-xs font-medium text-surface tabular-nums shadow-sm backdrop-blur transition-colors hover:bg-ink-800"
+            >
+              <span className="text-ref-300">
+                {calibration.mode === 'ratio' ? `1 : ${calibration.ratio}` : `기준 ${calibrationInput(calibration).value} ${calibrationInput(calibration).unit}`}
+              </span>
+              <span className="opacity-70">· {unit}</span>
+            </button>
+          )}
           <PdfViewer
             pdfDoc={pdfDoc}
             pageNum={pageNum}
@@ -1521,6 +1570,9 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
         {/* 접어도 지우지 않고 숨기기만 (검색어·축척 창 상태 유지, 다시 펼칠 때 새로 그리지 않음) */}
         <Sidebar
           collapsed={!sidebarOpen}
+          panel={panel}
+          onPanel={setPanel}
+          styleBar={styleBar && <MarkupStyleBar docked {...styleBar} />}
           numPages={pdfDoc.numPages}
           calibration={calibration}
           mmPerPt={mmPerPt}
@@ -1552,7 +1604,7 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
           onAssignCategory={assignCategory}
           onClear={(group) => {
             // 그 묶음만 지움 (계기 카드는 마크업 전체 삭제에 들어가지 않음). 지운 것은 휴지통으로
-            deleteItems(measurementsRef.current.filter((m) => itemGroup(m) === group).map((m) => m.id))
+            deleteItems(measurementsRef.current.filter((m) => listGroup(m) === group).map((m) => m.id))
           }}
           trash={trash}
           onRestore={restoreItems}

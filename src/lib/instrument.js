@@ -86,6 +86,8 @@ export const isInst = (m) => m?.type === 'memo' && !!m.inst
 
 // 오른쪽 목록의 묶음: 'measure' 측정 | 'markup' 마크업 | 'inst' 계기 카드 (마크업 전체 삭제에 휩쓸리지 않게 따로)
 export const itemGroup = (m) => (isInst(m) ? 'inst' : isMarkup(m.type) ? 'markup' : 'measure')
+// 오른쪽 목록 칸: 메모·링크 박스(box)는 마크업과 따로 Equipment 탭에 보임
+export const listGroup = (m) => (isInst(m) ? 'inst' : m.type === 'memo' ? 'box' : isMarkup(m.type) ? 'markup' : 'measure')
 
 // 메모의 관련 문서 목록 (예전 link 하나짜리 포함)
 export const memoLinks = (m) => (Array.isArray(m?.links) ? m.links : m?.link ? [m.link] : [])
