@@ -40,7 +40,6 @@ export function saveLocalCables(l, scope) {
     // 저장소가 꽉 찼거나 못 쓰는 환경
   }
 }
-export const newerCables = (a, b) => (normalizeCables(b).at > normalizeCables(a).at ? normalizeCables(b) : normalizeCables(a))
 
 // ---------- 지금 목록 (모듈 하나에 보관, 바뀌면 알림) ----------
 let current = EMPTY_CABLES
@@ -152,12 +151,6 @@ function holds(hay, needle) {
     if (!/\d$/.test(needle) || !SUFFIX_AFTER.test(hay.slice(i + needle.length))) return true
   }
   return false
-}
-export function tagMatches(cellText, tag) {
-  const a = listKey(cellText)
-  const b = listKey(tag)
-  if (!a || !b) return false
-  return holds(a, b) || (a.length >= 6 && holds(b, a))
 }
 
 export const findSheet = (sheets, name) => sheets.find((s) => s.sheet === name) ?? sheets.find((s) => !s.hidden) ?? sheets[0]

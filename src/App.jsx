@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { loadInstList } from './lib/instList'
 import { loadCables } from './lib/cableSchedule'
 import { loadPdf, setOpenPdf } from './lib/pdf'
@@ -11,7 +11,6 @@ import { cloudConfigured, networkHint, signOut, supabase } from './lib/supabase'
 
 // 오류 이름·글 짧게 (원인을 알아볼 수 있게 안내 끝에 붙임)
 const errText = (e) => `${e?.name ?? '오류'}: ${String(e?.message ?? e ?? '').slice(0, 120)}`
-import Workspace from './components/Workspace'
 import Toolbar from './components/Toolbar'
 import TabBar from './components/TabBar'
 import OpenDocPicker from './components/OpenDocPicker'
@@ -22,6 +21,16 @@ import ThemeMenu from './components/ThemeMenu'
 import { ensureIndexed, forgetIndex, reindex, replaceIndex } from './lib/indexer'
 import { enqueuePageSync, isPageSyncPending, settlePageSync } from './lib/pageSync'
 import { linkRevision, resolveFile } from './lib/revision'
+
+// 도면 작업 화면(측정·툴바·오른쪽 목록 등)은 도면을 열 때만 필요해서 따로 받음 → 홈 첫 화면 JS 가 절반 가까이 줄어듦.
+// 기다리지 않게: 홈이 뜬 뒤 한가할 때, 그리고 도면을 열기 시작할 때(PDF 읽는 동안 함께) 미리 받아 둠
+const loadWorkspace = () => import('./components/Workspace')
+const Workspace = lazy(loadWorkspace)
+function prefetchWorkspaceWhenIdle() {
+  const run = () => loadWorkspace().catch(() => {}) // 실패해도 도면 열 때 다시 받음
+  if (window.requestIdleCallback) window.requestIdleCallback(run, { timeout: 3000 })
+  else setTimeout(run, 1500)
+}
 
 export default function App() {
   // ---------- 로그인 ----------
@@ -40,6 +49,8 @@ export default function App() {
     })
     return () => data.subscription.unsubscribe()
   }, [])
+
+  useEffect(prefetchWorkspaceWhenIdle, [])
 
   const userId = user?.id ?? null
   // 로그인하면 서버, 아니면 이 브라우저 저장소
@@ -230,6 +241,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
       }
       if (opening.current.has(id)) return false
       opening.current.add(id)
+      loadWorkspace().catch(() => {}) // PDF 를 읽는 동안 작업 화면 코드도 함께 받음
       try {
         const pdfDoc = await loadPdf(await file.arrayBuffer())
         let record = null
@@ -757,8 +769,8 @@ function Session({ store, user, onLogout, onChangePassword }) {
       )}
 
       {docs.map((doc) => (
+        <Suspense key={`${doc.id}:${doc.rev ?? 0}`} fallback={doc.id === activeId ? <WorkspaceLoading /> : null}>
         <Workspace
-          key={`${doc.id}:${doc.rev ?? 0}`}
           doc={doc}
           onReplaceFile={(args) => replaceDoc(doc.id, args)}
           onReloadDoc={() => reloadDoc(doc.id)}
@@ -783,6 +795,7 @@ function Session({ store, user, onLogout, onChangePassword }) {
           setNotepadOpen={setNotepadOpen}
           setSidebarOpen={setSidebarOpen}
         />
+        </Suspense>
       ))}
 
       {activeId === null && (
@@ -861,6 +874,16 @@ function Session({ store, user, onLogout, onChangePassword }) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// 작업 화면 코드를 아직 못 받았을 때 (보통은 미리 받아 둬서 안 보임)
+function WorkspaceLoading() {
+  return (
+    <div className="flex flex-1 items-center justify-center gap-2 text-sm text-ink-500">
+      <span className="h-4 w-4 animate-spin rounded-full border-2 border-ink-200 border-t-brand-600" />
+      도면 화면 준비 중…
     </div>
   )
 }

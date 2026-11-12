@@ -104,10 +104,6 @@ export function getFile(id) {
   return run('files', 'readonly', (files) => req2promise(files.get(id))).then((r) => r?.blob ?? null)
 }
 
-export function getDoc(id) {
-  return run('docs', 'readonly', (docs) => req2promise(docs.get(id)))
-}
-
 export function saveState(id, state) {
   return run('docs', 'readwrite', async (docs) => {
     const existing = await req2promise(docs.get(id))

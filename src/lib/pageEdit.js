@@ -10,8 +10,6 @@ const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y)
 // 처음 순서 (지금 PDF 그대로)
 export const initialOrder = (numPages) => Array.from({ length: numPages }, (_, i) => ({ src: i + 1 }))
 
-export const sameOrder = (order, numPages) => order.length === numPages && order.every((e, i) => e.src === i + 1 && !e.rot)
-
 const normRot = (r) => (((Math.round((r ?? 0) / 90) * 90) % 360) + 360) % 360
 
 // 돌릴 쪽의 화면 크기 (돌리기 전, 배율 1). 돌린 쪽이 없으면 빈 Map
