@@ -7,6 +7,12 @@ export default function ThemeMenu() {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
   useEffect(() => (theme === 'system' ? watchSystemTheme() : undefined), [theme])
+  // 찾기·명령 창에서 바꾼 테마도 단추에 반영
+  useEffect(() => {
+    const on = (e) => setTheme(e.detail)
+    window.addEventListener('jcp:theme', on)
+    return () => window.removeEventListener('jcp:theme', on)
+  }, [])
   useEffect(() => {
     if (!open) return
     const close = (e) => !ref.current?.contains(e.target) && setOpen(false)

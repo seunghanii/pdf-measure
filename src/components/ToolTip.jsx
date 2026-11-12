@@ -19,7 +19,9 @@ export default function ToolTips({ rootRef }) {
     const show = (el) => {
       if (!el.isConnected) return
       const r = el.getBoundingClientRect()
-      setTip({ text: el.dataset.tip, key: el.dataset.key || '', x: r.left + r.width / 2, y: r.bottom + 6 })
+      // data-tip-side="right": 왼쪽 세로 도구 줄처럼 단추 오른쪽에 띄움
+      if (el.dataset.tipSide === 'right') setTip({ text: el.dataset.tip, key: el.dataset.key || '', x: r.right + 8, y: r.top + r.height / 2, side: 'right' })
+      else setTip({ text: el.dataset.tip, key: el.dataset.key || '', x: r.left + r.width / 2, y: r.bottom + 6 })
     }
     const hide = () => {
       clearTimeout(timer.current)
@@ -87,6 +89,17 @@ export default function ToolTips({ rootRef }) {
   }, [rootRef])
 
   if (!tip) return null
+  if (tip.side === 'right')
+    return (
+      <div
+        role="tooltip"
+        className="pointer-events-none fixed z-50 max-w-64 -translate-y-1/2 rounded-md bg-ink-800 px-2 py-1 text-xs leading-snug text-surface shadow-lg"
+        style={{ left: tip.x, top: tip.y }}
+      >
+        {tip.text}
+        {tip.key && <kbd className="ml-1.5 rounded bg-white/15 px-1 font-sans text-[11px] text-surface/80">{tip.key}</kbd>}
+      </div>
+    )
   const left = Math.max(8, Math.min(tip.x, window.innerWidth - 8))
   return (
     <div

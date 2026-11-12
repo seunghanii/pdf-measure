@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
-import { TOOLS, VIEW_TOOLS, digitForTool } from '../lib/tools'
+import { createContext, useContext, useRef } from 'react'
+import { TOOLS, digitForTool } from '../lib/tools'
 import { toggleSnap, useSnapEnabled } from '../lib/snapSetting'
 import { MEMO_COLORS } from '../lib/memo'
 import { MAX_ZOOM, MIN_ZOOM } from '../lib/zoom'
 import { DEFAULT_BOX_OPACITY, HIGHLIGHT_COLORS, IMAGE_BORDER_COLORS, IMAGE_BORDER_WIDTHS, MARKUP_COLORS, SHAPES, STROKE_TYPES, STROKE_WIDTHS, TEXT_SIZES } from '../lib/markup'
 
-const MARKUP_TOOL_IDS = TOOLS.filter((t) => t.group === 'markup').map((t) => t.id)
 
 import { BOX_TOOLS, LINK_ICON, MEMO_ICON } from '../lib/boxKinds'
 import ToolTips from './ToolTip'
+import { MODES } from '../lib/workMode'
 
 // 맥은 Cmd(⌘), 그 밖은 Ctrl
 const MOD = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘' : 'Ctrl+'
@@ -28,29 +28,23 @@ export default function Toolbar({
   zoom,
   setZoom,
   onFit,
-  tool,
-  setTool,
   canUndo,
   onUndo,
   canRedo,
   onRedo,
-  markupStyle,
-  onChangeMarkupStyle,
-  selectedMarkupType,
-  selectedHasStroke, // 선택한 것 중에 도형·화살표·펜이 있으면 굵기도 보여 줌
-  selectedHasShape, // 선택한 것 중에 도형이 있으면 사각형/원 고르기도 보여 줌
-  onInsertImage, // 사진 넣기 (파일 고르기)
-  memoActions, // 메모 범위만 선택했을 때: { onOpen, onLink, linked }
-  imageActions, // 사진만 선택했을 때: 자르기·숨기기 { cropping, cropped, onToggleCrop, onResetCrop, onHide }
+  mode, // 작업 모드 'view' | 'equip' | 'measure' | 'markup' (lib/workMode.js)
+  onMode,
+  styleBar, // 마크업 설정 바 내용 (없으면 안 보임) { kind, title, style, onChange, showStroke, showShape, imageActions, memoActions }
+  styleDocked, // 오른쪽 목록이 열려 있어 설정 바를 거기 붙임 (넓은 화면에서는 여기 띄우지 않음)
   onSave,
   onRevision, // 도면 개정 창 열기 (개정판으로 바꾸기·예전 판)
   revLabel, // 지금 판 이름 (바꾼 적 있을 때)
   saving,
   syncStatus, // 서버 저장 상태: 'saved' | 'saving' | 'error' (로그인했을 때만)
   right, // 홈 화면 오른쪽 (계정)
+  left, // 홈 화면 로고 옆 (홈 안 화면 고르기)
 }) {
   const numPages = pdfDoc?.numPages ?? 0
-  const memoKind = markupStyle?.memoKind ?? 'note'
   const headerRef = useRef(null)
 
   return (
@@ -65,52 +59,18 @@ export default function Toolbar({
           <span className="hidden text-[15px] font-semibold tracking-tight text-ink-900 xl:inline">JCP 도면 관리</span>
         </div>
       )}
+      {!pdfDoc && left}
 
       {/* PDF 열기는 홈의 '도면 열기' 칸과 탭 줄 + 버튼에서 */}
       {pdfDoc && (
         <>
-          {/* 도구 묶음은 왼쪽 끝과 오른쪽 단추들 사이 빈 곳의 가운데 (좁은 화면은 옆으로 미는 한 줄이라 왼쪽부터) */}
-          <div className="flex min-w-0 flex-1 items-center justify-center-safe gap-x-2 xl:gap-x-2.5 max-lg:flex-none max-lg:justify-start max-lg:*:shrink-0">
-          <div className="flex items-center gap-0.5 rounded-xl bg-ink-100 p-0.5" role="group" aria-label="측정 도구">
-            {/* 기준 길이는 오른쪽 목록 축척 칸에서만 (C·3 키는 그대로) */}
-            {/* 면적·각도(more)는 + 버튼 안에. 고른 동안에는 막대에도 보여 줌 */}
-            {VIEW_TOOLS.filter((t) => t.id !== 'calibrate' && (!t.more || tool === t.id)).map((t) => (
-              <ToolButton key={t.id} t={t} active={tool === t.id} onClick={() => setTool(t.id)} />
-            ))}
-            <MoreTools tools={VIEW_TOOLS.filter((t) => t.more)} tool={tool} setTool={setTool} />
-            <SnapButton />
-          </div>
-          <Divider />
-          <div className="flex items-center gap-0.5 rounded-xl bg-ink-100 p-0.5" role="group" aria-label="마크업 도구">
-            {TOOLS.filter((t) => t.group === 'markup' && t.id !== 'memo').map((t) => (
-              <ToolButton key={t.id} t={t} active={tool === t.id} onClick={() => setTool(t.id)} />
-            ))}
-            {/* 박스: 메모·링크·Equipment 를 따로 (모두 memo 도구, 종류만 다름) */}
-            {BOX_TOOLS.map((t) => (
-              <ToolButton
-                key={t.id}
-                t={t}
-                active={tool === 'memo' && memoKind === t.kind}
-                onClick={() => {
-                  setTool('memo')
-                  if (memoKind !== t.kind) onChangeMarkupStyle({ memoKind: t.kind })
-                }}
-              />
-            ))}
-            <button
-              data-tip="사진 넣기 · 복사한 사진은 Ctrl+V, 사진 파일을 도면에 끌어다 놓아도 돼요"
-              data-key="I"
-              aria-label="사진 넣기"
-              onClick={onInsertImage}
-              className="flex select-none items-center gap-1.5 rounded-[10px] px-2 py-1.5 text-sm font-medium whitespace-nowrap xl:px-2.5 text-ink-600 transition-colors hover:bg-surface hover:text-ink-900 pointer-coarse:px-3 pointer-coarse:py-2.5"
-            >
-              <Icon d="M4 5h16v14H4zM4 16l5-5 4 4 2-2 5 5M15.5 9.5h.01" />
-            </button>
-          </div>
-          <div className="flex items-center gap-0.5 rounded-xl bg-ink-100 p-0.5" role="group" aria-label="되돌리기">
-            <HistoryButton label="되돌리기" keys={`${MOD}Z`} onClick={onUndo} disabled={!canUndo} d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 010 11H11" />
-            <HistoryButton label="다시 실행" keys={`${MOD}Shift+Z`} onClick={onRedo} disabled={!canRedo} d="M15 14l5-5-5-5M20 9H9.5a5.5 5.5 0 000 11H13" />
-          </div>
+          {/* 가운데: 작업 모드 고르기 + 되돌리기 (도구는 왼쪽 세로 도구 줄 ToolRail) */}
+          <div className="flex min-w-0 flex-1 items-center justify-center-safe gap-x-2.5 max-lg:flex-none max-lg:justify-start max-lg:*:shrink-0">
+            <ModeSwitch mode={mode} onMode={onMode} />
+            <div className="flex items-center gap-0.5 rounded-xl bg-ink-100 p-0.5" role="group" aria-label="되돌리기">
+              <HistoryButton label="되돌리기" keys={`${MOD}Z`} onClick={onUndo} disabled={!canUndo} d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 010 11H11" />
+              <HistoryButton label="다시 실행" keys={`${MOD}Shift+Z`} onClick={onRedo} disabled={!canRedo} d="M15 14l5-5-5-5M20 9H9.5a5.5 5.5 0 000 11H13" />
+            </div>
           </div>
 
           <div className="flex items-center gap-3">
@@ -172,19 +132,10 @@ export default function Toolbar({
       )}
       {right && <div className="ml-auto flex items-center gap-2">{right}</div>}
       </div>
-      {/* 마크업 설정 바: 마크업 도구를 골랐거나, 선택 도구로 마크업을 골랐을 때 툴바 아래에 떠서 보임 (도면을 밀어내지 않음) */}
-      {pdfDoc && (MARKUP_TOOL_IDS.includes(tool) || (tool === 'select' && selectedMarkupType)) && (
-        <div className="absolute top-full left-1/2 z-20 mt-2 max-w-[calc(100%-1rem)] -translate-x-1/2 max-lg:w-max">
-          <MarkupStyle
-            kind={selectedMarkupType && tool === 'select' ? selectedMarkupType : tool}
-            title={tool === 'select' ? '선택한 마크업' : TOOLS.find((t) => t.id === tool)?.label}
-            style={markupStyle}
-            onChange={onChangeMarkupStyle}
-            showStroke={selectedHasStroke}
-            showShape={selectedHasShape}
-            imageActions={imageActions}
-            memoActions={memoActions}
-          />
+      {/* 마크업 설정 바: 오른쪽 목록이 열려 있으면 목록 맨 위에 붙고(도면을 가리지 않음), 닫혀 있거나 좁은 화면이면 툴바 아래에 떠서 보임 */}
+      {pdfDoc && styleBar && (
+        <div className={`absolute top-full left-1/2 z-20 mt-2 max-w-[calc(100%-1rem)] -translate-x-1/2 max-lg:w-max ${styleDocked ? 'lg:hidden' : ''}`}>
+          <MarkupStyleBar {...styleBar} />
         </div>
       )}
     </header>
@@ -219,10 +170,6 @@ function SyncBadge({ status }) {
   )
 }
 
-function Divider() {
-  return <div className="hidden h-6 w-px bg-ink-200 md:block" />
-}
-
 function SmallButton({ children, ...props }) {
   return (
     <button
@@ -235,116 +182,23 @@ function SmallButton({ children, ...props }) {
 }
 
 // 자석 켜고 끄기: 켜져 있으면 도면 선의 끝점·교차점·선 위와 찍은 점에 붙음
-function SnapButton() {
+function SnapButton({ rail }) {
   const on = useSnapEnabled()
   return (
     <button
+      data-tip-side={rail ? 'right' : undefined}
       onClick={toggleSnap}
       aria-pressed={on}
       aria-label="자석"
       data-tip={on ? '자석 켜짐: 선 끝점·교차점·선 위에 붙어요. 누르면 꺼짐' : '자석 꺼짐: 누르면 선에 붙게 켜요'}
       data-key="S"
       className={[
-        'flex select-none items-center gap-1.5 rounded-[10px] px-2 py-1.5 text-sm font-medium whitespace-nowrap xl:px-2.5 transition-colors pointer-coarse:px-3 pointer-coarse:py-2.5',
+        rail ? RAIL_BTN : 'flex select-none items-center gap-1.5 rounded-[10px] px-2 py-1.5 text-sm font-medium whitespace-nowrap xl:px-2.5 transition-colors pointer-coarse:px-3 pointer-coarse:py-2.5',
         on ? 'bg-surface text-snap-600 shadow-xs ring-1 ring-snap-200 hover:bg-snap-50' : 'text-ink-400 hover:bg-surface hover:text-ink-600',
       ].join(' ')}
     >
       <Icon d={on ? 'M6 4v8a6 6 0 0012 0V4h-4v8a2 2 0 01-4 0V4zM6 8h4M14 8h4' : 'M6 4v8a6 6 0 0012 0V4h-4v8a2 2 0 01-4 0V4zM3 3l18 18'} />
     </button>
-  )
-}
-
-// 자주 안 쓰는 도구(면적·각도) 펼침 메뉴. 툴바가 좁은 화면에서 옆으로 밀리며 잘리지 않게 fixed 로 띄움
-function MoreTools({ tools, tool, setTool }) {
-  const btnRef = useRef(null)
-  const menuRef = useRef(null)
-  const [pos, setPos] = useState(null) // 열렸을 때 {left, top}
-  const open = !!pos
-
-  useEffect(() => {
-    if (!open) return
-    const close = () => setPos(null)
-    const onDown = (e) => {
-      if (menuRef.current?.contains(e.target) || btnRef.current?.contains(e.target)) return
-      close()
-    }
-    const onKey = (e) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation()
-        close()
-      }
-    }
-    window.addEventListener('pointerdown', onDown, true)
-    window.addEventListener('keydown', onKey, true)
-    window.addEventListener('resize', close)
-    window.addEventListener('blur', close)
-    return () => {
-      window.removeEventListener('pointerdown', onDown, true)
-      window.removeEventListener('keydown', onKey, true)
-      window.removeEventListener('resize', close)
-      window.removeEventListener('blur', close)
-    }
-  }, [open])
-
-  const toggle = () => {
-    if (open) return setPos(null)
-    const r = btnRef.current.getBoundingClientRect()
-    setPos({ left: Math.max(8, Math.min(r.left, window.innerWidth - 200)), top: r.bottom + 6 })
-  }
-
-  return (
-    <>
-      <button
-        ref={btnRef}
-        onClick={toggle}
-        aria-label="도구 더 보기"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        data-tip={open ? undefined : `도구 더 보기: ${tools.map((t) => t.label).join(' · ')}`}
-        className={[
-          'flex select-none items-center rounded-[10px] px-1.5 py-1.5 text-ink-600 xl:px-2 transition-colors pointer-coarse:px-3 pointer-coarse:py-2.5',
-          open ? 'bg-surface text-ink-900 shadow-xs' : 'hover:bg-surface hover:text-ink-900',
-        ].join(' ')}
-      >
-        <Icon d="M12 5v14M5 12h14" />
-      </button>
-      {open && (
-        <div
-          ref={menuRef}
-          role="menu"
-          aria-label="더 많은 측정 도구"
-          className="fixed z-50 min-w-44 rounded-lg border border-ink-200 bg-surface p-1 shadow-lg"
-          style={{ left: pos.left, top: pos.top }}
-        >
-          {tools.map((t) => {
-            const digit = digitForTool(t.id)
-            const active = tool === t.id
-            return (
-              <button
-                key={t.id}
-                role="menuitemradio"
-                aria-checked={active}
-                onClick={() => {
-                  setTool(t.id)
-                  setPos(null)
-                }}
-                className={[
-                  'flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm font-medium pointer-coarse:py-2.5',
-                  active ? 'bg-brand-600 text-white' : 'text-ink-700 hover:bg-ink-100',
-                ].join(' ')}
-              >
-                <Icon d={t.icon} />
-                <span className="flex-1">{t.label}</span>
-                <kbd className={`font-sans text-xs ${active ? 'text-white/80' : 'text-ink-400'}`}>
-                  {digit ? `${digit} · ` : ''}
-                  {t.key}
-                </kbd>
-              </button>
-            )
-          })}
-        </div>
-      )}
-    </>
   )
 }
 
@@ -365,10 +219,11 @@ function HistoryButton({ label, keys, onClick, disabled, d }) {
 }
 
 // 툴바 도구는 아이콘만 (이름표는 마우스를 올리거나 길게 누르면 바로 뜸, ToolTip.jsx)
-function ToolButton({ t, active, onClick }) {
+function ToolButton({ t, active, onClick, rail }) {
   const digit = digitForTool(t.id)
   return (
     <button
+      data-tip-side={rail ? 'right' : undefined}
       data-tip={t.label}
       data-key={digit ? `${digit} · ${t.key}` : t.key}
       aria-label={t.label}
@@ -376,12 +231,14 @@ function ToolButton({ t, active, onClick }) {
       aria-pressed={active}
       onClick={onClick}
       className={[
-        'flex select-none items-center gap-1.5 rounded-[10px] px-2 py-1.5 text-sm font-medium whitespace-nowrap xl:px-2.5 transition-colors pointer-coarse:px-3 pointer-coarse:py-2.5',
+        rail ? RAIL_BTN : 'flex select-none items-center gap-1.5 rounded-[10px] px-2 py-1.5 text-sm font-medium whitespace-nowrap xl:px-2.5 transition-colors pointer-coarse:px-3 pointer-coarse:py-2.5',
         active
           ? t.accent === 'orange'
             ? 'bg-ref-500 text-white shadow-xs'
             : 'bg-brand-600 text-white shadow-xs'
-          : 'text-ink-600 hover:bg-surface hover:text-ink-900',
+          : rail
+            ? 'text-ink-600 hover:bg-ink-100 hover:text-ink-900'
+            : 'text-ink-600 hover:bg-surface hover:text-ink-900',
       ].join(' ')}
     >
       <Icon d={t.icon} />
@@ -398,6 +255,7 @@ const ALIGN_BUTTONS = [
 
 // 마크업 색상, 선 굵기, 글자 크기, 텍스트 상자 배경 투명도
 function MarkupStyle({ kind, title, style, onChange, showStroke, showShape, imageActions, memoActions }) {
+  const barClass = useBarClass('gap-1')
   if (kind === 'memo') return <MemoStyle style={style} onChange={onChange} actions={memoActions} />
   if (kind === 'image') return <ImageStyle title={title === '선택한 마크업' ? '사진' : title} style={style} onChange={onChange} actions={imageActions} />
   const isHighlight = kind === 'highlight'
@@ -408,7 +266,7 @@ function MarkupStyle({ kind, title, style, onChange, showStroke, showShape, imag
   const widths = STROKE_WIDTHS.includes(style.strokeWidth) ? STROKE_WIDTHS : [...STROKE_WIDTHS, style.strokeWidth].sort((a, b) => a - b)
   const transparency = Math.round((1 - (style.boxOpacity ?? DEFAULT_BOX_OPACITY)) * 100)
   return (
-    <div className="flex flex-wrap items-center gap-1 rounded-lg border border-ink-200 bg-surface/95 px-2.5 py-1.5 shadow-md backdrop-blur max-lg:max-w-full max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:*:shrink-0 no-scrollbar pointer-coarse:py-2">
+    <div className={barClass}>
       {title && <span className="mr-1.5 text-xs font-semibold whitespace-nowrap text-ink-700">{title}</span>}
       {(kind === 'rect' || showShape) && (
         <div className="mr-1.5 flex items-center rounded border border-ink-300 bg-surface" role="group" aria-label="도형 모양">
@@ -517,7 +375,7 @@ function ImageStyle({ title, style, onChange, actions }) {
       active ? 'bg-ink-800 text-surface' : 'text-ink-700 ring-1 ring-ink-300 hover:bg-ink-100'
     }`
   return (
-    <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-ink-200 bg-surface/95 px-2.5 py-1.5 shadow-md backdrop-blur max-lg:max-w-full max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:*:shrink-0 no-scrollbar pointer-coarse:py-2">
+    <div className={useBarClass('gap-1.5')}>
       <span className="mr-1 text-xs font-semibold whitespace-nowrap text-ink-700">{title}</span>
       {actions && (
         <>
@@ -591,7 +449,7 @@ function MemoStyle({ style, onChange, actions }) {
   const kind = style.memoKind ?? 'note'
   const title = actions ? '박스' : kind === 'inst' ? 'Equipment 박스' : kind === 'link' ? '링크 박스' : '메모 박스'
   return (
-    <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-ink-200 bg-surface/95 px-2.5 py-1.5 shadow-md backdrop-blur max-lg:max-w-full max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:*:shrink-0 no-scrollbar pointer-coarse:py-2">
+    <div className={useBarClass('gap-1.5')}>
       <span className="mr-1 text-xs font-semibold whitespace-nowrap text-ink-700">{title}</span>
       {actions ? (
         <>
@@ -625,3 +483,107 @@ function MemoStyle({ style, onChange, actions }) {
     </div>
   )
 }
+
+// 설정 바가 오른쪽 목록에 붙었는지 (붙으면 그림자 없이 줄바꿈해서 넓이에 맞춤)
+const BarDock = createContext(false)
+function useBarClass(gap) {
+  const docked = useContext(BarDock)
+  return docked
+    ? `flex flex-wrap items-center ${gap} border-b border-ink-200 bg-ink-50 px-4 py-2.5 [&_span]:whitespace-normal`
+    : `flex flex-wrap items-center ${gap} rounded-lg border border-ink-200 bg-surface/95 px-2.5 py-1.5 shadow-md backdrop-blur max-lg:max-w-full max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:*:shrink-0 no-scrollbar pointer-coarse:py-2`
+}
+
+export function MarkupStyleBar({ docked = false, ...props }) {
+  return (
+    <BarDock.Provider value={docked}>
+      <MarkupStyle {...props} />
+    </BarDock.Provider>
+  )
+}
+
+// 작업 모드 고르기 (보기 · Equipment · 측정 · 마크업)
+function ModeSwitch({ mode, onMode }) {
+  return (
+    <div className="flex items-center gap-0.5 rounded-xl bg-ink-100 p-0.5" role="radiogroup" aria-label="작업 모드">
+      {MODES.map((m) => {
+        const on = mode === m.id
+        return (
+          <button
+            key={m.id}
+            role="radio"
+            aria-checked={on}
+            data-tip={m.hint}
+            onClick={() => onMode(m.id)}
+            className={[
+              'rounded-[10px] px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors pointer-coarse:px-4 pointer-coarse:py-2.5 max-sm:px-2',
+              on ? 'bg-brand-600 text-white shadow-xs' : 'text-ink-600 hover:bg-surface hover:text-ink-900',
+            ].join(' ')}
+          >
+            {m.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// 왼쪽 세로 도구 줄: 어느 모드에서나 선택·이동·글자 복사, 그 아래 지금 모드의 도구
+export function ToolRail({ mode, tool, setTool, markupStyle, onChangeMarkupStyle, onInsertImage }) {
+  const railRef = useRef(null)
+  const memoKind = markupStyle?.memoKind ?? 'note'
+  const pick = (id) => setTool(id)
+  const tools = (ids) => ids.map((id) => TOOLS.find((t) => t.id === id))
+  return (
+    <nav
+      ref={railRef}
+      aria-label="도구"
+      className="no-scrollbar z-10 flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-ink-200 bg-surface py-2 pointer-coarse:w-14"
+    >
+      <ToolTips rootRef={railRef} />
+      {tools(['select', 'pan', 'textcopy']).map((t) => (
+        <ToolButton key={t.id} t={t} rail active={tool === t.id} onClick={() => pick(t.id)} />
+      ))}
+      {mode !== 'view' && <div className="my-1 h-px w-6 shrink-0 bg-ink-200" />}
+      {mode === 'equip' &&
+        [...BOX_TOOLS].reverse().map((t) => (
+          <ToolButton
+            key={t.id}
+            t={t}
+            rail
+            active={tool === 'memo' && memoKind === t.kind}
+            onClick={() => {
+              setTool('memo')
+              if (memoKind !== t.kind) onChangeMarkupStyle({ memoKind: t.kind })
+            }}
+          />
+        ))}
+      {mode === 'measure' && (
+        <>
+          {tools(['length', 'area', 'angle']).map((t) => (
+            <ToolButton key={t.id} t={t} rail active={tool === t.id} onClick={() => pick(t.id)} />
+          ))}
+          <SnapButton rail />
+        </>
+      )}
+      {mode === 'markup' && (
+        <>
+          {tools(['highlight', 'text', 'pen', 'rect', 'arrow']).map((t) => (
+            <ToolButton key={t.id} t={t} rail active={tool === t.id} onClick={() => pick(t.id)} />
+          ))}
+          <button
+            data-tip="사진 넣기 · 복사한 사진은 Ctrl+V, 사진 파일을 도면에 끌어다 놓아도 돼요"
+            data-tip-side="right"
+            data-key="I"
+            aria-label="사진 넣기"
+            onClick={onInsertImage}
+            className={RAIL_BTN + ' text-ink-600 hover:bg-ink-100 hover:text-ink-900'}
+          >
+            <Icon d="M4 5h16v14H4zM4 16l5-5 4 4 2-2 5 5M15.5 9.5h.01" />
+          </button>
+        </>
+      )}
+    </nav>
+  )
+}
+
+const RAIL_BTN = 'flex h-9 w-9 shrink-0 select-none items-center justify-center rounded-[10px] transition-colors pointer-coarse:h-11 pointer-coarse:w-11'

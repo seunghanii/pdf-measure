@@ -18,6 +18,10 @@ import EmptyState from './components/EmptyState'
 import { AccountMenu, PasswordDialog } from './components/Account'
 import SearchPanel, { SearchIcon } from './components/SearchPanel'
 import ThemeMenu from './components/ThemeMenu'
+import HomeNav from './components/HomeNav'
+import { isDark, loadTheme, saveTheme } from './lib/theme'
+
+const MOD_KEY = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘' : 'Ctrl+'
 import { ensureIndexed, forgetIndex, reindex, replaceIndex } from './lib/indexer'
 import { enqueuePageSync, isPageSyncPending, settlePageSync } from './lib/pageSync'
 import { linkRevision, resolveFile } from './lib/revision'
@@ -96,7 +100,28 @@ function Session({ store, user, onLogout, onChangePassword }) {
   const [uploading, setUploading] = useState([]) // 서버에 올리는 중인 파일 이름
   const [loading, setLoading] = useState(false)
   const [restored, setRestored] = useState(false)
-  const [searchOpen, setSearchOpen] = useState(false) // 홈 화면 돋보기
+  const [searchOpen, setSearchOpen] = useState(false) // 찾기·명령 창 (⌘K / Ctrl+K)
+  // 홈 안 화면: 'home' 현황판 | 'equip' Equipment | 'docs' 도면 폴더 | 'calendar' 달력 (이 탭 동안만 기억)
+  const [homeView, setHomeView] = useState(() => {
+    try {
+      return sessionStorage.getItem('pdf-measure:home-view') || 'home'
+    } catch {
+      return 'home'
+    }
+  })
+  const [equipFilter, setEquipFilter] = useState(null)
+  const showHome = useCallback((view, filter = null) => {
+    setHomeView(view)
+    setEquipFilter(filter)
+    setActiveId(null)
+    try {
+      sessionStorage.setItem('pdf-measure:home-view', view)
+    } catch {
+      // 무시
+    }
+  }, [])
+  const homeFileRef = useRef(null)
+  const pickPdf = useCallback(() => homeFileRef.current?.click(), [])
   const [pickerOpen, setPickerOpen] = useState(false) // 탭 줄 + 버튼: 도면 골라 새 탭으로
   const [searchJump, setSearchJump] = useState(null) // 검색에서 고른 위치 { id, page, rect }
   const [pendingRev, setPendingRev] = useState(null) // 열자마자 개정판 바꾸기 창을 띄울 도면 { id, file, nonce }
@@ -619,18 +644,75 @@ function Session({ store, user, onLogout, onChangePassword }) {
     onLogout() // 서버에 닿지 않아도 이 브라우저에서는 로그아웃
   }, [onLogout])
 
-  // 홈 화면에서 Ctrl+F: 모든 도면 검색
+  // 찾기·명령 창: 어디서든 ⌘K / Ctrl+K, 홈에서는 Ctrl+F 도 (도면 안 Ctrl+F 는 오른쪽 검색 칸)
   useEffect(() => {
-    if (activeId !== null) return
     const onKey = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return
+      const k = e.code === 'KeyK' || e.key.toLowerCase() === 'k'
+      const f = activeId === null && e.key.toLowerCase() === 'f'
+      if (k || f) {
         e.preventDefault()
-        setSearchOpen(true)
+        setSearchOpen((v) => (k ? !v : true))
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [activeId])
+
+  // 찾기·명령 창의 명령 (도면 안 명령은 열린 도면 화면에 jcp:command 로 전함)
+  const commands = useMemo(() => {
+    const docCmd = (cmd) => () => {
+      setSearchOpen(false)
+      window.dispatchEvent(new CustomEvent('jcp:command', { detail: { id: activeId, cmd } }))
+    }
+    const home = (view) => () => {
+      setSearchOpen(false)
+      showHome(view)
+    }
+    const list = []
+    if (activeId !== null)
+      list.push(
+        { id: 'mode-view', label: '보기 모드', hint: '선택·이동·글자 복사', icon: 'M5 3l14 8-6 2-3 6z', run: docCmd('mode:view') },
+        { id: 'mode-equip', label: 'Equipment 모드', hint: 'Equipment·링크·메모 박스', keys: 'E', icon: 'M5 10a7 7 0 1014 0 7 7 0 10-14 0zM12 10l3.5-3', run: docCmd('mode:equip') },
+        { id: 'mode-measure', label: '측정 모드', hint: '길이·면적·각도', keys: 'L', words: '길이 면적 각도 축척', icon: 'M3 12h18M3 8v8M21 8v8', run: docCmd('mode:measure') },
+        { id: 'mode-markup', label: '마크업 모드', hint: '형광펜·텍스트·펜·도형', words: '형광펜 텍스트 펜 도형 화살표 사진', icon: 'M3 17c3-1 4-6 7-6s2 6 5 6 4-4 6-5', run: docCmd('mode:markup') },
+        { id: 'tagfind', label: 'Tag 찾기', hint: '도면 글자에서 Tag 를 찾아 Equipment 만들기', icon: 'M11 4a7 7 0 100 14 7 7 0 000-14zM20 20l-4-4', run: docCmd('tagfind') },
+        { id: 'equiplist', label: '이 도면 Equipment 목록', icon: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01', run: docCmd('equiplist') },
+        { id: 'pages', label: '페이지 탐색', hint: '쪽 추가·삭제·순서', icon: 'M3 3h7v9H3zM14 3h7v9h-7zM3 15h7v6H3zM14 15h7v6h-7z', run: docCmd('pages') },
+        { id: 'fit', label: '화면에 맞춤', keys: `${MOD_KEY}0`, icon: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5', run: docCmd('fit') },
+        { id: 'export', label: 'PDF 내보내기', hint: '마크업·측정을 그려 넣은 PDF', keys: `${MOD_KEY}S`, icon: 'M12 4v11M7 10l5 5 5-5M5 20h14', run: docCmd('export') },
+      )
+    list.push(
+      { id: 'home', label: '홈 현황판', icon: 'M3 11l9-7 9 7v9H3z', run: home('home') },
+      { id: 'equip', label: 'Equipment 화면', hint: '모든 도면 Equipment 표', words: '진척 상태 issue', icon: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01', run: home('equip') },
+      { id: 'docs', label: '도면 폴더', words: '폴더 휴지통', icon: 'M3 6h6l2 2h10v11H3z', run: home('docs') },
+      { id: 'calendar', label: '달력', words: '일정 휴무', icon: 'M3 5h18v16H3zM3 10h18M8 3v4M16 3v4', run: home('calendar') },
+      {
+        id: 'open',
+        label: 'PDF 열기',
+        hint: '컴퓨터에서 PDF 고르기',
+        icon: 'M12 5v14M5 12h14',
+        run: () => {
+          setSearchOpen(false)
+          pickPdf()
+        },
+      },
+      {
+        id: 'theme',
+        label: isDark(loadTheme()) ? '밝게 보기' : '어둡게 보기',
+        words: '다크 모드 테마',
+        icon: 'M12 3a9 9 0 109 9 7 7 0 01-9-9z',
+        run: () => {
+          setSearchOpen(false)
+          const next = isDark(loadTheme()) ? 'light' : 'dark'
+          saveTheme(next)
+          window.dispatchEvent(new CustomEvent('jcp:theme', { detail: next }))
+        },
+      },
+    )
+    return list
+    // searchOpen: 열 때마다 테마 이름을 새로
+  }, [activeId, showHome, searchOpen, pickPdf]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Ctrl+Tab 대신 Alt+←/→ 로 탭 이동
   useEffect(() => {
@@ -723,17 +805,40 @@ function Session({ store, user, onLogout, onChangePassword }) {
         refreshRecent()
       }} onSetAlias={(id, alias) => updateLibrary((lib) => setAlias(lib, id, alias))} />
 
+      {/* PDF 열기 (홈 툴바 단추, 찾기·명령 창) */}
+      <input
+        ref={homeFileRef}
+        type="file"
+        accept="application/pdf,.pdf"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          openFiles([...(e.target.files ?? [])])
+          e.target.value = ''
+        }}
+      />
       {activeId === null && (
         <Toolbar
+          left={<HomeNav view={homeView} onView={(v) => showHome(v)} />}
           right={
             <>
               <button
                 onClick={() => setSearchOpen(true)}
-                title="도면 이름·별명, 도면 속 글자 검색 (Ctrl+F)"
+                title="도면 이름·별명, Tag. No, 도면 속 글자 찾기와 명령 (⌘K / Ctrl+K)"
                 className="flex items-center gap-1.5 rounded-lg border border-ink-200 bg-surface px-2.5 py-1.5 text-sm text-ink-600 shadow-xs transition-colors hover:border-ink-300 hover:bg-ink-50 hover:text-ink-900"
               >
                 <SearchIcon />
-                <span className="hidden sm:inline">검색</span>
+                <span className="hidden sm:inline">찾기</span>
+                <kbd className="hidden rounded bg-ink-100 px-1 font-sans text-[11px] text-ink-500 lg:inline">{MOD_KEY}K</kbd>
+              </button>
+              <button
+                onClick={() => homeFileRef.current?.click()}
+                className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium whitespace-nowrap text-white shadow-xs transition-colors hover:bg-brand-press"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                <span className="hidden sm:inline">PDF 열기</span>
               </button>
               <ThemeMenu />
               {cloudConfigured && <AccountMenu user={user} onLogout={logout} onChangePassword={onChangePassword} />}
@@ -828,11 +933,16 @@ function Session({ store, user, onLogout, onChangePassword }) {
           showLogin={cloudConfigured && !user}
           store={store}
           onMigrated={refreshRecent}
+          view={homeView}
+          onView={showHome}
+          equipFilter={equipFilter}
+          onSearch={() => setSearchOpen(true)}
         />
       )}
 
-      {searchOpen && activeId === null && (
+      {searchOpen && (
         <SearchPanel
+          commands={commands}
           store={store}
           recent={liveRecent}
           library={library}

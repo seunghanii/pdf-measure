@@ -31,6 +31,9 @@ export const TOOLS = [
 // more: 자주 안 쓰는 도구(면적·각도). 도구 막대의 + 버튼 안에 들어가고, 단축키는 그대로
 export const VIEW_TOOLS = [...TOOLS.filter((t) => t.group === 'basic'), ...TOOLS.filter((t) => t.group === 'measure')]
 
+// 마크업 설정 바가 뜨는 도구
+export const MARKUP_TOOL_IDS = TOOLS.filter((x) => x.group === 'markup').map((x) => x.id)
+
 export const DIGIT_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
 
 // 숫자 → 도구 (1=선택 … 9=펜, 0=도형). 화살표는 W.
