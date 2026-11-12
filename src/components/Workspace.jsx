@@ -1615,7 +1615,6 @@ export default function Workspace({ doc, active, searchJump: rawSearchJump, onOp
           onApplyRatio={applyRatio}
           onResetCalibration={() => setCalibration(null)}
           fileName={fileName}
-          instCount={instCount}
           onOpenInstruments={setInstPanel}
           top={
             <DocSearch

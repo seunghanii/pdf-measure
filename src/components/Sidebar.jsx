@@ -40,7 +40,6 @@ export default function Sidebar({
   onResetCalibration,
   fileName,
   top, // 맨 위 (도면 안 검색 창)
-  instCount = 0, // 계기 카드 개수
   onOpenInstruments, // ('list' | 'find') 계기 목록 창 열기
   collapsed, // 접힘: 숨기기만 함
   trash = [], // 휴지통 [{ item, at }]
