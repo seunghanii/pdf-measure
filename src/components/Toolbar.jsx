@@ -8,6 +8,10 @@ import { DEFAULT_BOX_OPACITY, HIGHLIGHT_COLORS, IMAGE_BORDER_COLORS, IMAGE_BORDE
 const MARKUP_TOOL_IDS = TOOLS.filter((t) => t.group === 'markup').map((t) => t.id)
 
 import { BOX_TOOLS, LINK_ICON, MEMO_ICON } from '../lib/boxKinds'
+import ToolTips from './ToolTip'
+
+// 맥은 Cmd(⌘), 그 밖은 Ctrl
+const MOD = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘' : 'Ctrl+'
 
 function Icon({ d }) {
   return (
@@ -28,6 +32,8 @@ export default function Toolbar({
   setTool,
   canUndo,
   onUndo,
+  canRedo,
+  onRedo,
   markupStyle,
   onChangeMarkupStyle,
   selectedMarkupType,
@@ -45,9 +51,11 @@ export default function Toolbar({
 }) {
   const numPages = pdfDoc?.numPages ?? 0
   const memoKind = markupStyle?.memoKind ?? 'note'
+  const headerRef = useRef(null)
 
   return (
-    <header className="relative z-20 border-b border-ink-200 bg-surface">
+    <header ref={headerRef} className="relative z-20 border-b border-ink-200 bg-surface">
+      <ToolTips rootRef={headerRef} />
       {/* 좁은 화면(폰·세로 아이패드)에서는 줄을 바꾸지 않고 한 줄로 옆으로 밀어 봄 */}
       <div className="no-scrollbar flex flex-wrap items-center gap-x-2.5 gap-y-2 px-3 py-2 max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:overscroll-x-contain max-lg:*:shrink-0">
       {/* 도면을 볼 때는 로고·앱 이름 없이 도구만 */}
@@ -62,7 +70,7 @@ export default function Toolbar({
       {pdfDoc && (
         <>
           {/* 도구 묶음은 왼쪽 끝과 오른쪽 단추들 사이 빈 곳의 가운데 (좁은 화면은 옆으로 미는 한 줄이라 왼쪽부터) */}
-          <div className="flex min-w-0 flex-1 items-center justify-center gap-x-2.5 max-lg:flex-none max-lg:justify-start max-lg:*:shrink-0">
+          <div className="flex min-w-0 flex-1 items-center justify-center-safe gap-x-2 xl:gap-x-2.5 max-lg:flex-none max-lg:justify-start max-lg:*:shrink-0">
           <div className="flex items-center gap-0.5 rounded-xl bg-ink-100 p-0.5" role="group" aria-label="측정 도구">
             {/* 기준 길이는 오른쪽 목록 축척 칸에서만 (C·3 키는 그대로) */}
             {/* 면적·각도(more)는 + 버튼 안에. 고른 동안에는 막대에도 보여 줌 */}
@@ -90,22 +98,19 @@ export default function Toolbar({
               />
             ))}
             <button
-              title="사진 넣기 (I) · 복사한 사진은 Ctrl+V 로 바로 붙여넣기, 사진 파일을 도면에 끌어다 놓아도 돼요"
+              data-tip="사진 넣기 · 복사한 사진은 Ctrl+V, 사진 파일을 도면에 끌어다 놓아도 돼요"
+              data-key="I"
               aria-label="사진 넣기"
               onClick={onInsertImage}
-              className="flex items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-sm font-medium whitespace-nowrap text-ink-600 transition-colors hover:bg-surface hover:text-ink-900 pointer-coarse:px-3 pointer-coarse:py-2.5"
+              className="flex select-none items-center gap-1.5 rounded-[10px] px-2 py-1.5 text-sm font-medium whitespace-nowrap xl:px-2.5 text-ink-600 transition-colors hover:bg-surface hover:text-ink-900 pointer-coarse:px-3 pointer-coarse:py-2.5"
             >
               <Icon d="M4 5h16v14H4zM4 16l5-5 4 4 2-2 5 5M15.5 9.5h.01" />
             </button>
           </div>
-          <button
-            className="rounded-lg px-2 py-1.5 text-sm text-ink-600 transition-colors hover:bg-ink-100 disabled:opacity-40 disabled:hover:bg-transparent pointer-coarse:px-3 pointer-coarse:py-2.5 pointer-coarse:text-base"
-            onClick={onUndo}
-            disabled={!canUndo}
-            title="되돌리기 (Ctrl+Z)"
-          >
-            ↶
-          </button>
+          <div className="flex items-center gap-0.5 rounded-xl bg-ink-100 p-0.5" role="group" aria-label="되돌리기">
+            <HistoryButton label="되돌리기" keys={`${MOD}Z`} onClick={onUndo} disabled={!canUndo} d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 010 11H11" />
+            <HistoryButton label="다시 실행" keys={`${MOD}Shift+Z`} onClick={onRedo} disabled={!canRedo} d="M15 14l5-5-5-5M20 9H9.5a5.5 5.5 0 000 11H13" />
+          </div>
           </div>
 
           <div className="flex items-center gap-3">
@@ -237,9 +242,10 @@ function SnapButton() {
       onClick={toggleSnap}
       aria-pressed={on}
       aria-label="자석"
-      title={on ? '자석 켜짐: 선 끝점·교차점·선 위에 붙어요. 누르면 꺼짐 (S)' : '자석 꺼짐: 누르면 선에 붙게 켜요 (S)'}
+      data-tip={on ? '자석 켜짐: 선 끝점·교차점·선 위에 붙어요. 누르면 꺼짐' : '자석 꺼짐: 누르면 선에 붙게 켜요'}
+      data-key="S"
       className={[
-        'flex items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-sm font-medium whitespace-nowrap transition-colors pointer-coarse:px-3 pointer-coarse:py-2.5',
+        'flex select-none items-center gap-1.5 rounded-[10px] px-2 py-1.5 text-sm font-medium whitespace-nowrap xl:px-2.5 transition-colors pointer-coarse:px-3 pointer-coarse:py-2.5',
         on ? 'bg-surface text-snap-600 shadow-xs ring-1 ring-snap-200 hover:bg-snap-50' : 'text-ink-400 hover:bg-surface hover:text-ink-600',
       ].join(' ')}
     >
@@ -294,9 +300,9 @@ function MoreTools({ tools, tool, setTool }) {
         aria-label="도구 더 보기"
         aria-haspopup="menu"
         aria-expanded={open}
-        title={`도구 더 보기: ${tools.map((t) => `${t.label}(${t.key})`).join(' · ')}`}
+        data-tip={open ? undefined : `도구 더 보기: ${tools.map((t) => t.label).join(' · ')}`}
         className={[
-          'flex items-center rounded-[10px] px-2 py-1.5 text-ink-600 transition-colors pointer-coarse:px-3 pointer-coarse:py-2.5',
+          'flex select-none items-center rounded-[10px] px-1.5 py-1.5 text-ink-600 xl:px-2 transition-colors pointer-coarse:px-3 pointer-coarse:py-2.5',
           open ? 'bg-surface text-ink-900 shadow-xs' : 'hover:bg-surface hover:text-ink-900',
         ].join(' ')}
       >
@@ -342,17 +348,35 @@ function MoreTools({ tools, tool, setTool }) {
   )
 }
 
-// 툴바 도구는 아이콘만 (이름은 마우스를 올리면 나오는 설명으로)
+// 되돌리기·다시 실행
+function HistoryButton({ label, keys, onClick, disabled, d }) {
+  return (
+    <button
+      data-tip={label}
+      data-key={keys}
+      aria-label={label}
+      onClick={onClick}
+      disabled={disabled}
+      className="flex select-none items-center rounded-[10px] px-1.5 py-1.5 text-ink-600 xl:px-2 transition-colors hover:bg-surface hover:text-ink-900 disabled:text-ink-300 disabled:hover:bg-transparent pointer-coarse:px-3 pointer-coarse:py-2.5"
+    >
+      <Icon d={d} />
+    </button>
+  )
+}
+
+// 툴바 도구는 아이콘만 (이름표는 마우스를 올리거나 길게 누르면 바로 뜸, ToolTip.jsx)
 function ToolButton({ t, active, onClick }) {
   const digit = digitForTool(t.id)
   return (
     <button
-      title={`${t.label} (${digit ? `${digit} 또는 ` : ''}${t.key})`}
+      data-tip={t.label}
+      data-key={digit ? `${digit} · ${t.key}` : t.key}
       aria-label={t.label}
+      aria-keyshortcuts={t.key}
       aria-pressed={active}
       onClick={onClick}
       className={[
-        'flex items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-sm font-medium whitespace-nowrap transition-colors pointer-coarse:px-3 pointer-coarse:py-2.5',
+        'flex select-none items-center gap-1.5 rounded-[10px] px-2 py-1.5 text-sm font-medium whitespace-nowrap xl:px-2.5 transition-colors pointer-coarse:px-3 pointer-coarse:py-2.5',
         active
           ? t.accent === 'orange'
             ? 'bg-ref-500 text-white shadow-xs'
