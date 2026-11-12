@@ -458,7 +458,10 @@ function Session({ store, user, onLogout, onChangePassword }) {
         setError(
           e?.code === 'no_file'
             ? `"${item.name}" 의 PDF 파일은 서버에 없어요. 같은 PDF 를 다시 열면 저장된 측정값이 그대로 이어져요.`
-            : (networkHint(e) ?? `다시 열 수 없어요: ${item.name}. 페이지를 새로고침한 뒤 다시 열어 보고, 그래도 안 되면 알려 주세요. (${errText(e)})`),
+            : (networkHint(e) ??
+                (/Importing a module script|dynamically imported module/i.test(String(e?.message))
+                  ? `도면 여는 부품을 브라우저가 불러오지 못했어요. 브라우저(사파리)를 완전히 껐다 켜 주세요. (${errText(e)})`
+                  : `다시 열 수 없어요: ${item.name}. 페이지를 새로고침한 뒤 다시 열어 보고, 그래도 안 되면 알려 주세요. (${errText(e)})`)),
         )
       } finally {
         setLoading(false)
