@@ -50,14 +50,19 @@ export default function Toolbar({
     <header className="relative z-20 border-b border-ink-200 bg-surface">
       {/* 좁은 화면(폰·세로 아이패드)에서는 줄을 바꾸지 않고 한 줄로 옆으로 밀어 봄 */}
       <div className="no-scrollbar flex flex-wrap items-center gap-x-2.5 gap-y-2 px-3 py-2 max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:overscroll-x-contain max-lg:*:shrink-0">
-      <div className={`flex items-center gap-2 ${pdfDoc ? 'max-sm:hidden' : ''}`}>
-        <Logo />
-        <span className="hidden text-[15px] font-semibold tracking-tight text-ink-900 xl:inline">JCP 도면 관리</span>
-      </div>
+      {/* 도면을 볼 때는 로고·앱 이름 없이 도구만 */}
+      {!pdfDoc && (
+        <div className="flex items-center gap-2">
+          <Logo />
+          <span className="hidden text-[15px] font-semibold tracking-tight text-ink-900 xl:inline">JCP 도면 관리</span>
+        </div>
+      )}
 
       {/* PDF 열기는 홈의 '도면 열기' 칸과 탭 줄 + 버튼에서 */}
       {pdfDoc && (
         <>
+          {/* 도구 묶음은 왼쪽 끝과 오른쪽 단추들 사이 빈 곳의 가운데 (좁은 화면은 옆으로 미는 한 줄이라 왼쪽부터) */}
+          <div className="flex min-w-0 flex-1 items-center justify-center gap-x-2.5 max-lg:flex-none max-lg:justify-start max-lg:*:shrink-0">
           <div className="flex items-center gap-0.5 rounded-xl bg-ink-100 p-0.5" role="group" aria-label="측정 도구">
             {/* 기준 길이는 오른쪽 목록 축척 칸에서만 (C·3 키는 그대로) */}
             {/* 면적·각도(more)는 + 버튼 안에. 고른 동안에는 막대에도 보여 줌 */}
@@ -101,8 +106,9 @@ export default function Toolbar({
           >
             ↶
           </button>
+          </div>
 
-          <div className="ml-auto flex items-center gap-3">
+          <div className="flex items-center gap-3">
             {syncStatus && <SyncBadge status={syncStatus} />}
             {onRevision && (
               <button

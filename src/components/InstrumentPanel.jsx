@@ -19,6 +19,8 @@ export default function InstrumentPanel({
   onGoHere, // (row) 이 도면 카드로 이동
   onGoOther, // (row) 다른 도면 카드로 이동
   onSetStatus, // (id, status)
+  onSetKind, // (id, kind) Type 바로 고르기
+  onAddKind, // (약어) Type 목록에 더하기 (모든 도면 공통)
   onPreview, // (hit) 찾은 태그 자리 보기
   onCreateCards, // (hits)
   kinds, // 계기 종류 목록
@@ -54,7 +56,7 @@ export default function InstrumentPanel({
         </button>
       </div>
       {tab === 'list' ? (
-        <InstList measurements={measurements} store={store} docId={docId} docName={docName} onGoHere={onGoHere} onGoOther={onGoOther} onSetStatus={onSetStatus} onFind={() => onTab('find')} />
+        <InstList measurements={measurements} store={store} docId={docId} docName={docName} onGoHere={onGoHere} onGoOther={onGoOther} onSetStatus={onSetStatus} onSetKind={onSetKind} onAddKind={onAddKind} kinds={kinds} onFind={() => onTab('find')} />
       ) : (
         <TagFinder docId={docId} kinds={kinds} measurements={measurements} textIndex={textIndex} onPreview={onPreview} onCreate={onCreateCards} onDone={() => onTab('list')} />
       )}
@@ -77,11 +79,77 @@ function DoneDates({ row }) {
   )
 }
 
+// 목록 줄의 Type 고르기: 목록의 약어 + '직접 입력…' (새 약어는 모든 도면 Type 목록에 더함)
+const NEW_KIND = '\u0000new'
+function KindSelect({ value, kinds, onChange, onAddKind }) {
+  const [adding, setAdding] = useState(false)
+  const [text, setText] = useState('')
+  const options = value && !kinds.includes(value) ? [...kinds, value] : kinds
+  if (adding) {
+    const finish = (ok) => {
+      const k = text.trim().toUpperCase()
+      if (ok && k) {
+        if (!kinds.includes(k)) onAddKind?.(k)
+        onChange(k)
+      }
+      setText('')
+      setAdding(false)
+    }
+    return (
+      <input
+        autoFocus
+        value={text}
+        onChange={(e) => setText(e.target.value.toUpperCase())}
+        onBlur={() => finish(true)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            finish(true)
+          } else if (e.key === 'Escape') {
+            e.stopPropagation()
+            finish(false)
+          }
+        }}
+        placeholder="예: FIC"
+        className="w-20 rounded border border-brand-400 px-1.5 py-0.5 text-xs font-semibold outline-none"
+        aria-label="새 Type"
+      />
+    )
+  }
+  return (
+    <select
+      value={value || ''}
+      onChange={(e) => {
+        const v = e.target.value
+        if (v === NEW_KIND) setAdding(true)
+        else onChange(v)
+      }}
+      className={`max-w-full rounded py-0.5 pr-6 pl-1.5 text-xs font-semibold ${value ? 'bg-transparent text-ink-700 ring-1 ring-ink-200 hover:bg-ink-50' : 'bg-warn-50 text-warn-700 ring-1 ring-warn-200'}`}
+      aria-label="Type 바꾸기"
+      title="Type 고르기"
+    >
+      <option value="" className="bg-surface text-ink-500">
+        {value ? '— (비우기)' : '— 고르기'}
+      </option>
+      {options.map((k) => (
+        <option key={k} value={k} className="bg-surface text-ink-800">
+          {k}
+        </option>
+      ))}
+      <option value={NEW_KIND} className="bg-surface text-brand-700">
+        + 직접 입력…
+      </option>
+    </select>
+  )
+}
+
 // ---------- 계기 목록 ----------
-function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, onSetStatus, onFind }) {
+function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, onSetStatus, onSetKind, onAddKind, kinds = [], onFind }) {
   const [scope, setScope] = useState('doc') // 'doc' 이 도면 | 'all' 모든 도면
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState(null) // null: 전체
+  const [issueOnly, setIssueOnly] = useState(false) // 이슈 체크가 켜진 것만
+  const [noType, setNoType] = useState(false) // Type 이 빈 것만
   const [others, setOthers] = useState(null) // 다른 도면들의 계기 줄 (모든 도면을 처음 고를 때 받음)
 
   useEffect(() => {
@@ -117,7 +185,17 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
     for (const r of matched) c.set(r.status, (c.get(r.status) ?? 0) + 1)
     return c
   }, [matched])
-  const rows = status ? matched.filter((r) => r.status === status) : matched
+  const issueCount = matched.filter((r) => r.issue).length
+  const noTypeCount = matched.filter((r) => !r.kind).length
+  // 'Type 없음' 으로 거른 채 Type 을 고르면 그 줄이 바로 사라지지 않게: 거르기를 켠 때 빈 줄을 기억
+  const [noTypeIds, setNoTypeIds] = useState(null)
+  const toggleNoType = () => {
+    setNoTypeIds(noType ? null : new Set(matched.filter((r) => !r.kind).map((r) => `${r.docId}-${r.id}`)))
+    setNoType(!noType)
+  }
+  const rows = matched.filter(
+    (r) => (!status || r.status === status) && (!issueOnly || r.issue) && (!noType || !r.kind || noTypeIds?.has(`${r.docId}-${r.id}`)),
+  )
   const done = counts.get('checked') ?? 0
 
   // 같은 태그가 여러 번 (도면을 옮겨 그렸거나 잘못 적은 것) → 표시
@@ -174,6 +252,26 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
               {s.label} <span className="tabular-nums">{counts.get(s.id) ?? 0}</span>
             </button>
           ))}
+          {(issueCount > 0 || issueOnly) && (
+            <button
+              onClick={() => setIssueOnly((v) => !v)}
+              aria-pressed={issueOnly}
+              title="이슈 체크가 켜진 Equipment 만"
+              className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${issueOnly ? 'bg-danger-600 text-white' : 'text-danger-700 ring-1 ring-danger-200 hover:bg-danger-50'}`}
+            >
+              Issue <span className="tabular-nums">{issueCount}</span>
+            </button>
+          )}
+          {(noTypeCount > 0 || noType) && (
+            <button
+              onClick={toggleNoType}
+              aria-pressed={noType}
+              title="Type 이 비어 있는 Equipment 만 (고른 줄은 거르기를 끌 때까지 남아 있어요)"
+              className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${noType ? 'bg-ink-800 text-surface' : 'text-ink-600 ring-1 ring-ink-300 hover:bg-ink-50'}`}
+            >
+              Type 없음 <span className="tabular-nums">{noTypeCount}</span>
+            </button>
+          )}
         </div>
         {matched.length > 0 && (
           <div className="flex items-center gap-2 text-xs text-ink-500">
@@ -236,6 +334,11 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
                           중복
                         </span>
                       )}
+                      {r.issue ? (
+                        <span className="ml-1 rounded bg-danger-600 px-1 text-[10px] font-semibold text-white" title={(r.iss ?? []).map((x) => `· ${x.t}`).join('\n') || '이슈 체크'}>
+                          Issue {r.iss?.length || ''}
+                        </span>
+                      ) : null}
                       {r.hidden ? <span className="ml-1 text-[11px] text-ink-400">· 숨김</span> : null}
                       {r.desc && (
                         <div className="mt-0.5 max-w-48 truncate text-[11px] text-ink-500" title={r.desc}>
@@ -248,8 +351,12 @@ function InstList({ measurements, store, docId, docName, onGoHere, onGoOther, on
                         </div>
                       )}
                     </td>
-                    <td className="max-w-44 px-2 py-1.5 align-top">
-                      <div className="truncate font-semibold text-ink-700">{r.kind || '—'}</div>
+                    <td className="max-w-44 px-2 py-1.5 align-top" onClick={(e) => here && onSetKind && e.stopPropagation()}>
+                      {here && onSetKind ? (
+                        <KindSelect value={r.kind} kinds={kinds} onChange={(k) => onSetKind(r.id, k)} onAddKind={onAddKind} />
+                      ) : (
+                        <div className="truncate font-semibold text-ink-700">{r.kind || '—'}</div>
+                      )}
                     </td>
                     <td className="px-2 py-1.5 align-top" onClick={(e) => here && e.stopPropagation()}>
                       {here ? (

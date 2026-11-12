@@ -122,15 +122,19 @@ export function AccountMenu({ user, onLogout, onChangePassword }) {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex max-w-64 items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-ink-700 hover:bg-ink-100"
-        title="서버에 저장 중인 계정"
+        className="flex h-[34px] w-[34px] items-center justify-center rounded-lg border border-ink-200 bg-surface text-ink-600 shadow-xs transition-colors hover:border-ink-300 hover:bg-ink-50 hover:text-ink-900"
+        title={`계정: ${user.email}`}
+        aria-label="계정"
+        aria-expanded={open}
       >
-        <CloudIcon className="h-4 w-4 shrink-0 text-brand-600" />
-        <span className="truncate">{user.email}</span>
-        <span className="text-xs text-ink-400">▾</span>
+        <PersonIcon className="h-[18px] w-[18px]" />
       </button>
       {open && (
-        <div className="absolute right-0 z-30 mt-1 w-48 overflow-hidden rounded-lg bg-surface py-1 text-sm shadow-lg ring-1 ring-ink-200">
+        <div className="absolute right-0 z-30 mt-1 w-56 overflow-hidden rounded-lg bg-surface py-1 text-sm shadow-lg ring-1 ring-ink-200">
+          <div className="flex items-center gap-1.5 border-b border-ink-100 px-3 pt-1.5 pb-2 text-xs text-ink-500" title="서버에 저장 중인 계정">
+            <CloudIcon className="h-4 w-4 shrink-0 text-brand-600" />
+            <span className="truncate">{user.email}</span>
+          </div>
           <button
             className="block w-full px-3 py-2 text-left hover:bg-ink-50"
             onClick={() => {
@@ -307,6 +311,15 @@ export function MigrationCard({ store, onDone }) {
         </div>
       )}
     </section>
+  )
+}
+
+function PersonIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 20c0-3.6 3.6-6 8-6s8 2.4 8 6" />
+    </svg>
   )
 }
 

@@ -7,7 +7,7 @@ import { toPictureFile } from '../lib/clipPicture'
 import MemoEditor, { MemoHelp } from './MemoEditor'
 import PhotoViewer from './PhotoViewer'
 import DocPreview from './DocPreview'
-import { InstFields, RelatedDocs } from './InstCard'
+import { InstFields, IssueFields, RelatedDocs } from './InstCard'
 import ExcelFiles from './ExcelFiles'
 import CableSchedules, { CablePicker } from './CableSchedules'
 import { MAX_EXCEL_BYTES, XLSM_TYPE, XLSX_TYPE, excelType, isExcelFile, isOldExcel, newFileId } from '../lib/excel'
@@ -180,6 +180,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
     const up = () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
       document.body.style.cursor = ''
       try {
         localStorage.setItem(SIZE_KEY, JSON.stringify({ w: Math.round(next.w), h: Math.round(next.h) }))
@@ -190,6 +191,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
     document.body.style.cursor = dir === 'sw' ? 'nesw-resize' : dir === 'w' ? 'ew-resize' : 'ns-resize'
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
   }
 
   // 아래 자리: 위 변을 끌어 높이 조절
@@ -211,6 +213,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
     const up = () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
       document.body.style.cursor = ''
       try {
         localStorage.setItem(BOTTOM_H_KEY, String(Math.round(next)))
@@ -221,6 +224,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
     document.body.style.cursor = 'ns-resize'
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
   }
 
   const color = memo.color ?? '#f59e0b'
@@ -342,6 +346,7 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
 
       {/* 계기 카드 칸 (계기 카드일 때만) */}
       {memo.inst && <InstFields memo={memo} onChange={onChange} kinds={kinds} onAddKind={onAddKind} reading={tagReading} onReadTag={onReadTag && (() => onReadTag(true))} compact={bottom} />}
+      {memo.inst && <IssueFields key={memo.id} memo={memo} onChange={onChange} compact={bottom} />}
 
       {/* 관련 도면 (여러 개) */}
       <RelatedDocs memo={memo} library={library} onChange={onChange} onOpen={(l) => (l.photo ? openPhotoLink(l) : setPreviewing(l))} onPick={onPickLink} compact={bottom} />
@@ -435,15 +440,34 @@ export default function MemoPanel({ memo, others, onSwitch, onChange, onClose, o
         </button>
       </div>
 
-      {/* 크기 조절 손잡이. 오른쪽: 왼쪽 변, 아래 변, 왼쪽 아래 모서리 / 아래: 위 변 */}
+      {/* 크기 조절 손잡이. 오른쪽: 왼쪽 변, 아래 변, 왼쪽 아래 모서리 / 아래: 위 변
+          아이패드 등 터치: 손가락으로 잡기 쉽게 넓히고(pointer-coarse), 끄는 동안 화면이 스크롤되지 않게(touch-none) */}
       {bottom ? (
-        <div onPointerDown={startResizeBottom} className="absolute top-0 right-0 left-0 h-1.5 cursor-ns-resize" title="끌어서 높이 조절" />
+        <div
+          onPointerDown={startResizeBottom}
+          className="absolute top-0 right-0 left-0 z-10 flex h-2 cursor-ns-resize touch-none justify-center pointer-coarse:h-5"
+          title="끌어서 높이 조절"
+        >
+          <span className="mt-1 hidden h-1.5 w-12 rounded-full bg-ink-300 pointer-coarse:block" aria-hidden="true" />
+        </div>
       ) : (
         <>
-          <div onPointerDown={(e) => startResize(e, 'w')} className="absolute top-0 bottom-3 left-0 w-1.5 cursor-ew-resize" title="끌어서 너비 조절" />
-          <div onPointerDown={(e) => startResize(e, 's')} className="absolute right-0 bottom-0 left-3 h-1.5 cursor-ns-resize" title="끌어서 높이 조절" />
-          <div onPointerDown={(e) => startResize(e, 'sw')} className="absolute bottom-0 left-0 h-4 w-4 cursor-nesw-resize" title="끌어서 크기 조절">
-            <svg viewBox="0 0 16 16" className="h-4 w-4 text-ink-300" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+          <div
+            onPointerDown={(e) => startResize(e, 'w')}
+            className="absolute top-0 bottom-3 left-0 z-10 w-2 cursor-ew-resize touch-none pointer-coarse:bottom-10 pointer-coarse:w-4"
+            title="끌어서 너비 조절"
+          />
+          <div
+            onPointerDown={(e) => startResize(e, 's')}
+            className="absolute right-0 bottom-0 left-3 z-10 h-2 cursor-ns-resize touch-none pointer-coarse:left-10 pointer-coarse:h-4"
+            title="끌어서 높이 조절"
+          />
+          <div
+            onPointerDown={(e) => startResize(e, 'sw')}
+            className="absolute bottom-0 left-0 z-10 flex h-4 w-4 cursor-nesw-resize touch-none items-end pointer-coarse:h-10 pointer-coarse:w-10"
+            title="끌어서 크기 조절"
+          >
+            <svg viewBox="0 0 16 16" className="h-4 w-4 text-ink-300 pointer-coarse:m-1 pointer-coarse:h-6 pointer-coarse:w-6 pointer-coarse:text-ink-400" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
               <path d="M3 7l6 6M3 11l2 2" />
             </svg>
           </div>

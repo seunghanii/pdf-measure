@@ -5,6 +5,7 @@ import { initialOrder } from '../lib/pageEdit'
 // - 쪽을 누르면 그 쪽으로 이동, 지금 보는 쪽은 파랗게
 // - 쪽마다 ⋯ 메뉴: 앞·뒤에 빈 페이지 넣기, 앞·뒤로 옮기기, 페이지 지우기 (지우기는 한 번 더 확인)
 // - 마우스로 쪽을 끌어 순서 바꾸기, 맨 아래 '빈 페이지 추가'
+// - '선택' 을 누르면 쪽을 여러 개 골라(전체 선택, Shift 로 범위) 한꺼번에 돌리기·지우기
 // onEdit(order, { label, focus }): 새 쪽 순서로 PDF 를 바꿈 (lib/pageEdit.js). null 이면 보기만
 const THUMB_W = 128 // 쪽 그림 너비 (CSS px)
 
@@ -21,7 +22,8 @@ export function carryThumbs(oldPdf, newPdf, order) {
   if (!from) return
   const to = thumbsOf(newPdf)
   order.forEach((e, i) => {
-    const c = e.src && from.get(e.src)
+    // 돌린 쪽은 새로 그림
+    const c = e.src && !e.rot && from.get(e.src)
     if (c) to.set(i + 1, c)
   })
 }
@@ -54,10 +56,24 @@ const pageRatio = async (pdf, page) => {
   return { w: vp.width, h: vp.height }
 }
 
-export default function PageNavigator({ pdfDoc, pageNum, onGo, measurements, onEdit, busy, undoLabel, onUndo, onClose }) {
+// 돌린 뒤 창이 새로 그려져도 선택을 이어 감 (도면 id → 고른 쪽 번호들)
+const selCarry = new Map()
+
+// [1, 3, 5] → '1, 3, 5쪽', 많으면 '7개 쪽'
+const pagesLabel = (list) => (list.length <= 3 ? `${list.join(', ')}쪽` : `${list.length}개 쪽`)
+
+export default function PageNavigator({ docId, pdfDoc, pageNum, onGo, measurements, onEdit, busy, syncing, undoLabel, onUndo, onClose }) {
   const n = pdfDoc.numPages
   const listRef = useRef(null)
   const [menu, setMenu] = useState(null) // { page, confirm }
+  // 선택 모드: null 이면 꺼짐, 켜지면 고른 쪽 번호 Set
+  const [sel, setSel] = useState(() => {
+    const c = selCarry.get(docId)
+    selCarry.delete(docId)
+    return c ? new Set(c.filter((p) => p <= n)) : null
+  })
+  const [askDelete, setAskDelete] = useState(false)
+  const lastPick = useRef(null)
   const [drag, setDrag] = useState(null) // { page, to (0~n 사이 넣을 자리), x, y }
   const [ratios, setRatios] = useState({}) // 쪽 번호 → 세로/가로 (그림이 오기 전 자리 맞춤)
 
@@ -106,6 +122,51 @@ export default function PageNavigator({ pdfDoc, pageNum, onGo, measurements, onE
   }, [menu])
 
   const editable = !!onEdit && !busy
+  const selecting = !!sel && !!onEdit
+  const picked = useMemo(() => (sel ? [...sel].sort((a, b) => a - b) : []), [sel])
+
+  // Esc 로 선택 모드 끝내기 (메뉴가 열려 있으면 메뉴 먼저)
+  useEffect(() => {
+    if (!selecting || menu) return
+    const key = (e) => {
+      if (e.key !== 'Escape') return
+      if (askDelete) setAskDelete(false)
+      else setSel(null)
+    }
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  }, [selecting, menu, askDelete])
+
+  const startSelect = () => {
+    setMenu(null)
+    setAskDelete(false)
+    lastPick.current = null
+    setSel(new Set())
+  }
+  const stopSelect = () => {
+    setAskDelete(false)
+    setSel(null)
+  }
+  const allPicked = n > 0 && picked.length === n
+  const toggleAll = () => {
+    setAskDelete(false)
+    setSel(allPicked ? new Set() : new Set(Array.from({ length: n }, (_, i) => i + 1)))
+  }
+  // 누르면 고르기/빼기, Shift 를 누른 채면 마지막으로 누른 쪽부터 범위로 고르기
+  const pick = useCallback((page, e) => {
+    setAskDelete(false)
+    setSel((s) => {
+      const next = new Set(s ?? [])
+      const from = lastPick.current
+      if (e?.shiftKey && from && from !== page) {
+        const [a, b] = from < page ? [from, page] : [page, from]
+        for (let p = a; p <= b; p++) next.add(p)
+      } else if (next.has(page)) next.delete(page)
+      else next.add(page)
+      return next
+    })
+    lastPick.current = page
+  }, [])
 
   // ---- 편집 ----
   const insertBlank = async (at, near) => {
@@ -122,6 +183,28 @@ export default function PageNavigator({ pdfDoc, pageNum, onGo, measurements, onE
     const order = initialOrder(n).filter((e) => e.src !== page)
     onEdit(order, { label: `${page}쪽 지우기`, focus: Math.min(page, n - 1) })
   }
+  // 쪽 돌리기 (rot: 90 = 오른쪽, 270 = 왼쪽). keepSel: 돌린 뒤에도 선택 모드 유지
+  const rotate = (pages, rot, keepSel) => {
+    setMenu(null)
+    if (!pages.length) return
+    const set = new Set(pages)
+    const order = initialOrder(n).map((e) => (set.has(e.src) ? { ...e, rot } : e))
+    if (keepSel) selCarry.set(docId, pages)
+    const dir = rot === 270 ? '왼쪽' : rot === 180 ? '거꾸로' : '오른쪽'
+    onEdit(order, { label: `${pagesLabel(pages)} ${dir}으로 돌리기` })
+  }
+  const removeMany = (pages) => {
+    setAskDelete(false)
+    if (!pages.length || pages.length >= n) return
+    const set = new Set(pages)
+    const order = initialOrder(n).filter((e) => !set.has(e.src))
+    // 지운 뒤 갈 쪽: 처음 지운 쪽 자리 (그 앞에 남은 쪽 수 + 1)
+    const before = pages[0] - 1
+    setSel(null)
+    onEdit(order, { label: `${pagesLabel(pages)} 지우기`, focus: Math.min(before + 1, order.length) })
+  }
+  const pickedCount = useMemo(() => picked.reduce((a, p) => a + (counts.get(p) ?? 0), 0), [picked, counts])
+
   // page 를 to 자리(0~n, 그 앞에 넣음)로
   const move = (page, to) => {
     setMenu(null)
@@ -144,7 +227,7 @@ export default function PageNavigator({ pdfDoc, pageNum, onGo, measurements, onE
     return items.length
   }
   const onPointerDown = (e, page) => {
-    if (!editable || e.pointerType === 'touch' || e.button !== 0) return
+    if (!editable || selecting || e.pointerType === 'touch' || e.button !== 0) return
     if (e.target.closest('[data-page-menu]')) return
     dragRef.current = { page, x: e.clientX, y: e.clientY, on: false, id: e.pointerId }
   }
@@ -208,17 +291,48 @@ export default function PageNavigator({ pdfDoc, pageNum, onGo, measurements, onE
       <div className="flex h-11 shrink-0 items-center gap-1 border-b border-ink-200 pr-1 pl-3">
         <span className="text-sm font-semibold text-ink-800">페이지</span>
         <span className="text-xs text-ink-400 tabular-nums">{n}쪽</span>
+        {onEdit && (
+          <button
+            onClick={selecting ? stopSelect : startSelect}
+            disabled={!!busy}
+            aria-pressed={selecting}
+            aria-label={selecting ? '페이지 선택 끝내기' : '페이지 선택하기'}
+            title={selecting ? '선택 끝내기 (Esc)' : '쪽을 골라 돌리기·지우기'}
+            className={`ml-auto h-7 rounded-md px-2 text-xs font-semibold transition-colors disabled:opacity-50 ${
+              selecting ? 'bg-brand-600 text-white hover:bg-brand-700' : 'text-brand-700 hover:bg-brand-50'
+            }`}
+          >
+            {selecting ? '완료' : '선택'}
+          </button>
+        )}
         <button
           onClick={onClose}
           aria-label="페이지 탐색 닫기"
           title="페이지 탐색 닫기"
-          className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100 hover:text-ink-800"
+          className={`${onEdit ? '' : 'ml-auto '}flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100 hover:text-ink-800`}
         >
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M18 6l-6 6 6 6M11 6l-6 6 6 6" />
           </svg>
         </button>
       </div>
+
+      {syncing && (
+        <div className={`flex shrink-0 items-center gap-1.5 border-b border-ink-200 px-3 py-1 text-[11px] ${syncing === 'retry' ? 'text-danger-600' : 'text-ink-500'}`} role="status">
+          <span className={`h-2.5 w-2.5 shrink-0 animate-spin rounded-full border-[1.5px] ${syncing === 'retry' ? 'border-danger-200 border-t-danger-600' : 'border-brand-200 border-t-brand-600'}`} aria-hidden="true" />
+          {syncing === 'retry' ? '서버 연결이 안 돼 다시 시도 중…' : '서버에 저장 중… (계속 쓰셔도 돼요)'}
+        </div>
+      )}
+
+      {selecting && (
+        <div className="flex shrink-0 items-center gap-2 border-b border-ink-200 bg-ink-50 px-3 py-1.5 text-xs">
+          <button onClick={toggleAll} className="flex items-center gap-1.5 font-medium text-ink-700 hover:text-ink-900" aria-pressed={allPicked}>
+            <CheckMark on={allPicked} partial={!allPicked && picked.length > 0} />
+            전체 선택
+          </button>
+          <span className="ml-auto text-ink-500 tabular-nums">{picked.length}개</span>
+        </div>
+      )}
 
       {undoLabel && !busy && (
         <div className="flex shrink-0 items-center gap-2 border-b border-ink-200 bg-brand-50 px-3 py-2 text-xs text-brand-800">
@@ -243,8 +357,11 @@ export default function PageNavigator({ pdfDoc, pageNum, onGo, measurements, onE
               dragging={drag?.page === p}
               onGo={onGo}
               onPointerDown={onPointerDown}
+              picking={selecting}
+              picked={selecting && sel.has(p)}
+              onPick={pick}
               menuOpen={menu?.page === p}
-              onMenu={editable ? () => setMenu((m) => (m?.page === p ? null : { page: p })) : null}
+              onMenu={editable && !selecting ? () => setMenu((m) => (m?.page === p ? null : { page: p })) : null}
             />
             {menu?.page === p && (
               <PageMenu
@@ -256,6 +373,8 @@ export default function PageNavigator({ pdfDoc, pageNum, onGo, measurements, onE
                 onInsertAfter={() => insertBlank(p, p)}
                 onMoveUp={() => move(p, p - 2)}
                 onMoveDown={() => move(p, p + 1)}
+                onRotateRight={() => rotate([p], 90)}
+                onRotateLeft={() => rotate([p], 270)}
                 onAskDelete={() => setMenu({ page: p, confirm: true })}
                 onDelete={() => remove(p)}
                 onCancel={() => setMenu(null)}
@@ -265,7 +384,7 @@ export default function PageNavigator({ pdfDoc, pageNum, onGo, measurements, onE
         ))}
         {drag && drag.to === n && <DropLine />}
 
-        {onEdit && (
+        {onEdit && !selecting && (
           <button
             disabled={!editable}
             onClick={() => insertBlank(n, n)}
@@ -279,7 +398,22 @@ export default function PageNavigator({ pdfDoc, pageNum, onGo, measurements, onE
         )}
       </div>
 
-      {onEdit && <p className="shrink-0 border-t border-ink-200 px-3 py-2 text-[11px] leading-snug text-ink-400">끌어서 순서 바꾸기 · ⋯ 에서 추가·삭제</p>}
+      {selecting ? (
+        <SelectBar
+          count={picked.length}
+          n={n}
+          items={pickedCount}
+          disabled={!editable}
+          asking={askDelete}
+          onRotateLeft={() => rotate(picked, 270, true)}
+          onRotateRight={() => rotate(picked, 90, true)}
+          onAskDelete={() => setAskDelete(true)}
+          onDelete={() => removeMany(picked)}
+          onCancelDelete={() => setAskDelete(false)}
+        />
+      ) : (
+        onEdit && <p className="shrink-0 border-t border-ink-200 px-3 py-2 text-[11px] leading-snug text-ink-400">끌어서 순서 바꾸기 · ⋯ 에서 추가·삭제 · 선택으로 여러 쪽</p>
+      )}
 
       {busy && (
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-surface/80 px-4 text-center text-xs text-ink-600 backdrop-blur-[1px]">
@@ -291,11 +425,86 @@ export default function PageNavigator({ pdfDoc, pageNum, onGo, measurements, onE
   )
 }
 
+function CheckMark({ on, partial }) {
+  return (
+    <span
+      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${on || partial ? 'border-brand-600 bg-brand-600 text-white' : 'border-ink-300 bg-surface'}`}
+      aria-hidden="true"
+    >
+      {on ? (
+        <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M5 12.5l4.5 4.5L19 7.5" />
+        </svg>
+      ) : partial ? (
+        <span className="h-0.5 w-2 rounded-full bg-white" />
+      ) : null}
+    </span>
+  )
+}
+
+const RotateIcon = ({ left }) => (
+  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={left ? { transform: 'scaleX(-1)' } : undefined}>
+    <path d="M20 11a8 8 0 1 0-2.3 5.7" />
+    <path d="M20 4v7h-7" />
+  </svg>
+)
+
+// 선택 모드 아래 단추: 왼쪽·오른쪽 돌리기, 지우기 (지우기는 한 번 더 확인)
+function SelectBar({ count, n, items, disabled, asking, onRotateLeft, onRotateRight, onAskDelete, onDelete, onCancelDelete }) {
+  const none = count === 0
+  const all = count >= n
+  if (asking) {
+    return (
+      <div className="shrink-0 border-t border-ink-200 px-3 py-2 text-xs text-ink-800">
+        <p className="font-semibold">{count}개 쪽을 지울까요?</p>
+        <p className="mt-1 leading-snug text-ink-500">
+          {items ? `그 쪽의 항목 ${items}개는 휴지통으로 가요. ` : ''}지운 뒤 '되돌리기'로 바로 되살릴 수 있어요.
+        </p>
+        <div className="mt-2 flex gap-1.5">
+          <button onClick={onDelete} disabled={disabled} className="flex-1 rounded-md bg-danger-600 py-1.5 font-semibold text-white hover:bg-danger-700 disabled:opacity-50">
+            지우기
+          </button>
+          <button onClick={onCancelDelete} className="flex-1 rounded-md border border-ink-200 py-1.5 hover:bg-ink-50">
+            취소
+          </button>
+        </div>
+      </div>
+    )
+  }
+  const btn = 'flex h-9 flex-1 flex-col items-center justify-center rounded-md text-[10px] leading-none font-medium transition-colors disabled:opacity-40 disabled:hover:bg-transparent'
+  return (
+    <div className="shrink-0 border-t border-ink-200 px-2 py-1.5">
+      <div className="flex gap-1">
+        <button onClick={onRotateLeft} disabled={none || disabled} className={`${btn} text-ink-700 hover:bg-ink-100`} title="고른 쪽을 왼쪽으로 90° 돌리기">
+          <RotateIcon left />
+          <span className="mt-0.5">왼쪽</span>
+        </button>
+        <button onClick={onRotateRight} disabled={none || disabled} className={`${btn} text-ink-700 hover:bg-ink-100`} title="고른 쪽을 오른쪽으로 90° 돌리기">
+          <RotateIcon />
+          <span className="mt-0.5">오른쪽</span>
+        </button>
+        <button
+          onClick={onAskDelete}
+          disabled={none || all || disabled}
+          className={`${btn} text-danger-600 hover:bg-danger-50`}
+          title={all ? '모든 쪽을 지울 수는 없어요 (한 쪽은 남겨야 해요)' : '고른 쪽 지우기'}
+        >
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" />
+          </svg>
+          <span className="mt-0.5">삭제</span>
+        </button>
+      </div>
+      {all && <p className="mt-1 text-center text-[10px] text-ink-400">모든 쪽은 지울 수 없어요</p>}
+    </div>
+  )
+}
+
 function DropLine() {
   return <div className="pointer-events-none absolute -top-[7px] right-0 left-0 z-10 h-[3px] rounded-full bg-brand-500" />
 }
 
-const Thumb = memo(function Thumb({ pdf, page, ratio, current, dragging, onGo, onPointerDown, menuOpen, onMenu }) {
+const Thumb = memo(function Thumb({ pdf, page, ratio, current, dragging, onGo, onPointerDown, picking, picked, onPick, menuOpen, onMenu }) {
   const boxRef = useRef(null)
   const canvasRef = useRef(null)
   const [shown, setShown] = useState(() => thumbs.get(pdf)?.get(page) ?? null)
@@ -333,7 +542,7 @@ const Thumb = memo(function Thumb({ pdf, page, ratio, current, dragging, onGo, o
   }, [shown])
 
   const r = shown ? shown.height / shown.width : (ratio ?? 1.414)
-  const go = useCallback(() => onGo(page), [onGo, page])
+  const go = useCallback((e) => (picking ? onPick(page, e) : onGo(page)), [picking, onPick, onGo, page])
 
   return (
     <div className={`group mb-4 ${dragging ? 'opacity-40' : ''}`} onPointerDown={(e) => onPointerDown(e, page)}>
@@ -341,15 +550,28 @@ const Thumb = memo(function Thumb({ pdf, page, ratio, current, dragging, onGo, o
         <button
           ref={boxRef}
           onClick={go}
-          aria-label={`${page}쪽으로 이동`}
-          aria-current={current ? 'page' : undefined}
-          className={`theme-light block w-full overflow-hidden rounded-md bg-white ring-offset-2 ring-offset-surface transition-shadow ${
-            current ? 'ring-2 ring-brand-500' : 'ring-1 ring-ink-200 hover:ring-ink-400'
+          aria-label={picking ? `${page}쪽 ${picked ? '선택 빼기' : '선택'}` : `${page}쪽으로 이동`}
+          aria-current={current && !picking ? 'page' : undefined}
+          aria-pressed={picking ? picked : undefined}
+          className={`theme-light relative block w-full overflow-hidden rounded-md bg-white ring-offset-2 ring-offset-surface transition-shadow ${
+            picking
+              ? picked
+                ? 'ring-2 ring-brand-500'
+                : 'ring-1 ring-ink-200 hover:ring-ink-400'
+              : current
+                ? 'ring-2 ring-brand-500'
+                : 'ring-1 ring-ink-200 hover:ring-ink-400'
           }`}
           style={{ aspectRatio: `1 / ${r}` }}
         >
           {shown ? <canvas ref={canvasRef} className="block h-full w-full" /> : <span className="block h-full w-full animate-pulse bg-ink-100" />}
+          {picking && picked && <span className="pointer-events-none absolute inset-0 bg-brand-500/15" />}
         </button>
+        {picking && (
+          <span className="pointer-events-none absolute top-1 left-1">
+            <CheckMark on={picked} />
+          </span>
+        )}
         {onMenu && (
           <button
             data-page-menu
@@ -369,12 +591,12 @@ const Thumb = memo(function Thumb({ pdf, page, ratio, current, dragging, onGo, o
           </button>
         )}
       </div>
-      <div className={`mt-1 text-center text-xs tabular-nums ${current ? 'font-semibold text-brand-700' : 'text-ink-500'}`}>{page}</div>
+      <div className={`mt-1 text-center text-xs tabular-nums ${(picking ? picked : current) ? 'font-semibold text-brand-700' : 'text-ink-500'}`}>{page}</div>
     </div>
   )
 })
 
-function PageMenu({ page, n, count, confirm, onInsertBefore, onInsertAfter, onMoveUp, onMoveDown, onAskDelete, onDelete, onCancel }) {
+function PageMenu({ page, n, count, confirm, onInsertBefore, onInsertAfter, onMoveUp, onMoveDown, onRotateRight, onRotateLeft, onAskDelete, onDelete, onCancel }) {
   const item = 'flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-ink-50 disabled:opacity-40 disabled:hover:bg-transparent'
   return (
     <div data-page-menu className="absolute top-8 right-0 left-0 z-20 overflow-hidden rounded-lg border border-ink-200 bg-surface py-1 text-xs text-ink-800 shadow-xl">
@@ -407,6 +629,15 @@ function PageMenu({ page, n, count, confirm, onInsertBefore, onInsertAfter, onMo
           </button>
           <button className={item} onClick={onMoveDown} disabled={page === n}>
             뒤로 옮기기
+          </button>
+          <div className="my-1 border-t border-ink-100" />
+          <button className={item} onClick={onRotateRight}>
+            <RotateIcon />
+            오른쪽으로 돌리기
+          </button>
+          <button className={item} onClick={onRotateLeft}>
+            <RotateIcon left />
+            왼쪽으로 돌리기
           </button>
           <div className="my-1 border-t border-ink-100" />
           <button className={`${item} text-danger-600 hover:bg-danger-50`} onClick={onAskDelete} disabled={n <= 1} title={n <= 1 ? '마지막 한 쪽은 지울 수 없어요' : undefined}>
