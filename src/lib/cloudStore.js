@@ -12,6 +12,7 @@
 // 개정판으로 바꾼 도면의 예전 판 PDF 는 "사용자id/rev/파일이름의 해시/판 key.pdf" (lib/revision.js).
 // 홈 메모장 글도 특별한 한 줄(file_key = NOTE_KEY)의 state 에 { text, at } 로 보관. 달력 일정은 CAL_KEY 줄에 { events, at }.
 // 특별한 줄은 모두 size 가 0 이라 실제 도면(size > 0)과 구분됩니다.
+import { diffState } from './statePatch'
 import { cacheDelete, cacheGet, cachePrune, cachePut, summarize, SUMMARY_VERSION, textCacheDelete, textCacheGet, textCachePrune, textCachePut } from './storage'
 import { normalizeLibrary } from './library'
 import { loadLocalNote, normalizeNote, saveLocalNote } from './homeNote'
@@ -230,6 +231,7 @@ export function createCloudStore(supabase, user) {
         if (!isOld(r) || !byKey.has(r.file_key)) continue
         const { state, updated_at } = byKey.get(r.file_key)
         r.summary = summarize(state)
+        lastSaved.delete(r.file_key) // 저장 시각은 그대로 두고 요약만 고치므로, 다음 저장은 통째로
         if (state)
           table()
             .update({ state: { ...state, summary: r.summary } })
@@ -244,6 +246,11 @@ export function createCloudStore(supabase, user) {
     cachePrune(new Set(list.map((r) => r.path))).catch(() => {})
     return list
   }
+
+  // 바뀐 곳만 저장하기: 도면 id → { at: 그때 서버 저장 시각, tree: 그때 저장한 상태, n: 이어서 바뀐 곳만 보낸 횟수 }
+  const lastSaved = new Map()
+  const PATCH_RUN = 30 // 이만큼 이어서 보냈으면 한 번은 통째로 (혹시 어긋났더라도 바로잡힘)
+  let patchable = true
 
   let libChain = Promise.resolve() // 폴더 정보 바꾸기 차례
 
@@ -299,18 +306,43 @@ export function createCloudStore(supabase, user) {
     // expect: 이 창이 마지막으로 본 저장 시각 (updatedAt). 주면 서버가 그대로일 때만 저장하고,
     // 그사이 다른 기기(창)가 저장했으면 code 'conflict' 오류 → 받는 쪽이 합쳐서 다시 저장 (lib/autosave.js)
     // 돌려주는 값: 새 저장 시각
+    // 이 창이 바로 전에 저장한 것이 서버에 그대로 있으면(저장 시각 expect 가 그때 받은 시각) 바뀐 곳만 보냄 (lib/statePatch.js).
+    // 처음 저장, 다른 기기와 합친 뒤, 실패한 뒤, 서버에 함수가 없을 때는 예전처럼 통째로 저장.
     saveState(id, state, { expect } = {}) {
       const summary = summarize(state)
       const at = new Date().toISOString()
+      const conflict = () => {
+        const e = new Error('state changed elsewhere')
+        e.code = 'conflict'
+        return e
+      }
       return track(
         (async () => {
-          let q = table().update({ state: { ...state, summary }, updated_at: at }).eq('user_id', uid).eq('file_key', id)
-          if (expect !== undefined) q = expect === null ? q.is('updated_at', null) : q.eq('updated_at', expect)
-          const rows = check(await q.select('file_key'))
-          if (expect !== undefined && !rows.length) {
-            const e = new Error('state changed elsewhere')
-            e.code = 'conflict'
-            throw e
+          // 서버에 들어가는 모양 그대로 (undefined 등이 빠진 것)
+          const tree = JSON.parse(JSON.stringify({ ...state, summary }))
+          const prev = lastSaved.get(id)
+          lastSaved.delete(id) // 아래에서 성공해야 다시 넣음
+          let done = false
+          if (patchable && prev && expect != null && sameTime(prev.at, expect) && prev.n < PATCH_RUN) {
+            const ops = diffState(prev.tree, tree)
+            // 거의 다 바뀌었으면 통째로 보내는 편이 나음
+            if (ops && JSON.stringify(ops).length < JSON.stringify(tree).length * 0.5) {
+              const { data, error } = await supabase.rpc('patch_document_state', { p_file_key: id, p_expect: expect, p_at: at, p_ops: ops })
+              if (!error) {
+                if (!data) throw conflict()
+                lastSaved.set(id, { at, tree, n: prev.n + 1 })
+                done = true
+              } else if (error.code === 'PGRST202' || error.code === '42883') {
+                patchable = false // 서버에 함수가 아직 없음: 이 창에서는 통째로 저장
+              } else console.warn('바뀐 곳만 저장 실패, 통째로 저장', error)
+            }
+          }
+          if (!done) {
+            let q = table().update({ state: tree, updated_at: at }).eq('user_id', uid).eq('file_key', id)
+            if (expect !== undefined) q = expect === null ? q.is('updated_at', null) : q.eq('updated_at', expect)
+            const rows = check(await q.select('file_key'))
+            if (expect !== undefined && !rows.length) throw conflict()
+            if (rows.length) lastSaved.set(id, { at, tree, n: 0 })
           }
           patchRecent((list) => list.map((r) => (r.id === id ? { ...r, summary } : r)))
           return at
