@@ -69,3 +69,64 @@ create policy "pdfs_update_own" on storage.objects
 create policy "pdfs_delete_own" on storage.objects
   for delete to authenticated
   using (bucket_id = 'pdfs' and (storage.foldername(name))[1] = (select auth.uid()::text));
+
+-- 3) 자동 저장: 바뀐 곳만 고치기 ------------------------------------------------
+-- 큰 도면은 상태(state)가 1MB 를 넘어서, 박스 하나만 옮겨도 통째로 올리면 느림.
+-- 앱이 "고칠 곳 목록"만 보내면(src/lib/statePatch.js) 서버가 저장된 상태에 그대로 적용함.
+-- 이 함수들이 없어도 앱은 예전처럼 통째로 저장함.
+
+-- 고칠 곳 목록을 차례로 적용. ops: [{ "o": "s"|"d"|"i", "p": ["키", "번호", ...], "v": 값 }]
+create or replace function public.jsonb_apply_ops(s jsonb, ops jsonb)
+returns jsonb
+language plpgsql
+immutable
+set search_path = ''
+as $$
+declare
+  op jsonb;
+  path text[];
+begin
+  for op in select value from jsonb_array_elements(ops) loop
+    path := array(select jsonb_array_elements_text(op -> 'p'));
+    if op ->> 'o' = 's' then
+      s := jsonb_set(s, path, coalesce(op -> 'v', 'null'::jsonb), true);
+    elsif op ->> 'o' = 'd' then
+      s := s #- path;
+    elsif op ->> 'o' = 'i' then
+      s := jsonb_insert(s, path, coalesce(op -> 'v', 'null'::jsonb), false);
+    else
+      raise exception 'unknown op %', op ->> 'o';
+    end if;
+  end loop;
+  return s;
+end;
+$$;
+
+-- 내 도면 하나의 상태를 고침. 서버의 저장 시각이 p_expect 와 같을 때만(다른 기기가 그사이 저장하지 않았을 때만) 고치고
+-- 새 저장 시각을 돌려줌. 다르면 아무것도 하지 않고 null (앱이 서버 것을 받아 합친 뒤 다시 저장).
+create or replace function public.patch_document_state(p_file_key text, p_expect timestamptz, p_at timestamptz, p_ops jsonb)
+returns timestamptz
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  cur jsonb;
+begin
+  select state into cur from public.documents
+    where user_id = (select auth.uid()) and file_key = p_file_key and updated_at = p_expect
+    for update;
+  if not found or cur is null then
+    return null;
+  end if;
+  update public.documents
+    set state = public.jsonb_apply_ops(cur, p_ops), updated_at = p_at
+    where user_id = (select auth.uid()) and file_key = p_file_key;
+  return p_at;
+end;
+$$;
+
+revoke all on function public.jsonb_apply_ops(jsonb, jsonb) from public, anon;
+revoke all on function public.patch_document_state(text, timestamptz, timestamptz, jsonb) from public, anon;
+grant execute on function public.jsonb_apply_ops(jsonb, jsonb) to authenticated;
+grant execute on function public.patch_document_state(text, timestamptz, timestamptz, jsonb) to authenticated;
