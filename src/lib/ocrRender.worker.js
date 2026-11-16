@@ -172,20 +172,47 @@ async function renderTile({ page, scale, left, top, w, h, mask, clean, rotate })
   return { blob: await out.convertToBlob({ type: 'image/png' }) }
 }
 
+// 화면에 보여 줄 그림 (lib/pageRender.js): 다 그린 그림을 통째로 넘겨줌. 그리는 중 취소할 수 있음
+const drawing = new Map() // 요청 id → pdf.js 그리기 작업
+async function renderBitmap({ id, page, scale, left, top, w, h }) {
+  const doc = await docPromise
+  const pdfPage = await doc.getPage(page)
+  const viewport = pdfPage.getViewport({ scale })
+  const canvas = new OffscreenCanvas(w, h)
+  const ctx = canvas.getContext('2d')
+  const task = pdfPage.render({ canvasContext: ctx, canvas, viewport, transform: left || top ? [1, 0, 0, 1, -left, -top] : undefined })
+  drawing.set(id, task)
+  try {
+    await task.promise
+  } finally {
+    drawing.delete(id)
+  }
+  return canvas.transferToImageBitmap()
+}
+
 self.onmessage = async ({ data: msg }) => {
   try {
     if (msg.type === 'open') {
+      // 화면용(fonts)은 PDF 속 글꼴을 워커의 글꼴 목록(self.fonts)에 등록해 화면 쪽에서 그릴 때와 같은 모양으로 그림.
+      // 그게 안 되는 브라우저나 OCR 용은 글자를 모양(선)으로 그림
+      const fontFace = !!msg.fonts && !!self.fonts && typeof FontFace !== 'undefined'
       docPromise = pdfjs.getDocument({
         data: msg.data,
         CanvasFactory: OffscreenCanvasFactory,
         FilterFactory: NoFilterFactory,
-        disableFontFace: true, // 글꼴을 등록할 document 가 없으니 글자는 모양(선)으로 그림
+        disableFontFace: !fontFace,
+        ...(fontFace ? { ownerDocument: self } : null),
         isOffscreenCanvasSupported: true,
       }).promise
       await docPromise
       self.postMessage({ id: msg.id, ok: true })
     } else if (msg.type === 'tile') {
       self.postMessage({ id: msg.id, ...(await renderTile(msg)) })
+    } else if (msg.type === 'bitmap') {
+      const bitmap = await renderBitmap(msg)
+      self.postMessage({ id: msg.id, bitmap }, [bitmap])
+    } else if (msg.type === 'cancel') {
+      drawing.get(msg.target)?.cancel()
     }
   } catch (e) {
     self.postMessage({ id: msg.id, error: String(e?.message ?? e) })

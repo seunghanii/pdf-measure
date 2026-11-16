@@ -1,5 +1,6 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { stashPage, takePage } from '../lib/pageCache'
+import { renderInWorker } from '../lib/pageRender'
 
 const MAX_CANVAS_PIXELS = 16_000_000 // 모바일 사파리 캔버스 한도 근처
 // 크게 확대해서 상세 캔버스가 덮을 때 밑그림 해상도. 낮을수록 확대·축소할 때 덜 버벅임
@@ -75,18 +76,38 @@ const PageCanvas = memo(function PageCanvas({ pdfDoc, page, size, zoom, visible,
       if (cancelled) return
       const scale = baseScale
       const viewport = pdfPage.getViewport({ scale })
-      const off = document.createElement('canvas')
-      off.width = Math.floor(viewport.width)
-      off.height = Math.floor(viewport.height)
+      const bw = Math.floor(viewport.width)
+      const bh = Math.floor(viewport.height)
       setRendering(true)
-      task = pdfPage.render({ canvas: off, canvasContext: off.getContext('2d'), viewport })
-      task.promise
-        .then(() => {
+      // 워커가 준비돼 있으면 화면 밖에서 그린 그림을 받아 붙이기만 함 (lib/pageRender.js). 아니면 예전처럼 여기서 그림
+      const job = renderInWorker(pdfDoc, { page, scale, w: bw, h: bh })
+      let off = null
+      const drawHere = () => {
+        off = document.createElement('canvas')
+        off.width = bw
+        off.height = bh
+        task = pdfPage.render({ canvas: off, canvasContext: off.getContext('2d'), viewport })
+        return task.promise
+      }
+      let done
+      if (job) {
+        task = { cancel: job.cancel }
+        // 워커가 이 페이지를 못 그리면 여기서 그림
+        done = job.promise.catch((e) => {
+          if (cancelled) throw e
+          console.warn('워커 그리기 실패, 화면 쪽에서 그림', e)
+          return drawHere()
+        })
+      } else done = drawHere()
+      done
+        .then((bitmap) => {
+          if (cancelled) return bitmap?.close?.()
           // 다 그린 뒤 한 번에 교체해서 깜빡임 방지
-          canvas.width = off.width
-          canvas.height = off.height
-          canvas.getContext('2d').drawImage(off, 0, 0)
-          off.width = off.height = 0 // 임시 캔버스 메모리 바로 비움 (크기는 아래에서 canvas 기준으로)
+          canvas.width = bw
+          canvas.height = bh
+          canvas.getContext('2d').drawImage(off ?? bitmap, 0, 0)
+          if (off) off.width = off.height = 0 // 임시 캔버스 메모리 바로 비움 (크기는 아래에서 canvas 기준으로)
+          else bitmap.close()
           baseScaleRef.current = scale
           // 캔버스 픽셀과 화면 픽셀을 1:1 로 맞춰서 브라우저가 다시 늘리며 흐려지지 않게
           if (!capped) {
@@ -140,23 +161,38 @@ const PageCanvas = memo(function PageCanvas({ pdfDoc, page, size, zoom, visible,
       if (cancelled) return
       if (detailTask) detailTask.cancel()
       const viewport = pdfPage.getViewport({ scale: fullScale })
-      const off = document.createElement('canvas')
-      off.width = pw
-      off.height = ph
-      detailTask = pdfPage.render({
-        canvas: off,
-        canvasContext: off.getContext('2d'),
-        viewport,
-        transform: [1, 0, 0, 1, -x0 * dpr, -y0 * dpr],
-      })
-      const myTask = detailTask
-      myTask.promise
-        .then(() => {
-          if (cancelled) return
+      const job = renderInWorker(pdfDoc, { page, scale: fullScale, left: x0 * dpr, top: y0 * dpr, w: pw, h: ph })
+      let off = null
+      const myTask = (detailTask = { cancel: () => {} })
+      const drawHere = () => {
+        off = document.createElement('canvas')
+        off.width = pw
+        off.height = ph
+        const t = pdfPage.render({
+          canvas: off,
+          canvasContext: off.getContext('2d'),
+          viewport,
+          transform: [1, 0, 0, 1, -x0 * dpr, -y0 * dpr],
+        })
+        myTask.cancel = () => t.cancel()
+        return t.promise
+      }
+      let done
+      if (job) {
+        myTask.cancel = job.cancel
+        done = job.promise.catch((e) => {
+          if (cancelled || detailTask !== myTask) throw e
+          return drawHere()
+        })
+      } else done = drawHere()
+      done
+        .then((bitmap) => {
+          if (cancelled || detailTask !== myTask) return bitmap?.close?.()
           detail.width = pw
           detail.height = ph
-          detail.getContext('2d').drawImage(off, 0, 0)
-          off.width = off.height = 0
+          detail.getContext('2d').drawImage(off ?? bitmap, 0, 0)
+          if (off) off.width = off.height = 0
+          else bitmap.close()
           detail.style.left = `${x0}px`
           detail.style.top = `${y0}px`
           detail.style.width = `${pw / dpr}px`
