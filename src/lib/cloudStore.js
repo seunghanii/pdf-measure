@@ -12,7 +12,7 @@
 // 개정판으로 바꾼 도면의 예전 판 PDF 는 "사용자id/rev/파일이름의 해시/판 key.pdf" (lib/revision.js).
 // 홈 메모장 글도 특별한 한 줄(file_key = NOTE_KEY)의 state 에 { text, at } 로 보관. 달력 일정은 CAL_KEY 줄에 { events, at }.
 // 특별한 줄은 모두 size 가 0 이라 실제 도면(size > 0)과 구분됩니다.
-import { cacheDelete, cacheGet, cachePrune, cachePut, summarize, SUMMARY_VERSION } from './storage'
+import { cacheDelete, cacheGet, cachePrune, cachePut, summarize, SUMMARY_VERSION, textCacheDelete, textCacheGet, textCachePrune, textCachePut } from './storage'
 import { normalizeLibrary } from './library'
 import { loadLocalNote, normalizeNote, saveLocalNote } from './homeNote'
 import { loadLocalCal, normalizeCal, saveLocalCal } from './calEvents'
@@ -29,6 +29,8 @@ const CAL_KEY = '__calendar__' // 달력 일정 (lib/calEvents.js)
 const INST_LIST_KEY = '__inst_list__' // Inst list: 올린 계기 목록 (lib/instList.js)
 const CABLE_KEY = '__cable_schedule__' // Cable schedule 목록 (lib/cableSchedule.js)
 const TEXT_PREFIX = '@text|'
+// 서버 시각 글자는 모양이 달라도(…Z / …+00:00) 같은 시각이면 같음
+const sameTime = (a, b) => a != null && b != null && (a === b || Date.parse(a) === Date.parse(b))
 const IMAGE_PREFIX = '@img|'
 const COLS = 'file_key, name, size, storage_path, has_file, state, last_opened, updated_at'
 // 홈 목록에는 측정값 전체 대신 요약(개수·축척)만 받음
@@ -90,7 +92,7 @@ export function createCloudStore(supabase, user) {
   }
 
   // 특별한 줄(사진·검색 색인·폴더 정보) 저장
-  const upsertSpecial = (fileKey, name, state) =>
+  const upsertSpecial = (fileKey, name, state, at = new Date().toISOString()) =>
     table()
       .upsert(
         {
@@ -101,7 +103,7 @@ export function createCloudStore(supabase, user) {
           storage_path: '',
           state,
           last_opened: new Date(0).toISOString(),
-          updated_at: new Date().toISOString(),
+          updated_at: at,
         },
         { onConflict: 'user_id,file_key' },
       )
@@ -343,28 +345,60 @@ export function createCloudStore(supabase, user) {
       return track(table().update({ name }).eq('user_id', uid).eq('file_key', id).then(check))
     },
 
+    // 검색 색인은 크므로(도면 하나에 수십 kB ~ 1MB) 한 번 받으면 이 브라우저에 두고,
+    // 서버 줄의 고친 시각이 같으면 다시 받지 않음 (storage.js textCache*)
     async getTextIndex(id) {
-      const row = check(
-        await table().select('state').eq('user_id', uid).eq('file_key', TEXT_PREFIX + id).maybeSingle(),
-      )
-      return row?.state ?? null
+      const row = (cols) => table().select(cols).eq('user_id', uid).eq('file_key', TEXT_PREFIX + id).maybeSingle()
+      const kept = await textCacheGet(uid, id).catch(() => null)
+      if (kept) {
+        const head = check(await row('updated_at'))
+        if (!head) {
+          textCacheDelete(uid, id).catch(() => {})
+          return null
+        }
+        if (sameTime(head.updated_at, kept.stamp)) return kept.index
+      }
+      const full = check(await row('state, updated_at'))
+      if (full?.state) textCachePut(uid, id, full.state, full.updated_at).catch(() => {})
+      else if (kept) textCacheDelete(uid, id).catch(() => {})
+      return full?.state ?? null
     },
 
     saveTextIndex(id, index) {
-      return track(upsertSpecial(TEXT_PREFIX + id, '검색 색인', index))
+      const at = new Date().toISOString()
+      return track(
+        upsertSpecial(TEXT_PREFIX + id, '검색 색인', index, at).then((r) => {
+          ;(index ? textCachePut(uid, id, index, at) : textCacheDelete(uid, id)).catch(() => {})
+          return r
+        }),
+      )
     },
 
     // skip: 이미 받아 둔 색인의 도면 id (그 색인은 다시 받지 않고 index 를 비워서 돌려줌)
     async listTextIndexes(skip = new Set()) {
-      const keys = check(
-        await table().select('file_key').eq('user_id', uid).eq('size', 0).like('file_key', `${TEXT_PREFIX}%`),
-      ).map((r) => r.file_key)
+      const heads = check(
+        await table().select('file_key, updated_at').eq('user_id', uid).eq('size', 0).like('file_key', `${TEXT_PREFIX}%`),
+      )
+      const keys = heads.map((r) => r.file_key)
       const ids = keys.map((k) => k.slice(TEXT_PREFIX.length))
-      const missing = keys.filter((k, i) => !skip.has(ids[i]))
+      textCachePrune(uid, new Set(ids)).catch(() => {})
       const fetched = new Map()
+      // 이 브라우저에 둔 사본이 서버와 같은 판이면 그대로 씀
+      const missing = []
+      await Promise.all(
+        heads.map(async (h, i) => {
+          if (skip.has(ids[i])) return
+          const kept = await textCacheGet(uid, ids[i]).catch(() => null)
+          if (kept && sameTime(kept.stamp, h.updated_at)) fetched.set(h.file_key, kept.index)
+          else missing.push(h.file_key)
+        }),
+      )
       for (let i = 0; i < missing.length; i += 50) {
-        const rows = check(await table().select('file_key, state').eq('user_id', uid).in('file_key', missing.slice(i, i + 50)))
-        for (const r of rows) fetched.set(r.file_key, r.state)
+        const rows = check(await table().select('file_key, state, updated_at').eq('user_id', uid).in('file_key', missing.slice(i, i + 50)))
+        for (const r of rows) {
+          fetched.set(r.file_key, r.state)
+          if (r.state) textCachePut(uid, r.file_key.slice(TEXT_PREFIX.length), r.state, r.updated_at).catch(() => {})
+        }
       }
       return keys.map((k, i) => ({ id: ids[i], index: skip.has(ids[i]) ? undefined : fetched.get(k) }))
     },
