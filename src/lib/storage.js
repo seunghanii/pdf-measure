@@ -273,10 +273,53 @@ export function cacheDelete(key) {
   })
 }
 
-// keep 에 없는 임시 보관 파일 지우기
+// 서버에서 받은 검색 색인 사본 (로그인했을 때). 서버 줄의 고친 시각(stamp)이 같으면 다시 받지 않음.
+// 같은 'cache' 칸에 "@textidx|사용자|도면 id" 로 둠: { key, index, stamp }
+const TEXT_CACHE = '@textidx|'
+const textCacheKey = (uid, id) => `${TEXT_CACHE}${uid}|${id}`
+
+export function textCacheGet(uid, id) {
+  return run('cache', 'readonly', (c) => req2promise(c.get(textCacheKey(uid, id)))).then((r) => (r?.index ? { index: r.index, stamp: r.stamp } : null))
+}
+
+export function textCachePut(uid, id, index, stamp) {
+  return run('cache', 'readwrite', (c) => {
+    c.put({ key: textCacheKey(uid, id), index, stamp, at: Date.now() })
+  })
+}
+
+export function textCacheDelete(uid, id) {
+  return cacheDelete(textCacheKey(uid, id))
+}
+
+// 서버에 더는 없는 도면의 색인 사본 지우기 (keepIds: 서버에 색인이 있는 도면 id)
+export async function textCachePrune(uid, keepIds) {
+  const prefix = `${TEXT_CACHE}${uid}|`
+  const keys = await run('cache', 'readonly', (c) => req2promise(c.getAllKeys()))
+  const drop = keys.filter((k) => typeof k === 'string' && k.startsWith(prefix) && !keepIds.has(k.slice(prefix.length)))
+  if (drop.length) await run('cache', 'readwrite', (c) => drop.forEach((k) => c.delete(k)))
+}
+
+// 홈 '이어서 보기' 첫 쪽 그림 (lib/thumbs.js). "@thumb|도면 id": { key, d: data URL, t: 저장 시각 }
+const THUMB_CACHE = '@thumb|'
+
+export async function thumbCacheAll() {
+  const rows = await run('cache', 'readonly', (c) => req2promise(c.getAll(IDBKeyRange.bound(THUMB_CACHE, THUMB_CACHE + '\uffff'))))
+  return rows.map((r) => ({ id: r.key.slice(THUMB_CACHE.length), d: r.d, t: r.t }))
+}
+
+// put: [{ id, d, t }], drop: [id]
+export function thumbCacheWrite(put, drop = []) {
+  return run('cache', 'readwrite', (c) => {
+    for (const { id, d, t } of put) c.put({ key: THUMB_CACHE + id, d, t })
+    for (const id of drop) c.delete(THUMB_CACHE + id)
+  })
+}
+
+// keep 에 없는 임시 보관 파일 지우기 (검색 색인 사본·첫 쪽 그림은 따로 정리)
 export async function cachePrune(keep) {
   const keys = await run('cache', 'readonly', (c) => req2promise(c.getAllKeys()))
-  const drop = keys.filter((k) => !keep.has(k))
+  const drop = keys.filter((k) => !keep.has(k) && !String(k).startsWith(TEXT_CACHE) && !String(k).startsWith(THUMB_CACHE))
   if (drop.length) await run('cache', 'readwrite', (c) => drop.forEach((k) => c.delete(k)))
 }
 

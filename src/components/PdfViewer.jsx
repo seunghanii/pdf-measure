@@ -111,9 +111,32 @@ export default function PdfViewer({
   const [, forceRender] = useState(0)
   // 페이지별 항목 목록. 바뀌지 않은 페이지는 같은 배열을 그대로 써서 그 페이지 도형은 다시 그리지 않음
   const byPageRef = useRef(new Map())
+  // 끄는 동안(옮기기·크기 조절·점 옮기기)에는 이 화면에서만 바뀐 모습으로 그리고, 손을 떼면 한 번에 반영.
+  // 끌 때마다 오른쪽 목록·연결·자동 저장까지 다시 계산하지 않게 함. live: { 항목 id: 바뀐 값 }
+  const [live, setLive] = useState(null)
+  const liveRef = useRef(null)
+  const setLivePatch = (patches) => {
+    liveRef.current = { ...liveRef.current, ...patches }
+    setLive(liveRef.current)
+  }
+  // page 를 주면 그 쪽으로 옮기며 반영
+  const flushLive = (page) => {
+    const l = liveRef.current
+    if (!l) return
+    liveRef.current = null
+    setLive(null)
+    const pts = {}
+    for (const [id, patch] of Object.entries(l)) {
+      const keys = Object.keys(patch)
+      if (keys.length === 1 && keys[0] === 'points') pts[id] = patch.points
+      else onUpdateItem(id, patch)
+    }
+    if (Object.keys(pts).length) onSetPoints(pts, page)
+  }
+  const shown = useMemo(() => (live ? measurements.map((m) => (live[m.id] ? { ...m, ...live[m.id] } : m)) : measurements), [measurements, live])
   const byPage = useMemo(() => {
     const groups = new Map()
-    for (const m of measurements) {
+    for (const m of shown) {
       let list = groups.get(m.page)
       if (!list) groups.set(m.page, (list = []))
       list.push(m)
@@ -122,13 +145,21 @@ export default function PdfViewer({
     const next = new Map()
     for (const [page, list] of groups) {
       // 메모 범위는 다른 항목 아래에, 큰 범위부터 그려서 겹친 작은 범위도 누를 수 있게
-      const ordered = [...list.filter((m) => m.type === 'memo').sort(memoDrawOrder), ...list.filter((m) => m.type !== 'memo')]
+      // 항목이 그대로인 페이지는 정렬도 다시 하지 않음 (끄는 동안 다른 페이지 박스 수백 개를 매번 정렬하지 않게)
       const old = prev.get(page)
-      next.set(page, old && old.length === ordered.length && old.every((m, i) => m === ordered[i]) ? old : ordered)
+      if (old && old.raw.length === list.length && old.raw.every((m, i) => m === list[i])) {
+        next.set(page, old)
+        continue
+      }
+      const ordered = [...list.filter((m) => m.type === 'memo').sort(memoDrawOrder), ...list.filter((m) => m.type !== 'memo')]
+      // 순서까지 그대로면 같은 배열을 써서 그 페이지 도형을 다시 그리지 않음
+      const same = old && old.length === ordered.length && old.every((m, i) => m === ordered[i]) ? old : ordered
+      same.raw = list
+      next.set(page, same)
     }
     byPageRef.current = next
     return next
-  }, [measurements])
+  }, [shown])
   const snapOn = useSnapEnabled()
   const snapIndexes = useRef(new Map()) // 페이지 번호 → 도면 선 색인 (자석용, 필요할 때 한 번 읽음)
   const pointerRef = useRef(null) // 마지막 마우스 위치 { page, p } (붙여넣은 사진을 놓을 자리)
@@ -725,7 +756,8 @@ export default function PdfViewer({
     if (tool === 'select') {
       const handle = e.target.closest?.('[data-handle]')
       if (handle) {
-        dragRef.current = { id: handle.dataset.id, index: Number(handle.dataset.index), moved: false }
+        // pts: 잡은 순간의 점들 (끄는 동안 이 화면에서만 바꿔 그림)
+        dragRef.current = { id: handle.dataset.id, index: Number(handle.dataset.index), moved: false, pts: measurements.find((m) => m.id === handle.dataset.id)?.points }
         onSelect([handle.dataset.id])
         e.currentTarget.setPointerCapture(e.pointerId)
         return
@@ -816,7 +848,7 @@ export default function PdfViewer({
     const next = {}
     for (const [id, pts] of Object.entries(d.orig)) next[id] = pts.map((q) => ({ x: q.x + dx, y: q.y + dy }))
     d.last = next
-    onSetPoints(next)
+    setLivePatch(Object.fromEntries(Object.entries(next).map(([id, points]) => [id, { points }])))
     const to = pageAtClient(clientX, clientY) ?? d.page
     setMoveDrag((cur) => (cur && cur.from === d.page && cur.to === to ? cur : { from: d.page, to }))
   }
@@ -874,17 +906,18 @@ export default function PdfViewer({
           const t = d.text
           const left = d.resize === 'w' ? Math.min(p.x, t.right - t.min) : t.left
           const right = d.resize === 'e' ? Math.max(p.x, t.left + t.min) : t.right
-          onUpdateItem(d.id, { points: [{ x: left, y: t.y }], boxWidth: right - left })
-        } else if (d.crop) onUpdateItem(d.id, cropResize(d.rect, d.crop, d.resize, p))
-        else if (d.aspect && !e.shiftKey) onSetPoints({ [d.id]: resizeKeepAspect(d.rect, d.resize, p) })
-        else onSetPoints({ [d.id]: resizeRect(d.rect, d.resize, p) })
+          setLivePatch({ [d.id]: { points: [{ x: left, y: t.y }], boxWidth: right - left } })
+        } else if (d.crop) setLivePatch({ [d.id]: cropResize(d.rect, d.crop, d.resize, p) })
+        else if (d.aspect && !e.shiftKey) setLivePatch({ [d.id]: { points: resizeKeepAspect(d.rect, d.resize, p) } })
+        else setLivePatch({ [d.id]: { points: resizeRect(d.rect, d.resize, p) } })
       } else {
         if (!d.moved) {
           d.moved = true
           onBeginEdit()
         }
         const r = resolvePoint(p, page, { exclude: { id: d.id, index: d.index } })
-        onMovePoint(d.id, d.index, r.p)
+        if (d.pts) setLivePatch({ [d.id]: { points: d.pts.map((q, i) => (i === d.index ? r.p : q)) } })
+        else onMovePoint(d.id, d.index, r.p) // 기준 길이 선
         setCursor(r.snap ? { page, p: r.p, snap: r.snap } : null)
       }
       return
@@ -961,10 +994,12 @@ export default function PdfViewer({
         const ox = (a.left - b.left) / zoom
         const oy = (a.top - b.top) / zoom
         const next = {}
-        for (const [id, pts] of Object.entries(dr.last)) next[id] = pts.map((q) => ({ x: q.x + ox, y: q.y + oy }))
-        onSetPoints(next, to)
+        for (const [id, pts] of Object.entries(dr.last)) next[id] = { points: pts.map((q) => ({ x: q.x + ox, y: q.y + oy })) }
+        liveRef.current = next
+        flushLive(to)
       }
     }
+    flushLive() // 끌어서 바꾼 것을 한 번에 반영
     if (moveDrag) setMoveDrag(null)
     if (dragRef.current && !drawing) setCursor(null) // 점 끌기 때 보이던 자석 표시 지우기
     dragRef.current = null
@@ -1029,6 +1064,7 @@ export default function PdfViewer({
     panRef.current = null
     if (dragRef.current?.raf) cancelAnimationFrame(dragRef.current.raf)
     dragRef.current = null
+    flushLive()
     setMoveDrag(null)
     touchPanRef.current = null
     setMarquee(null)
